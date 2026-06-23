@@ -1,0 +1,400 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.1"
+   width="890"
+   height="807.20929"
+   viewBox="0 0 890 807.20922"
+   id="svg108"
+   sodipodi:docname="compiler.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview110"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="2.0164873"
+     inkscape:cx="476.07541"
+     inkscape:cy="395.48973"
+     inkscape:window-width="3840"
+     inkscape:window-height="2073"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg108" />
+  <defs
+     id="defs20">
+    <marker
+       style="overflow:visible"
+       id="marker1876"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Arrow2"
+       markerWidth="7.7"
+       markerHeight="5.6"
+       viewBox="0 0 7.7 5.6"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.7)"
+         d="M -2,-4 9,0 -2,4 c 2,-2.33 2,-5.66 0,-8 z"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:none"
+         id="path1874" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="Arrow2"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Arrow2"
+       markerWidth="7.7"
+       markerHeight="5.6"
+       viewBox="0 0 7.7 5.6"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.7)"
+         d="M -2,-4 9,0 -2,4 c 2,-2.33 2,-5.66 0,-8 z"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:none"
+         id="arrow2L" />
+    </marker>
+    <marker
+       id="arrow"
+       viewBox="0 0 10 10"
+       refX="8.5"
+       refY="5"
+       markerWidth="9"
+       markerHeight="9"
+       orient="auto">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         style="fill:#111111"
+         id="path2" />
+    </marker>
+    <!-- SVG 1.1 compatible drop shadow -->
+    <filter
+       id="shadow"
+       x="-0.0065384615"
+       y="-0.036956522"
+       width="1.0130769"
+       height="1.0847826">
+      <feGaussianBlur
+         in="SourceAlpha"
+         stdDeviation="1"
+         result="blur"
+         id="feGaussianBlur5" />
+      <feOffset
+         in="blur"
+         dx="0"
+         dy="1"
+         result="offsetBlur"
+         id="feOffset7" />
+      <feComponentTransfer
+         in="offsetBlur"
+         result="shadowOut"
+         id="feComponentTransfer11">
+        <feFuncA
+           type="linear"
+           slope="0.12"
+           id="feFuncA9" />
+      </feComponentTransfer>
+      <feMerge
+         id="feMerge17">
+        <feMergeNode
+           in="shadowOut"
+           id="feMergeNode13" />
+        <feMergeNode
+           in="SourceGraphic"
+           id="feMergeNode15" />
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Title -->
+  <!-- 1: Typed AST -->
+  <g
+     style="filter:url(#shadow)"
+     id="g26"
+     transform="translate(59.919604,-45.654146)">
+    <rect
+       x="274.17606"
+       y="79.776039"
+       width="311.64792"
+       height="104.8284"
+       rx="4.7812395"
+       ry="4.7812395"
+       style="fill:#ffffff;stroke:#111111;stroke-width:1.55208"
+       id="rect24" />
+  </g>
+  <text
+     x="396.8815"
+     y="65.695457"
+     style="font-weight:bold;font-size:14px;font-family:sans-serif;fill:#111111"
+     id="text28">Typed AST</text>
+  <text
+     x="396.8815"
+     y="91.69545"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text30">• Full type information</text>
+  <text
+     x="396.8815"
+     y="113.69545"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text32">• High-level structure</text>
+  <!-- Arrow 1 -->
+  <path
+     d="m 489.91961,139.37884 v 19.68569"
+     style="fill:none;stroke:#111111;stroke-width:2.2;marker-end:url(#Arrow2)"
+     marker-end="url(#arrow)"
+     id="path34"
+     sodipodi:nodetypes="cc" />
+  <!-- 2: Canonical IR -->
+  <g
+     style="filter:url(#shadow)"
+     id="g38"
+     transform="translate(59.919604,-22.363344)">
+    <rect
+       x="274.17572"
+       y="195.90134"
+       width="311.64862"
+       height="121.52641"
+       rx="5.547997"
+       ry="5.547997"
+       style="fill:#ffffff;stroke:#111111;stroke-width:1.55142"
+       id="rect36" />
+  </g>
+  <text
+     x="396.8815"
+     y="202.52507"
+     style="font-weight:bold;font-size:14px;font-family:sans-serif;fill:#111111"
+     id="text40">Canonical IR</text>
+  <text
+     x="396.8815"
+     y="228.52507"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text42">• Explicit control flow</text>
+  <text
+     x="396.8815"
+     y="250.52507"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text44">• Types preserved</text>
+  <text
+     x="396.8815"
+     y="272.52509"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text46">• Analysis-friendly form</text>
+  <!-- Arrow 2 -->
+  <path
+     d="m 489.91961,295.63666 v 20.74963"
+     style="fill:none;stroke:#111111;stroke-width:2.2;marker-end:url(#Arrow2)"
+     marker-end="url(#arrow)"
+     id="path48"
+     sodipodi:nodetypes="cc" />
+  <!-- 3: Monomorphized IR -->
+  <g
+     style="filter:url(#shadow)"
+     id="g52"
+     transform="translate(59.919604,-22.363344)">
+    <rect
+       x="274.17548"
+       y="351.77548"
+       width="311.64905"
+       height="132.44905"
+       rx="5.4010825"
+       ry="5.4010825"
+       style="fill:#ffffff;stroke:#111111;stroke-width:1.55095"
+       id="rect50" />
+  </g>
+  <text
+     x="396.8815"
+     y="361.71292"
+     style="font-weight:bold;font-size:14px;font-family:sans-serif;fill:#111111"
+     id="text54">Monomorphized IR</text>
+  <text
+     x="396.8815"
+     y="387.71292"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text56">• Function cloning + specialization</text>
+  <text
+     x="396.8815"
+     y="409.71292"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text58">• Indirect calls reduced</text>
+  <text
+     x="396.8815"
+     y="431.71292"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text60">• Ownership metadata / hints</text>
+  <!-- Arrow 3 -->
+  <path
+     d="m 489.91961,461.63666 0,33.741"
+     style="fill:none;stroke:#111111;stroke-width:2.2;marker-end:url(#Arrow2)"
+     marker-end="url(#arrow)"
+     id="path62"
+     sodipodi:nodetypes="cc" />
+  <!-- 4: Lowering stage -->
+  <g
+     style="filter:url(#shadow)"
+     id="g66"
+     transform="translate(59.919604,-7.9328045)">
+    <rect
+       x="274.17548"
+       y="517.77545"
+       width="311.64905"
+       height="132.44905"
+       rx="7.298254"
+       ry="7.298254"
+       style="fill:#ffffff;stroke:#111111;stroke-width:1.55095"
+       id="rect64" />
+  </g>
+  <text
+     x="396.8815"
+     y="542.0672"
+     style="font-weight:bold;font-size:14px;font-family:sans-serif;fill:#111111"
+     id="text68">Lowering stage</text>
+  <text
+     x="396.8815"
+     y="568.0672"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text70">• Representation choices</text>
+  <text
+     x="396.8815"
+     y="590.0672"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text72">• Closure layout</text>
+  <text
+     x="396.8815"
+     y="612.0672"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text74">• Calling conventions</text>
+  <!-- Arrow 4 -->
+  <path
+     d="M 489.91961,642.0672 V 662.659"
+     style="fill:none;stroke:#111111;stroke-width:2.2;marker-end:url(#Arrow2)"
+     marker-end="url(#arrow)"
+     id="path76"
+     sodipodi:nodetypes="cc" />
+  <!-- 5: Backends + Runtime -->
+  <g
+     style="filter:url(#shadow)"
+     id="g80"
+     transform="translate(59.919604,-7.9328045)">
+    <rect
+       x="274.17606"
+       y="683.77606"
+       width="311.64792"
+       height="111.83614"
+       rx="5.6834397"
+       ry="5.6834397"
+       style="fill:#ffffff;stroke:#111111;stroke-width:1.55208"
+       id="rect78" />
+  </g>
+  <text
+     x="396.8815"
+     y="710.95227"
+     style="font-weight:bold;font-size:14px;font-family:sans-serif;fill:#111111"
+     id="text82">Native backend / JS backend</text>
+  <text
+     x="396.8815"
+     y="736.95227"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text84">• Deterministic runtime integration</text>
+  <text
+     x="396.8815"
+     y="758.95227"
+     style="font-weight:normal;font-size:13px;font-family:sans-serif;fill:#222222"
+     id="text86">• Heap + ownership strategy</text>
+  <!-- Side annotations -->
+  <path
+     d="m 672.09629,101.06671 c 65,14 65,599.55559 0,629.55559"
+     style="opacity:0.9;fill:none;stroke:#111111;stroke-width:2;stroke-dasharray:6, 6;marker-end:url(#marker1876)"
+     marker-end="url(#arrow)"
+     id="path88"
+     sodipodi:nodetypes="cc" />
+  <text
+     x="711.63855"
+     y="121.6582"
+     style="font-weight:normal;font-size:12px;font-family:sans-serif;fill:#444444"
+     id="text90">Types preserved</text>
+  <path
+     d="m 312.29221,391.62884 c -60.00001,22 -60.00001,152.73202 0,182.73202"
+     style="opacity:0.9;fill:none;stroke:#111111;stroke-width:2;stroke-dasharray:6, 6;marker-end:url(#marker1876)"
+     marker-end="url(#arrow)"
+     id="path92"
+     sodipodi:nodetypes="cc" />
+  <text
+     x="66.728554"
+     y="384.09692"
+     style="font-weight:normal;font-size:12px;font-family:sans-serif;fill:#444444"
+     id="text94">Types and ABI/calling conventions</text>
+  <text
+     x="65.684547"
+     y="412.82138"
+     style="font-weight:normal;font-size:12px;font-family:sans-serif;fill:#444444"
+     id="text94-3">Lowering hints/opts</text>
+  <text
+     x="66.116554"
+     y="441.54587"
+     style="font-weight:normal;font-size:12px;font-family:sans-serif;fill:#444444"
+     id="text94-6"><tspan
+       sodipodi:role="line"
+       id="tspan2950"
+       x="66.116554"
+       y="441.54587">Ownership metadata (planned)</tspan></text>
+  <!-- Legend -->
+  <path
+     style="fill:none;stroke:#000000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:3, 3;stroke-dashoffset:0;stroke-opacity:1"
+     d="M 37.648926,482.6917 H 867.84932 l -1.17937,0.0958"
+     id="path3279" />
+  <text
+     xml:space="preserve"
+     style="font-size:10.6667px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';letter-spacing:0px;word-spacing:0px"
+     x="764.54321"
+     y="458.1965"
+     id="text3301"><tspan
+       sodipodi:role="line"
+       id="tspan3299"
+       x="764.54321"
+       y="458.1965">Elm</tspan></text>
+  <text
+     xml:space="preserve"
+     style="font-size:10.6667px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';letter-spacing:0px;word-spacing:0px"
+     x="764.92719"
+     y="528.39655"
+     id="text3323"><tspan
+       sodipodi:role="line"
+       x="764.92719"
+       y="528.39655"
+       id="tspan3343">C++/MLIR/LLVM</tspan></text>
+  <text
+     xml:space="preserve"
+     style="font-size:10.6667px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';letter-spacing:0px;word-spacing:0px"
+     x="750.81543"
+     y="438.04453"
+     id="text3349"><tspan
+       sodipodi:role="line"
+       id="tspan3347"
+       x="750.81543"
+       y="438.04453">Front End</tspan></text>
+  <text
+     xml:space="preserve"
+     style="font-size:10.6667px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';letter-spacing:0px;word-spacing:0px"
+     x="750.81543"
+     y="505.85941"
+     id="text3371"><tspan
+       sodipodi:role="line"
+       id="tspan3369"
+       x="750.81543"
+       y="505.85941">Back End</tspan></text>
+</svg>

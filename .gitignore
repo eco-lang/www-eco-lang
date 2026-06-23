@@ -1,0 +1,10 @@
+.DS_Store
+node_modules/
+elm-stuff/
+dist/
+.elm-pages/
+functions/
+bun.lockb
+.idea/
+eco-runtime/
+rag-cli/

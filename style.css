@@ -1,0 +1,62 @@
+@import 'tailwindcss';
+
+@plugin '@tailwindcss/typography';
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+body {
+  @apply antialiased text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900
+}
+
+/* Make <pre> elements not contribute to the width calculation of parents.
+ * Instead, let them be as wide as the parent.
+ * This allows a horizontal scrollbar to appear instead of making the whole
+ * article wider, overflowing its parent, and going offscreen on phones.
+ */
+pre {
+  contain: inline-size;
+}
+
+/* Elm Syntax Highlight CSS */
+pre.elmsh {
+  padding: 10px;
+  margin: 0;
+  text-align: left;
+  overflow: auto;
+}
+
+code.elmsh {
+  padding: 0;
+}
+
+code.not-prose {
+  border-radius: .3em;
+  background: rgba(255,229,100,.2);
+  padding: .15em .2em .05em;
+}
+
+.elmsh-line:before {
+  content: attr(data-elmsh-lc);
+  display: inline-block;
+  text-align: right;
+  width: 40px;
+  padding: 0 20px 0 0;
+  opacity: 0.3;
+}
+
