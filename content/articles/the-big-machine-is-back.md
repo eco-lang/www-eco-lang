@@ -57,6 +57,12 @@ eco is not only an attempt to compile Elm to native code. It is an attempt to ma
 * efficient native execution;
 * fewer operational components.
 
--- wheels on the bus architecture --
+**"wheels on the bus" architecture**
 
-O’Hara’s challenge is to engineer for this decade rather than the last one. eco is one answer to that challenge: a compiler for building simpler software on powerful machines.
+![Wheels on the bus architecture](/images/elm-actors.svg)
+
+In his Uncomplex talk John describes a "wheels on the bus" architecture. This is one where we have a fixed actor topology, no more than one actor per CPU core, passing events (or pointers to events) between actors using lock-free ring buffers (the wheels).
+
+eco imagines a multi-threaded Elm with parallel actors. Permitting strict type-enforced domain modelling in a high level language to be built elegantly yet capable of massive throughput and scaling on todays high core count servers.
+
+John O’Hara’s challenge is to engineer for this decade rather than the last one. eco is one answer to that challenge: a compiler for building simpler software on powerful machines.
