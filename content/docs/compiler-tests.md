@@ -110,25 +110,6 @@ Coverage is measured with a fork of an Elm coverage tool, adapted to elm-test-rs
 
 The `elm-tests` target first runs the static script that keeps the harness on the production steps, then runs elm-test-rs on a shadow project in the build tree (`build/compiler/build-xhr`). The shadow links the compiler's own sources, the variant sources of its JavaScript build, and the tests. The suite runs on the JavaScript build because that build compiles with stock Elm: the tests then need only Elm, Node and the pinned elm-test-rs, and they can run before, and independently of, the native chain. Continuous integration runs this target on all three platforms.
 
-## Examples of changes that fit the theory
-A change fits when it adds a program shape to the corpus or a rule to the checkers and lets the pairing do the rest.
-
-- An added invariant gets a checker module exposing one expectation, a suite module that hands it to the standard suite list, an entry in the invariant-test design note, and a row in the catalog naming the test. It then runs over the whole corpus.
-- Another language shape gets a case module and one entry in the standard suite list. Every existing checker applies to it from then on.
-- An added whole-program step or configuration switch gets a runner in the test pipeline that calls it through `Steps`, with its own record of forms, so the tests follow the build.
-- A known unfixed bug gets a fail-first pin whose message states the reason, removed together with the fix.
-- A small isolated unit, such as a codec or a table, gets a plain unit test at the module's test path, as the variable-length integer codec and the type table have.
-
-## Examples of changes that would break the theory
-A change breaks the theory when it makes a check quieter or opens a second way into the compiler.
-
-- Calling a compiler pass directly from the test pipeline or the package-compilation test. The tests would then follow a sequence the build does not, and the static script fails the run. Add the call to `Steps` instead.
-- Writing a private pipeline inside a checker. It drifts from the build the moment either changes. Use a pipeline runner, or add one.
-- A checker that passes when it finds nothing to inspect. It reports success without evidence. Make it fail when its premise is absent, or state the gap in its comment.
-- Adding per-value fuzzing or one test per program. Both multiply by every checker and exhaust the runner's memory without reaching any code the corpus does not. Add a corpus program and let the bulk check carry it.
-- Loosening an expectation so that a corpus program passes. Either the program, the compiler or the rule is wrong; fix the one that is, or pin the bug.
-- Keeping a test for a removed engine or feature switch. It tests code no build runs. Delete it with the code it exercised.
-
 ## References
 
 Parent: [verification.md](/docs/verification).

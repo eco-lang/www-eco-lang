@@ -131,27 +131,6 @@ Every layer cites the numbered rules of the invariants catalog by number instead
 
 The dialect's verifiers sit outside every test target. They run when the back end reads MLIR and reject a malformed single operation at the boundary between the Elm and C++ halves. They check only local facts, and checking between lowering passes is off in the production drivers, so facts that span operations, such as call signatures and layouts, are left to the tests above.
 
-## Adding a check
-
-A change fits when it adds a check at the layer whose oracle catches the bug most cheaply, goes through the shared machinery, and cites the invariant it serves. A change breaks the theory when it makes a check quieter without making the code more correct.
-
-### Examples of changes that fit the theory
-- An added compiler invariant gets a row in the catalog naming its test module, a checker for it, and registration with the shared corpus, so it runs over every module.
-- An added lowering or operation gets a small MLIR file with `CHECK` lines, and an Elm program with `-- CHECK:` lines that reaches it from source. The first pins the lowering; the second pins the compiler's use of it.
-- An added kernel package or runtime feature gets its own test package of Elm programs with a thin runner built on the shared whole-program base, registered in the list of test packages. It then runs on every path the corpus runs on. The `elm-core`, `elm-json`, `elm-http` and `eco-system` test packages have this shape.
-- A platform-specific case uses the Linux-only or skip-AOT marker with a reason, so the restriction is visible in the file.
-- A change to a collector protocol updates the model and the canary's pins together and adds a mutant the model must reject.
-- A found concurrency defect gets a register entry and a guard before the fix, so it cannot return unnoticed.
-
-### Examples of changes that would break the theory
-- Testing a pass's output through a pipeline of the test's own. Tests then pass on a compile no user runs; extend the shared steps instead.
-- Adding a `CHECK` variant or a skip marker that the parser tolerates silently. A misspelling then asserts nothing; make it parse or fail.
-- Updating a canary hash without reading the model it names. The hash exists to force that reading, so investigate the model first.
-- Adding primitive-value fuzzing or one test per case to the compiler suites. Both cost run time and memory and reach no code the corpus does not.
-- Marking a failing test skipped to get a clean run. The failure disappears from view. Only the collector's concurrency defect guards have a real expected-failure mode, in which a guard fails once its defect stops reproducing; the codegen and whole-program harnesses can only skip. Fix the code, or, for a collector defect, add a register entry and a guard.
-- Copying the whole-program runner for one package. Fixes to the shared base would then miss it; build on the base instead.
-- Running `check` after a change to Elm code or MLIR generation. It can test stale `.mlir` files; use `full`.
-
 ## References
 
 Parent: [eco.md](/docs/theory). Children: [compiler-tests.md](/docs/compiler-tests), [program-tests.md](/docs/program-tests), [codegen-tests.md](/docs/codegen-tests), [runtime-tests.md](/docs/runtime-tests), [concurrency-models.md](/docs/concurrency-models).

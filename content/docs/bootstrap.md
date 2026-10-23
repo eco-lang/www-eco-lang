@@ -74,7 +74,7 @@ Stage 7 runs on the native host, where Node's heap limit does not apply, so it e
 
 Before stage 9, compiling a program takes two tools: the native compiler, which emits MLIR, and a separate native back end, which lowers MLIR to an executable. Stage 9 fuses them into one `eco` binary so a user installs one tool, and it starts only after stage 8 has passed.
 
-Stage 9 then has `eco` compile the compiler once, and it succeeds if that compile works. It does not compare `eco` with the result. Only `eco` embeds the LLVM and MLIR back end, so `eco` and any binary it produces differ by construction, and a byte comparison could never pass. The native fixed point is checked at stage 8 instead, on compilers that do not embed the back end. On a glibc build the chain's executables are linked with the GNU linker, because lld refuses the stack-map relocations in a position-independent executable; [build-system.md](/docs/build-system) gives the full rule for which linker links what.
+Stage 9 then has `eco` compile the compiler once, and it succeeds if that compile works. It does not compare `eco` with the result. Only `eco` embeds the LLVM and MLIR back end, so `eco` and any binary it produces differ by construction, and a byte comparison could never pass. The native fixed point is checked at stage 8 instead, on compilers that do not embed the back end. On a glibc build the chain's executables are linked with the GNU linker, because lld refuses the stack-map relocations in a position-independent executable.
 
 A quick relink target rebuilds `eco` from the stage-7 MLIR already on disk when only C++ has changed. The C++ code lowers and runs that MLIR but does not decide its contents, so the MLIR is still valid. The relink skips the stage-8 gate, so it serves local development and needs a full bootstrap to have run first.
 
@@ -96,26 +96,9 @@ The chain needs five things from outside itself, listed from the toolchain inwar
 
 A configuration that builds only stages 1 to 5 lets a platform without a working LLVM build bootstrap its front end.
 
-## Examples of changes that fit the theory
-A change fits when every stage can still rebuild it from source and both fixed points still hold at full strength.
-
-- Adding an Elm source file or a kernel function. The stage inputs are globs, so the chain reruns itself. An added kernel function needs both its JavaScript and its C++ implementation, or the native stages diverge from the JavaScript ones.
-- Adding an input or output capability the compiler needs. It goes into both layers and into the Node server's handler, so that stage 1 and stage 2 both still work.
-- Adding a test gate or check at the earliest stage that can run it, where both existing gates sit.
-- Tuning memory for one stage: its heap settings, its Node heap or stage 5's engine. Each is local to one custom command.
-- Porting to a platform whose linker is not deterministic, by comparing the MLIR as macOS and Windows do.
-
-## Examples of changes that would break the theory
-- Making a later stage depend on output from a JavaScript stage that the native chain cannot reproduce. The shipped compiler would then carry something no fixed point has checked; feed later stages only from outputs that passed a check.
-- Adding a byte comparison between `eco` and any ordinary binary. It can never pass; compare compilers that do not embed the back end, as stage 8 does.
-- Shipping or testing against the stage-5 MLIR. It comes from the lighter engine and from a compiler that has not passed the native fixed point; use the stage-7 MLIR.
-- Editing generated JavaScript beyond the one post-processing script, or adding Node-only behavior to a native stage. The native stages would stop matching the JavaScript ones; make the change in the kernel or the compiler.
-- Weakening a fixed-point check to get a bootstrap through. A failing check means a real nondeterminism or miscompile; find it, as the bootstrap repair loop does.
-- Changing the stand-alone bootstrap scripts to change the chain. CMake does not run them, and they differ from the CMake recipes; change the custom commands.
-
 ## References
 
-Parent: [build-and-workflow.md](/docs/workflow). Sibling: [build-system.md](/docs/build-system).
+Parent: [eco.md](/docs/theory).
 
 - `compiler/CMakeLists.txt`: every stage as a custom command, with its comments, the `compare_files` checks in stages 4b and 8c, the stamp dependencies (`ECO_BOOT_VERIFY_STAMP`, `BOOTSTRAP_STAMP`), the source globs (`ELM_SOURCES`, `KERNEL_SOURCES`), and the `bootstrap`, `eco`, `eco-verify` and `eco-quick` targets. It labels stages 1 to 3 as steps. Treat it as the truth where documents disagree.
 - `compiler/cmake/bootstrap/`: the `build-xhr` and `build-kernel` shadow roots, and `build-kernel/heap-config.json`.
@@ -128,5 +111,3 @@ Parent: [build-and-workflow.md](/docs/workflow). Sibling: [build-system.md](/doc
 - `runtime/src/codegen/`: the native back end (`eco-boot-native`) used from stage 6.
 - `ECO_FRONTEND_ONLY`: the stages 1 to 5 configuration. `ECO_MONO_ENGINE=subst`: the light engine in stage 5. `--kernel-package`, `--local-package`: the stage 2 compiler options. `--text-mlir`: text MLIR output.
 - `docs/bootstrap.md`: stage narrative and test gates. `guides/bootstrap.md`, `guides/bootstrap-fix-loop.md`, `guides/bootstrap-fails.md`: running the chain, the repair loop and recorded failures.
-
-Known disagreements in the repository's documents: `docs/bootstrap.md` and `guides/bootstrap.md` say stock Elm comes from npm, but the build fetches a pinned binary, and they suggest a 12000 MB Node heap where the recipes set 16384 MB. `guides/bootstrap-fix-loop.md` speaks of eight stages; there are nine.

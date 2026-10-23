@@ -151,30 +151,6 @@ Only the collector as built is modeled: one mutator in the process, with either 
 
 GenMC is the weak-memory tool because it runs the real headers. C11Tester tests randomly, so a pass from it is weaker evidence. herd7 needs hand-written litmus tests, which drift from the code they stand for.
 
-Some written sources lag the code, and where they disagree the code and `test/tla/README.md` are right. The invariant text and the verification plan say a canary failure fails the build; the code warns by default. The same two documents name seven models; the registry, the manifest and the README include the eighth, the block lifecycle model. The headers of some audit logs say the canary is not built, though those logs record many canary re-audits below the header.
-
-## Examples of changes that fit the theory
-A change fits when the model, its mapping and its audit log move with the code, and the verdict is written down.
-
-- Changing a protocol a model covers: edit the PlusCal source (never the generated translation), the mapping and the audit log in the same change, run the quick model checks, and run trace validation for traced paths. Every fix to a register defect has this shape: its rows flip to a pass, and the old behavior stays as a mutant.
-- Adding a concurrent phase: write its model before the implementation, with the mapping and its footprint rows, mutants and a trace specification, then add pins and register entries. Concurrent bitmap clearing and concurrent evacuation are the candidates the verification plan names.
-- Adding an atomic or a lock to a file that is already covered: the census fires, and the change is a model question first. Often the verdict is that no model change is needed, and it goes into the audit log with the hash prefix.
-- Widening a limit the pinned code encodes, such as the most fields an object may have or the largest closure arity: the canary fires, and the audit entry records that no model change is needed.
-- Guarding an address or identifier reuse, where one thread still holds the old meaning: add a configuration with a reused id and a mutant. The block lifecycle model exists for this reason, though its protocol is serial.
-- Pinning a region: add begin and end markers in the source, add the pin with `-` as its hash, accept it through the update step, and list the pin in the model's mapping.
-
-## Examples of changes that would break the theory
-A change breaks the theory when it quiets the canary or a checker without anyone deciding whether the model still describes the code.
-
-- Running the update step to clear a canary failure. The tool refuses without an audit entry, and an entry written to get past the gate, or a bulk re-bless after a refactor, leaves models without a real verdict. Read the change and its footprint rows, and update the model where it no longer matches.
-- Ignoring a canary warning because the build went on. Nothing else notices it; treat the warning as the failure it reports.
-- Editing the generated TLA+ translation by hand. The freshness check fails, and the next translation discards the edit. Edit the PlusCal and translate it again.
-- Making a mutant pass, or loosening a bound to keep a run fast. Either removes the evidence that the model can fail. Split the model along a contract, or move the breadth to the deep tier.
-- Letting a model drift toward the plan or the comments, merging two atomic steps into one, or writing a loop that cannot stop where the code's loop can. Each hides interleavings the code has. Cite the code, keep steps atomic, and let trace validation check the result.
-- Adding shared state with no footprint row. The census sees an added atomic but not a plain field, and the register's first entries are all shared locations that the mapping tables missed. Add the footprint search and the mapping entry with the field.
-- Checking a property with an assertion, or naming several invariants in one mutant's configuration. The runner matches one invariant by name, so either form makes the expected outcome unmatchable.
-- Building a concurrency feature with no model. Concurrent evacuation, for example, would break the rules for forwarding through object headers that several models assume. Its model belongs before its code.
-
 ## References
 
 Parent: [verification.md](/docs/verification).

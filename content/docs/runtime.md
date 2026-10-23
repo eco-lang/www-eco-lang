@@ -93,27 +93,6 @@ The runtime depends on four properties of the code around it, and it has no way 
 
 The collector's concurrent protocols are also written as TLA+ models: formal specifications that a model checker explores exhaustively. A canary records hashes of the code each model describes and warns when that code changes. A warning means the model may no longer match the code, so the model is checked first and the hash updated only after.
 
-## Examples of changes that fit the theory
-A change fits the runtime when it leaves published objects unchanged, keeps all Elm code and allocation on the eco thread, and registers every heap value that C++ code holds.
-
-- An added heap object kind changes its tag, structure, size calculation, tracing and pointer rewriting together, because the collector depends on all five agreeing. Chunked lists and the UTF-8 string forms have this shape.
-- An added Task-returning kernel or service builds its Task with the binding helpers, parks a resume token, keeps any service thread to plain data, posts results to a queue the scheduler drains, and takes and releases holds through the liveness interface. Sockets, WebSockets, HTTP/2 and the HTTP server are built from these pieces.
-- An added effect manager registers its initializer, its effect handler, its self-message handler and any taggers with the platform's registry, next to the existing managers, because the platform runtime finds a manager only through that table when it gathers commands and subscriptions.
-- Collector tuning, or an added collector phase, sits behind the heap configuration, with a rule in the invariant catalog, so the default design stays the one the theory and the tests describe. If it runs concurrently, the formal model changes first, because the models are the specification the concurrent code is checked against.
-- An added platform is another per-OS file beside the existing address-space, unwinding, path and spawning files, so the collector body stays free of platform conditionals.
-- Host-facing behavior goes through the embedding interface, with payloads serialized by the host and decoded on the eco thread, so the host never builds a heap value.
-
-## Examples of changes that would break the theory
-- Writing into a published heap object, for example to update one field from a kernel. Every young collection and every background mark assumes no old object gains a pointer to a younger one. Allocate a fresh object, or build it in an object still under construction that stays in the nursery until it is published.
-- Holding a heap reference in a C++ local across an allocation without registering it. The collector cannot see it and leaves it pointing at a moved object. Put it in a registered member field or a stack guard.
-- Letting a service thread allocate, follow a heap reference or run Elm code, to save a hop through the queue. That reintroduces the timer corruption. Post plain data and let the eco thread build the values.
-- Doing a kernel's input or output when it is called, for speed. The Task stops being a description of work. Defer it into the Task's callback.
-- Changing the hold count directly, or adding a separate keep-alive flag. The open-hold listing then misses a reason the program is still running. Take a hold through the liveness interface.
-- Adding a second mutator, or sharing one heap between threads, to get parallelism. The collector, the scheduler and every service contract assume one mutator per heap. Put parallel work on service threads that exchange plain data; parallel Elm belongs to the heap-per-thread design, which needs its own plan, per-heap accounting and formal models.
-- Telling a constant from a heap address by its value or by a null test. Use the constant bit.
-- Forking the process, in the runtime or in its tests. Spawn instead.
-- Updating the canary's hash to silence a warning. Check the model against the changed code first.
-
 ## References
 
 Parent: [eco.md](/docs/theory). Children: [garbage-collector.md](/docs/garbage-collector), [runtime-data-structures.md](/docs/data-structures), [scheduler-and-services.md](/docs/scheduler-and-services).

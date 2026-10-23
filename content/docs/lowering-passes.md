@@ -148,27 +148,6 @@ The pipeline is correct only if the things around it hold.
 - Elm values never change once built, so no old object points to a younger one and the lowering emits no write barriers.
 - The backend after the pipeline treats the whole-program stamps as contracts and fails on missing or stale ones.
 
-## Changing the pipeline
-
-A change fits when it decides its fact where the inputs are final, records the fact where later stages can read it, keeps every merge or motion of eco operations before collector preparation, and keeps every whole-program decision in MLIR.
-
-### Examples of changes that fit the theory
-- An eco-level simplification that removes an allocation or a call becomes a small pass in the first layer or the fold slot, before collector preparation, with its own environment switch and a text-matching test of the pass output. The comparison rewrite and the folder are built like this.
-- A fact a later stage needs is computed where its inputs are final, stamped on the operation, function or module, and given a validation twin that recomputes it. The "cannot collect" call marking and the three planners have this shape.
-- An operation family adds patterns to the conversion's source file for its concern and creates any module-level artifact it needs in the pre-creation stage, so parallel body conversion stays read-only.
-- Raising a representation limit, such as closure arity or the number of object fields, changes closure simplification, the closure, heap and aggregate lowerings, the grouping size table and the heap invariants together, because each of them encodes the limit.
-- A parallel stage hands out work in chunks, builds converters and patterns once per chunk, and is checked for output byte-identical to the serial path.
-
-### Examples of changes that would break the theory
-- Merging, eliminating or moving eco operations after collector preparation. Purity is gone by then and the attached lists and group membership go stale. Put the transform at the fold slot, and do not merge allocations unless their result provably cannot reach a Float.
-- Fixing a collector bug by adding values to preparation's live sets, or reading them as the source of collector safety. The emitted code never uses them. Fix what statepoint rewriting sees: types, "cannot collect" attributes or fold-proof casts.
-- Rewriting LLVM-dialect bodies after gc-free propagation, or between the capacity plan and gc-free propagation. A stamp goes stale in a way no check on one partition sees. Put the rewrite before reachability.
-- Looking up a callee's declaration inside a per-function pass or a consumer to recover a fact about it. The transform and the audit then read different things and diverge. Copy the fact onto the call.
-- Making a validator repair its input, for example by stubbing a missing declaration. It hides the front-end bug; fix the emitter in the Elm compiler.
-- Emitting a raw integer-to-pointer or pointer-to-integer cast for a boxed slot. The inliner can fold it and leave an integer live across a statepoint. Use the slot helpers, which emit the barrier form.
-- Adding a whole-module analysis on the LLVM side. It cannot run on a partition. Compute it in the MLIR tail and stamp it.
-- Creating a declaration or global from inside parallel body conversion. It writes shared state from many threads; create it in the pre-creation stage.
-
 ## References
 
 Parent: [backend.md](/docs/backend). Siblings: [eco-dialect.md](/docs/eco-dialect), [native-drivers.md](/docs/native-drivers).

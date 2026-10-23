@@ -132,35 +132,6 @@ These are the facts the parts above assume of each other, and nothing at run tim
 - The kinds the wrapper decodes match the kinds on the header, because both come from the same target signature. The kind derivation aborts rather than default to boxed.
 - Code that fills value slots publishes `n_values` with no safepoint between setting the count and filling the slots, because the collector traces exactly that many. The generic field-store helpers must never be used on a closure.
 
-## Code that looks live but is not
-
-Three leftovers in this area look like working paths. A change that wakes one of them breaks the design.
-
-The `$clo` functions are generated for every capturing closure, but the evaluator slot never points to one. It points to a descriptor whose generic entry wraps `$cap`. `$clo` exists only because closure creation names it and the verifier requires a named function to exist. An executable drops it, because nothing reaches it from the entry point. A JIT run, a shared library or an object file without internalization keeps it as dead code.
-
-One arm of the typed saturated lowering, `emitClosureCall`, is taken when an application carries a closure-kind attribute, `_closure_kind`. It loads the evaluator slot and calls it as if it were `$clo(closure, args...)`. Nothing reaches it: the front end puts that attribute only on closure creation, and the dialect simplifier only copies it from an earlier application. If it were reached it would jump into the descriptor, which is data. A comment near it calls it "NOT dead", so it can look like a supported path to revive.
-
-`eco_apply_segmentation_unknown` survives only for a unit test. Both generic kinds lower to `eco_apply_closure_eval`.
-
-## Examples of changes that fit the theory
-
-- Widening the closure arity limit. The packed word and the descriptor grow, extension words carry the extra kinds, and every reader goes through the shared kind accessors. Each optimization declines the arities it cannot serve, such as the fast edge above 16 or 20 and interning above 20, and generic apply serves the rest.
-- A further guarded fast path. The fast edge is the model: read the header, compare it with what the site knows, call a specialized entry on a match, and fall through to the unchanged generic sequence otherwise. A path built this way cannot miscompile when its precondition is missed.
-- A further raw result path. The result kind is on the header, so a path that returns raw values can arrive in steps, first in the wrappers and then at saturated sites, without changing what any call means.
-- A kernel that builds closures. It allocates through `eco_alloc_closure_fn` with its result kind, which interns a descriptor with an empty `sat[]`, and it applies closures through `eco_apply_closure`. No compiler change is needed.
-- A further proven call shape. Global optimization adds a stamp or a call fact, MLIR generation emits a typed application with the matching attributes, and the lowering turns it into a direct call. Every site the proof does not cover keeps generic apply. The fast stamp for partial applications of a global has this shape.
-
-## Examples of changes that would break the theory
-
-- Mutating a closure when extending it, or writing a capture after allocation. That breaks interned zero-capture closures, the published-object rule and tracing by `n_values`. Allocate a fresh closure, as `eco_pap_extend_l` does.
-- Emitting a remaining arity or a stamp from a type or a guess. Neither is checked at run time, so a wrong claim corrupts silently. Emit a generic application, or add a guarded fast edge.
-- Deciding the result kind or the slot kinds at the call site. That breaks kernel callers and staged closures. Read them from the header, and convert at the runtime boundary.
-- Boxing arguments in the IR before a generic apply. Pass raw values with a layout and let the runtime convert.
-- Storing a raw function address in the evaluator slot. Every runtime path reads that slot as a descriptor. A closure around a bare function gets its own descriptor.
-- Reviving the closure-kind arm, or calling `$clo` through the evaluator slot. The call would jump into the descriptor. Route calls that need the whole closure through the descriptor's generic entry or a `sat[]` entry.
-- Packing the closure word by hand or reading kind bits directly. Use `packClosureWord`, `closureSlotKind` and `ClosureKinds`, and change every reader of the layout together.
-- Adding a `sat[]` entry whose return type is not the canonical type for its result kind. The fast edge's merge would receive a value of the wrong type. Keep declining that case.
-
 ## References
 
 Related documents: [eco.md](/docs/theory) (parent), [global-optimization.md](/docs/global-optimization), [lambda-set-specialization.md](/docs/lambda-set-specialization), [mlir-generation.md](/docs/mlir-generation), [eco-dialect.md](/docs/eco-dialect), [lowering-passes.md](/docs/lowering-passes), [value-representation.md](/docs/value-representation), [kernels.md](/docs/kernels), [elm-kernel.md](/docs/elm-kernel), [garbage-collector.md](/docs/garbage-collector).
@@ -186,19 +157,3 @@ Invariants (`design_docs/invariants.csv`):
 - RUNTIME_CLOSURE_004: over-application recurses through generic apply.
 - REP_CLOSURE_001, FORBID_CLOSURE_001: only Int, Float and Char are raw in closures; Bool is boxed. REP_CLOSURE_002: arguments are converted to declared slot kinds.
 - HEAP_033: interned zero-capture closures. HEAP_034: closures are traced to `n_values`. HEAP_078: the 2047-parameter layout and every reader of it. HEAP_SNAPSHOT_001: published objects are never written.
-
-Rows that disagree with the code (trust the code):
-
-- CGEN_CLOSURE_005, 007 and 008 describe a dispatch-mode attribute on every closure call. No pass sets it, and no lowering reads it.
-- CGEN_058 names `eco_apply_closure` and CGEN_059 names `eco_apply_closure_typed` as the generic lowering. CGEN_060 names `eco_apply_segmentation_unknown` with bitmap-based extension. Both generic kinds call `eco_apply_closure_eval`, and partial calls use `eco_pap_extend_l` with a layout.
-- RUNTIME_CLOSURE_004 places the over-application chain in `eco_apply_closure`. It is in `eco_apply_closure_eval`.
-- HEAP_033's main text gives a different packed-word layout. Its amendment and the code use HEAP_078's 11/11/2/40 layout.
-
-Comments that disagree with the code:
-
-- `Ops.td`'s `papExtend` example: shows the dispatch-mode attribute that nothing sets.
-- The comment above `expandSatMarkers`: "25 slots" where the guard uses 20.
-- `Heap.hpp`'s `EvalParamLayout` comment: a capability bit on a closure flags field that does not exist.
-- `RuntimeExports.h`: the doc for `eco_apply_closure_eval` sits above the segmentation-unknown declaration, and `eco_alloc_closure_k`'s evaluator parameter is documented as a function pointer though it is a descriptor.
-- `generateGenericApply`'s doc comment in `Expr.elm`: says all arguments are boxed; only Bool is.
-- The `CallOpLowering` comment calling `emitClosureCall` "NOT dead".

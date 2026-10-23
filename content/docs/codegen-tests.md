@@ -129,24 +129,6 @@ The harness is C++ code linked into the test executable because only there can a
 
 A fixture belongs to the code it pins. When a pass or operation is deleted, its fixtures are deleted with it, except those that pin operations that remain. Keeping them under `XFAIL:` would leave files that are skipped and assert nothing. The intent of a test lives in each fixture's header comment, usually naming the rule or design it serves, rather than in a separate checklist that drifts from the files.
 
-## Examples of changes that fit the theory
-A change fits when it adds one fixture per property, at the stage that makes the property visible, with a header that names the rule it pins.
-
-- An added eco operation, verifier rule or pass gets one fixture per property, named `<subject>_<case>.mlir`. The reachability fixtures, the never-collects plan fixtures and the typed partial-application verifier fixtures have this shape.
-- An added or moved limit edits the generator script, commits the script and its output together, and keeps a twin one past the limit that must be rejected.
-- An added byte-fusion operation or encoding gets a JIT round trip plus boundary and incomplete-input cases, following the existing families.
-- An added directive goes into the shared `CHECK` parser, so every harness that uses it gains the directive at once, with a hard error for malformed input.
-- A bug found by an Elm program is reduced to MLIR and pinned with a fixture beside the Elm test that found it, so the lowering stays pinned even if the program changes.
-
-## Examples of changes that would break the theory
-A change breaks the theory when it makes a fixture quieter without the code becoming more correct, or when it lets the two harnesses differ by accident.
-
-- Writing checks under a custom check prefix, or in the commands of a second RUN line. The harness reads neither, so those checks never run. Use plain `CHECK` lines and one RUN line, or teach the harness the feature first.
-- Deleting a fixture, or marking it `XFAIL:`, to make a pass change green. Both remove the check. Decide whether the property is obsolete, then delete the fixture and update its rule in the catalog, or still required, then fix the pass.
-- Copying a harness fix into only one of the two harnesses. They are near copies, and a fix such as the nursery check or crash routing that lands in one leaves the other set unprotected. Land it in both, or extract the common part.
-- Pinning a front-end bug with a fixture. Fixtures start from MLIR and cannot see typing or specialization mistakes; those belong in the compiler or whole-program tests.
-- Adding a separate shell or Python driver. It would lose the runtime link, the shared parser and the spawned children; extend the C++ harness instead.
-
 ## References
 
 Parent: [verification.md](/docs/verification).

@@ -183,31 +183,6 @@ The engine's state records are compiled by Eco itself, and comments in the engin
 
 Both engines create specializations that turn out unreachable, and the post-monomorphization inliner orphans more. Reachability is exact only after the inliner and before global optimization adds references by other routes, so a second prune runs there. It collects edges again from the rewritten bodies and does no closing of numbers. Pruned entries are emptied, never renumbered, because lambda-set members, call edges and later passes all hold specialization numbers.
 
-## Examples of changes that fit the theory
-A change fits when it adds an equality to an item's store, a demand to the list or a check that reports a property of the program, and leaves staging, layout and calling conventions to later passes.
-
-- A construct whose type its consumer decides becomes another equality in the item's store: a connection between two types, or a frame for a loop or an application. Connecting the body of a let to the type of its node, or the record's type to the update's type, has this shape.
-- A let-bound value used at several types extends the body-first split: discover the uses, translate once per use in a scratch store, and rename. Local tail-recursive definitions used at several types are split this way, one loop per type.
-- A further kind of global, such as another synthesized definition or kernel family, gets a canonical type and enters as an ordinary demand. The registry, the prune and both engines then handle it like any other global, as they handle the flags decoder.
-- A change to specialization semantics that both engines share goes into both, and the comparison mode confirms it. The comparison means something only while both engines implement the same rules.
-- Anything about which functions can reach a call belongs to [lambda-set-specialization.md](/docs/lambda-set-specialization).
-- Performance work cuts allocation per item: hash-consing, results the back end can return in registers, memoization keyed per global.
-- A further limit on growth reports through the engine's error channel as a property of the program, as the watchdogs do, so the user gets advice instead of a compiler bug.
-
-## Examples of changes that would break the theory
-- Defaulting a `number` anywhere before the prune, or committing to a layout on a type that still holds an open number. A Float found later in another item cannot then be honored, and the prune's positional close cannot undo the decision. Keep the number open and have the decision decline.
-- Comparing or interning types with the key's equality where exact equality is meant. The key folds open numbers into Int and erases variable numbers, so two different types would be treated as one. Use exact equality outside the registry.
-- Changing the key to tell apart things the prune merges, such as two boxed variables, or an open number and Int. That splits specializations that compile to identical code. The key is identity up to what code generation can see.
-- Harvesting a definition's own annotation variables into the program-wide number table, or letting one item's number fact reach another item's loading. Either closes non-numbers to Int. Load from the static table and read the harvested table only at read-back, keying and pruning.
-- Adding boxing or unboxing shims in the MLIR patterns to repair a layout disagreement. No emitted code is correct under the disagreement, and the shim hides the engine bug. Make every view of the value agree inside the engine.
-- Making a best-effort connection strict, which crashes on erased kernel signatures the checker accepted, or making the strict root unification lax, which hides registry bugs. Keep each where its reason applies.
-- Falling back to the substitution engine on a hard case. The solver engine has no fallback so that an unhandled construct is a loud error; handle the construct in the solver engine.
-- Loosening the comparison's canonical text to hide a mismatch, or letting one engine borrow the other's output. Either makes the comparison meaningless. Find which engine is wrong.
-- Raising or disabling a watchdog limit to get past a type that keeps growing, or reporting a trip as a compiler bug. Growth from polymorphic recursion never stops; the fix is an annotation in the program. Raise a limit only for a program that really is that large.
-- Staging, uncurrying, layout or calling-convention choice inside the pass. Each has an owner downstream, and a second owner drifts from the first. Put it in global optimization or the MLIR generator.
-- Another kind of deferred work, or another let-scope specialization stack, for a typing problem. That rebuilds the substitution engine's machinery inside the solver engine. Use a store connection or the body-first split.
-- A project settings file that sets monomorphization options without naming the engine. It silently runs the substitution engine with lambda sets off. Name the engine.
-
 ## References
 
 Parent: [compiler.md](/docs/compiler). Sibling that runs inside this pass: [lambda-set-specialization.md](/docs/lambda-set-specialization).

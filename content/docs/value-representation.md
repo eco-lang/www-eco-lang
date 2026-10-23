@@ -156,24 +156,6 @@ A representation bug surfaces at the first check that can see it. The earlier th
 
 The validator asserts run only in heap-validating or Debug builds, and the pointer-integer check only in GC-debug builds. The MLIR-equivalence runner catches runtime divergence between the MLIR that the JavaScript-built compiler and the native compiler produce for the same program.
 
-## Examples of changes that fit the theory
-
-- An added family of embedded constants, using a constant code that no pointer test reads. The nullary-constructor constants are the example: they use code 3, so every pointer-indicator test classes them as non-pointers with no change. They are built and decoded only through the `Heap.hpp` helpers and their code-generation copies under `static_assert`, and the verifiers and heap validation reject a heap object for a nullary constructor.
-- Raising an object kind's slot capacity by adding kind storage while leaving field positions alone. Tail kind words are the example: they raise the capacity of records, constructors and closures, and touch neither SSA nor the ABI.
-- A heap-only form of an existing logical value. Ropes, slices, UTF-8 strings and chunked lists are all `!eco.value` in SSA and at the ABI, so no compiled code changes when one is added. Only the runtime learns the form.
-- Storing a primitive raw in a runtime container with the existing kinds. A Task's value field holds an Int, Float or Char raw, with its kind in slot 0 of `header.unboxed`.
-- A boundary that needs a conversion, routed through `boxToEcoValue` or `coerceResultToType`, so that boxing is decided by the actual SSA type against the target's ABI type.
-
-## Examples of changes that would break the theory
-
-- Storing a Bool raw in a heap or closure slot because it is `i1` in SSA. The collector and every reader expect a word there. Box it to `0x4` or `0x5`, which costs no allocation.
-- Adding a fifth raw kind, such as a raw Bool or a 32-bit Int, by reusing a code. Every kind word, the closure parameter and result kinds, and the collector's walkers assume four codes. A fifth kind means widening all of them together and amending the rule that fixes the kinds.
-- Testing for a constant by asking whether the constant code is nonzero, whether the word is null, or whether it lies in an address range. False is `0x4`, with constant code 0, and passes none of those tests correctly. Use `isConstantBits`.
-- Allocating a heap object for a value that has an embedded form, such as a zero-field Custom or a heap Nil. Equality would call equal values unequal. Return the embedded word, as `alloc::custom` does for an empty field list.
-- Changing a layout at one site, for example ordering a record's fields differently in one emitter, or caching a layout. The other builders and readers keep the old answer. Change `computeRecordLayout` or its sibling itself, so that every site follows.
-- Reading a boxed slot directly at a primitive type, such as a Bool field read as `i1`. Under an encoding where True and False share no low bit, this inverts every Bool case. With `0x5` and `0x4` the low bit happens to be right, so the mistake passes unnoticed until the encoding changes. Project at the slot's kind and then unbox.
-- Removing a box and unbox pair as redundant without proving that the two forms are equal. The pair is where one model's form meets another's, and dropping it lets a value reach a slot or a parameter in the wrong form. Fold only a pair that is provably the identity, such as an unbox applied directly to a box of the same type.
-
 ## References
 
 Code:
@@ -205,12 +187,3 @@ Documents:
 - [eco.md](/docs/theory): why the models are kept apart.
 - [runtime.md](/docs/runtime), [garbage-collector.md](/docs/garbage-collector), [runtime-data-structures.md](/docs/data-structures), [closures-and-calls.md](/docs/closures-and-calls), [eco-dialect.md](/docs/eco-dialect), [mlir-generation.md](/docs/mlir-generation).
 - `plans/hpointer-representation-redesign.md` (the word encoding, D1 to D10); `plans/2-bit-unboxed-migration.md`.
-
-Rows and comments that disagree with the code. A developer who trusts them writes the wrong test or looks for layouts in the wrong phase:
-
-- HEAP_014 and XPHASE_002 say an embedded constant is one whose constant bits are nonzero. False has constant code 0, so that test misclassifies it. The real test is the pointer indicator (REP_CONSTANT_001, REP_CONSTANT_002).
-- REP_HEAP_001 says layout metadata is produced during monomorphization, but monomorphization supplies only constructor shapes, and code generation derives every layout.
-- REP_AGG_001 says the aggregate types have no producer. Code generation emits `eco.make.tuple2`, `eco.make.tuple3`, `eco.make.custom` and `eco.to_heap` by default.
-- REP_SSA_001 lists `i1` among the immediates it says exist only for Int, Float and Char.
-- The description of `eco.box` in `Ops.td` says it accepts `i32` and allocates a Bool object. Char is `i16`, and boxing a Bool allocates nothing.
-- Comments in `Heap.hpp` describe `ElmArray`'s and `DynRecord`'s unboxed bits as one-bit flags and mention a `Const_EmptyString` constant that does not exist.

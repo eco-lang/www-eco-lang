@@ -80,31 +80,6 @@ The two children describe the libraries. Elm's kernels form one child, and the t
 
 [system-libraries.md](/docs/system-libraries) covers `eco/kernel` and `eco/system`. Both are Elm packages over C++ kernels for native code and JavaScript kernels for Node, and both expose only neutral values. `eco/system` is derived from the Node library of Gren, a language close to Elm, and covers files, processes, streams, sockets, TLS, WebSockets and an HTTP server on top of a network reactor and worker services. Because these packages invent their APIs, they carry their own rules for threads, rooting, errors and keeping a program alive while work is pending.
 
-## Where kernel changes belong
-
-A kernel change fits when it adds behavior in C++ and leaves the calling convention, the kernel's facts and its type to the compiler's tables, when it keeps IO inside task bindings, and when it passes only neutral values across the boundary. A change that moves one of those decisions somewhere else breaks the theory.
-
-### Examples of changes that fit the theory
-- A kernel function takes an Elm wrapper, the JavaScript body for the Node target, the declaration in the library's export header, the implementation and its export, and an entry in the library's CMake module list. The compiler needs no change unless the function needs a typed variant. The completion of elm/core's kernels and the progress reporting behind `Http.track` both have this shape.
-- A typed variant for a hot instantiation takes one C++ function with an `_Int`, `_Float` or `_Char` suffix and one branch in the compiler's symbol selection.
-- A task-returning IO kernel builds its binding with the shared helpers and does all its IO inside the binding's body. An exemption from deferral goes into the audit with its reason.
-- A whole package of kernels, as `eco/system` is, is an `eco`-authored package with its own kernel homes, its own CMake library and the registration of its effect managers. That extends the design along an axis it already has.
-- A row in the facts or types table is added or refined after reading the C++, with the evidence it rests on recorded beside it.
-- A small kernel whose behavior the call-site type fixes can become a dialect operation when its body is tiny and the operation folds with its neighbors.
-
-### Examples of changes that would break the theory
-- A name check in a compiler pass that decides "this kernel is pure" or "this kernel allocates". A second place deciding a kernel's properties will disagree with the facts table. Add or amend a row instead, so every pass sees one answer.
-- Giving a kernel its type from its first use. The first use may not match what the C++ does with the value. Add a row to the types table that follows the C++.
-- IO, or a call back into Elm, made when a task-returning kernel is called. Tasks lose their ordering and the scheduler can block. Put the work in the binding's body.
-- Letting the back end repair a kernel signature, or accepting two signatures for one symbol. The compiler's declaration is the only source of the convention, so fix it there.
-- Passing an Elm record or a package's custom type through a kernel, or reading a field by position. The kernel cannot know the compiler's layout, and the code breaks when the layout changes. Return a neutral tuple and decode it in the Elm wrapper.
-- Keeping a C++ pointer or C++-owned state inside a heap object to avoid a conversion. The collector frees the object without releasing what the pointer owns. Use a handle id with a C++ table, or build real heap values.
-- Registering one root per element in a kernel that builds a list. The rooting cost then grows with the list. Root the buffer once.
-- Giving Elm code observable mutation through a kernel handle. Elm code would then depend on a usage rule the compiler cannot check. Build a fresh value instead.
-- Adding a package whose kernel home name matches an existing one. The compiler's kernel tables key a kernel by its home name without the `Elm` or `Eco` prefix, so the two homes would silently share facts and types. `Elm.Kernel.File` and `Eco.Kernel.File` already share one row, which covers both bodies. A guard script run by the full test target rejects an `eco/system` home that collides with any other, but nothing checks a home added to another package. Choose a distinct home name, or separate the tables by prefix first.
-- Adding a third kernel prefix of a different length. The compiler splits a symbol into its parts by dropping a fixed number of leading characters, which works only because `Elm_Kernel_` and `Eco_Kernel_` are the same length. Change the splitting to parse the prefix before adding one.
-- Adding a native-only function to an `eco/system` wrapper without a matching JavaScript kernel. The wrapper then fails on the JavaScript target. Write both kernels.
-
 ## References
 
 Parent: [eco.md](/docs/theory). Children: [elm-kernel.md](/docs/elm-kernel), [system-libraries.md](/docs/system-libraries). Related: [runtime.md](/docs/runtime) for the scheduler and the collector.

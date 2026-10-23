@@ -122,33 +122,6 @@ A fix must give the fused region one of these properties, and this document does
 
 Until one of them holds, any change to fusion should be checked against the list of allocation points above, and should not add to it.
 
-## Where the code and its stated rules disagree
-
-The UTF-8 and bytes reads return a success flag that the emitter discards. The UTF-8 read reports failure on invalid input, and the lowering computes the flag, but the emitter branches only on the bounds check. A fused decode of invalid UTF-8 would therefore produce `Just` of a null string where the kernel produces `Nothing`. This is latent, because string decoders do not reach fusion in practice, and the fixture for the operation tests the flag itself, not the emitter's use of it.
-
-Three numbered rules are false for an encoder with an opaque leaf. One says fusion is all or nothing for encoders as well as decoders, which the opaque leaf makes false. The other two say a fused encoder makes no intermediate allocations and calls no interpreter, and an opaque leaf builds an `Encoder` value and runs the kernel's walker. The References list gives their identifiers.
-
-The emitter compiles the expression of a string, a `Bytes` value or an opaque leaf twice, once for the size term and once for the write, so the string or the `Encoder` value is built twice. A comment calls this the same two passes the kernel makes, which understates it for an opaque leaf.
-
-## Examples of changes that fit the theory
-
-- Another elm/bytes primitive or combinator: a node in `Reify`, an operation in the middle form, an emitter case, a `bf` operation with a runtime helper for any layout detail, and a lowering pattern in `BFToLLVM`. The opaque leaf follows exactly this path.
-- Another shape that inlining produces: teach the recognizer to look through it, as it looks through `let` bindings, local variables and eta-expanded helpers, rather than naming the helper that produced it.
-- Carrying a fact from recognition to emission: put it in the node, as the loop's element type is carried, rather than working it out again in the emitter.
-- Another buffer or string representation: change only the runtime helpers. Buffer slices and the UTF-8 string forms are handled this way, in the helpers alone.
-- More decoders fusing: extend the decoder recognizer to read the inlined form of a decoder that takes arguments, a decoder around a kernel read, as the loop recognizer already reads inlined `succeed`, `map` and `andThen`.
-- Making the fused code safe against the collector by any of the three properties in the section on the cursor and the collector, applied to every allocation point listed there.
-
-## Examples of changes that would break the theory
-
-- Fusing a decoder that is only partly recognized by guessing the rest. Fused code that only approximates the source breaks the rule that fusion computes exactly what the kernel computes. Leave the decoder to the kernel, or add an exact pattern.
-- Matching a project helper by name, such as the compiler's own list encoder. It ties the compiler to one codebase. Add the helper to the inliner's list and match what it unfolds into.
-- Adding `encode` or `decode` to the inliner's list. The entry points disappear into kernel calls and nothing fuses.
-- Reading a buffer or string header from generated code, for example computing the address of a length field. It ties generated code to one representation. Add or extend a runtime helper instead.
-- An unchecked read that no passing bounds check dominates, or a write whose bytes were not counted in the size. Either one reads or writes past the buffer. Give every read a check and every write a size term.
-- A fused failure path that traps or throws. The kernel returns `Nothing`, and the fused code must return the same. Branch to the `Nothing` constant.
-- Adding a fused operation that allocates while a cursor is live, such as a read that builds its result on the heap and then continues reading through the same cursor, or making a helper called with a live cursor allocate, such as the opaque encoder's walker or the UTF-8 copy. Each one adds a point where a minor collection can move a nursery buffer under a cursor that is never updated. Keep allocation out of the region where a cursor is live, or make the change together with a fix that gives the region one of the three properties above.
-
 ## References
 
 Parent: [compiler.md](/docs/compiler). This node has no children.

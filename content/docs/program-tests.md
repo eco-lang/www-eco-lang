@@ -149,27 +149,6 @@ Windows builds and runs the test executable, but the whole-program suites report
 
 Two test binaries must not run at once from the same build tree, because they share the compiler's caches. Separate build trees can run side by side, since each gets its own server addresses through the environment.
 
-## Examples of changes that fit the theory
-A change fits when it adds a program with directives, goes through the shared parser and base, and so reaches every runner that can use it.
-
-- A regression test for a fixed bug is one small program in the language corpus, or in the matching package suite, with one output directive per expectation and a header naming the broken rule. It needs no C++, and it lands with the fix it pins.
-- A test package for another Elm package or kernel gets its own directory and project file, a thin wrapper on the shared base, and registration in both the package list and the test binary. The core package suite has this shape.
-- A system library capability gets programs in the system suite, with exit and input directives as needed, a stress variant if load matters, and no JavaScript skip unless the behavior is native-only.
-- An added directive goes into the shared C++ parser once, which serves the JIT, AOT and codegen hosts. If system programs will use it, the JavaScript runner must read it too: that runner rejects an output variant it does not know, and silently ignores any other directive it does not read. The Linux-only marker and the exit directive have this shape.
-- A source-level rule that Elm cannot observe gets a guard script in `test/scripts/`, run by the everyday targets.
-- A stress program is written on the shared harness module and reads the shared flags.
-
-## Examples of changes that would break the theory
-A change breaks the theory when it moves an expectation out of the program, adds a second dialect of directives, or makes a test pass by asserting less.
-
-- A hand-written C++ test that embeds an Elm expectation. Only the JIT runner would ever see it. Write the program with directives instead.
-- A second C++ directive parser, or a dialect that only one runner understands. A fix to one would miss the other. Extend the shared parser.
-- Forked children, or programs run inside the harness process, to save start-up time. Both bring back the inherited nursery and leaked state. Batch programs inside one spawned child if speed matters.
-- Weakening or deleting a directive to make a test pass. A program that constrains nothing is the failure the strict parser exists to prevent. Fix the code. The program runners have no expected-failure mode, and their skip markers are for behavior a target or host lacks, not for a failure.
-- Writing generated files into a package's source directory during a run. Concurrent runs collide and the package recompiles every time. Pass per-run data through the environment.
-- Making h2spec or Autobahn a gate by demanding a clean sweep. The baseline records strict cases that mature servers also fail on purpose.
-- Adding a package directory without registering it in both the package list and the test binary. The package list creates the shadow trees for the JIT and AOT runners, and the test binary registers the JIT suite; missing either leaves the package silently unrun.
-
 ## References
 
 Parent: [verification.md](/docs/verification).

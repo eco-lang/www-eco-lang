@@ -87,27 +87,6 @@ Long chains of let bindings, operator applications, calls or list patterns overf
 
 Some numbers must agree with the C++ runtime: how many arguments a closure can take, how many fields a record or custom type can hold, and the tag that identifies each constructor in memory, including tags reserved for the runtime's own structures. Canonicalization checks the limits and reports a breach as an error at the offending source location, because a breach that got through would crash the back end with no position to report. The numbers live in two small data modules that mirror the runtime's heap header by hand. Nothing in the build checks that the two sides agree.
 
-## Examples of changes that fit the theory
-A change fits when it records a fact while the solver can still see it, keeps one grammar and one constraint generator, and keeps the output plain data that the cache can store.
-
-- A form of syntax that standard Elm accepts and the parser lacks goes into the parser and the source tree, is canonicalized like its neighbors, and takes a number from the shared counter. The constraint generator gains one case that records the node's variable.
-- An error or warning is a constructor in its phase's error module, rendered in the same file. Error accumulation carries it with no further work.
-- A kernel function that needs a firmer type gets a row in the intrinsic annotation table, with the C++ evidence for its contract.
-- A limit tied to the runtime is a number in the heap-limits module, checked in canonicalization and reported at a source location.
-- A field in the cached typed files goes through the encoder and the decoder, uses the string and type tables, and comes with a bump of the format version.
-- A kind of id is one more wrapped integer type beside the existing ones, so the compiler keeps it apart from the others.
-
-## Examples of changes that would break the theory
-- Finding a node's type afterward by name lookup or by walking the tree. That repeats the solver's work and can disagree with it. Record the variable during constraint generation, and repair after solving only what the solver cannot know.
-- A second constraint generator for a special pathway. Two copies drift apart and report errors at different places. Add a switch to the single generator.
-- Deriving type-variable identity or class membership from a variable's name. Names do not survive unification and collide across modules. Read the solver root.
-- Mutable state in the solver, or a global cache that Elm code could observe. It breaks the guarantee the compiler relies on and that it cannot check. Keep the store immutable and pass it by value.
-- An earlier phase importing a later one to save code. The early phase would then depend on a decision made later, and the layer rule rejects it. Move the shared definitions into the syntax tree or data layers.
-- Recursion over structure of unbounded length, such as let chains, operator chains or lists. It overflows the stack on large programs and during self-compilation. Walk the spine with a self-tail-recursive loop.
-- Transformation logic in a syntax tree module. Every phase imports those modules, so the logic would hide which phase owns it. Put it in the phase that runs it.
-- A field added to the cached typed files without a format version bump. Files written by the previous compiler would then be misread rather than rejected. Bump the version in the same change.
-- Guida's syntax extensions, or any syntax standard Elm rejects. Programs using it would not compile with Elm, and the parser would grow a second grammar. Keep to standard Elm.
-
 ## References
 
 Parent: [compiler.md](/docs/compiler). Related: [local-optimization.md](/docs/local-optimization), [monomorphization.md](/docs/monomorphization), [lambda-set-specialization.md](/docs/lambda-set-specialization).

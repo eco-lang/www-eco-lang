@@ -135,30 +135,6 @@ Two settings exist but are off. Aging survivors through more than one extent cos
 
 Reference counting is out of scope for this heap. Any reference-counted tier would be a separate heap, and reusing an object in place is compatible only with an object that has never survived a collection.
 
-## Examples of changes that fit the theory
-A change fits when it keeps published objects unwritten, keeps collector threads away from anything the mutator reads, and bases every decision on the mutator's own state.
-
-- An added heap object kind changes its tag, structure, size calculation, both nursery scanners, the marker and the shared child walker together, because each of them reads the layout from the tag. String ropes, slices, the UTF-8 string forms and chunked list nodes have this shape; [runtime-data-structures.md](/docs/data-structures) explains the forms themselves.
-- An added off-heap mutable store registers an external root scanner that markers read only at the start of a mark cycle, as the MVar store, platform state and pending resumes do. Reading it later would break the snapshot that background marking relies on.
-- A kernel that builds a container across safepoints uses the builder helpers, or gathers its elements on the rooted list scratch stack and allocates once, so the container is either young while written or written only before publication.
-- An added trigger, pacing rule or tunable reads only mutator-observed state, is a heap configuration key with its file and environment overrides, and leaves counters equal between the synchronous and concurrent modes. The live budget, the headroom trigger and the direct-allocation budget are built this way.
-- An added old-generation space uses ordinary blocks with a block kind, is covered by the page index and mark storage, and frees only through an index, as the large-object space does, so marking and sweeping need no special case for it.
-- More parallel work in a pause reuses the shared marker loop, work counting and stealing queues, and keeps object-level counters the same at every worker count.
-- A change to a modeled protocol updates the model, its mapping and its audit notes in the same change, then the canary's manifest, so the specification never lags the code.
-- An explicit collection point is a kernel Task that collects when the mutator reaches a synchronization point, so the decision stays with the mutator.
-
-## Examples of changes that would break the theory
-- Writing into an existing object from a kernel: updating a process record in place, one "harmless" slot store, or reusing a survivor's storage. In the default nursery this leaves a dangling pointer once the extent is tenured, and it breaks the argument that makes marking barrier-free. Allocate a replacement, use the builder bit while the object is young, or keep the mutable thing off the heap behind a root scanner.
-- Adding a remembered set or store buffer to tolerate such writes. It brings back what the design removed and invalidates barrier-free marking and tenuring. Fix the writer instead.
-- Allocating a pointer-bearing object directly in the old generation to save a copy. Its later stores are unrecorded old-to-young pointers. Use the young large-object space.
-- Letting a collector thread write a header or field the mutator can read, or heal slots outside a pause. The mutator's check-then-read on headers becomes a race. Keep background results in the job's own table and apply them at the merge.
-- Basing a collection decision on helper or marker progress. The synchronous mode stops matching the concurrent one, and concurrent changes become untestable. Let progress decide only whether a pause waits or helps.
-- Skipping a root because an allocation "will not collect". Any allocation can collect and move every young object, leaving the unrooted pointer at the old copy. Root it with a guard or a scanner.
-- Loosening the abort on a second mutator to get parallelism. The process-wide accounting, the determinism argument and the models all assume one. Parallel Elm belongs to the heap-per-thread design, with its own per-heap accounting and models.
-- Updating the canary's hash to silence a warning. The models it names may no longer describe the code. Re-audit them first.
-- Wiring old-generation compaction into production. External root scanners would need pointer fix-up first, and the forwarding check that compiled code performs inline would need reconciling with moved old objects.
-- Reading a large payload as a heap object, or special-casing one kernel's large buffers. A payload has no header and its bytes can look like a tag. Go through the large-object space and its body accessors.
-
 ## References
 
 Parent: [runtime.md](/docs/runtime). Related: [runtime-data-structures.md](/docs/data-structures), [value-representation.md](/docs/value-representation), [closures-and-calls.md](/docs/closures-and-calls), [concurrency-models.md](/docs/concurrency-models), [runtime-tests.md](/docs/runtime-tests).

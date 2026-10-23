@@ -88,27 +88,6 @@ The handler mirrors the kernel modules' behavior, and that mirroring is the cont
 
 The compiler's version is stamped into a file generated in the build tree from a checked-in baseline, so configuring a build never rewrites a tracked source file.
 
-## Changing the build driver
-
-A change fits when the driver still decides what to rebuild while the phases decide how, every host facility stays behind the paired modules, and every cache stays keyed so that a stale file is recompiled and never trusted. Driver changes must leave the emitted output byte-identical; plans for driver work state that as their gate. The self-compilation chain's fixed-point checks catch the most dangerous way to break it, a driver that makes output depend on the host or on the run.
-
-### Examples of changes that fit the theory
-- A command line option is threaded from the build command's flags to the build or generation code that reads it. Separate build directories, one-shot builds, the settings file and local packages all take this route.
-- A host operation goes into the kernel module, its plain-Elm twin and the Node handler in one change, with failures reported as the neutral triple.
-- A bundled package joins the list the driver probes beside the installation, and the install rules. The system package has this shape.
-- A change to the typed artifact format bumps the format version and updates the artifact rules, and old caches recompile.
-- A tunable value extends the settings record and contributes to the hash only if it changes generated artifacts.
-- A more precise error goes through the driver's reporting module, so every command reports it the same way.
-
-### Examples of changes that would break the theory
-- Calling a host facility directly from compiler code, instead of through a paired module, leaves the stock-Elm build with no way to perform it, so the self-compilation chain cannot start. Add the operation to the module family and its twin.
-- Building a cache path by hand, instead of through the driver's path helpers for the current build directory, makes side-by-side builds share and corrupt one cache. Use the helpers.
-- Reusing a cached module or package without checking that the artifact for the current form exists lets a JavaScript build's cache reach the native path. Keep the check in every reuse decision.
-- A setting that changes artifacts but stays out of the hash leaves stale caches, and an unrelated setting in the hash forces cold builds. Decide the setting's hash contribution when it is added.
-- Holding whole graphs in closures, channels or MVars across the handoff to the back end means the collection before linking frees nothing. Drop references at their last use.
-- Making compiler code branch on what a collection reports. The report's times and memory figures are observations that vary from run to run, and the rule for explicit collections forbids Elm control flow from reading them. Output that depended on them could differ between runs, which the bootstrap's byte-for-byte fixed-point checks would reject. Treat the report as diagnostics only.
-- Adding reuse of whole-program results inside the module build gives wrong programs, because those phases need the whole program. Treat incremental whole-program phases as their own design.
-
 ## References
 
 Parent: [compiler.md](/docs/compiler).

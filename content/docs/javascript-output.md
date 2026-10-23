@@ -75,24 +75,6 @@ The generator reads the erased program because that is stock Elm's design. Stock
 
 Two other designs come up and are turned down. Dropping JavaScript output for native code alone would break the self-compilation chain and browser use together. Feeding the generator from the typed or specialized program would tie it to data that exists to serve native code, and the two interface kinds keep it off that data.
 
-## Changing the generator
-
-A change fits when it keeps the generator a faithful Elm back end over the erased program and puts each concern in the part that already owns it: lowering in the expression code, behavior that differs by mode in the mode type, output wrapping beside the HTML page.
-
-### Examples of changes that fit the theory
-- A change to how one construct is lowered, such as a literal or an operator, belongs in the expression lowering and, if the text changes, the printer. Float literal formatting is an example.
-- Behavior that depends on the mode goes into the mode type and is read by the generator, as the debugger's type information and field shortening are.
-- A runtime helper goes beside the curried-call helpers at the head of the file. These sit beside the generated code and do not change code generation. The closing Guida block is not a model to follow, since it supports syntax Eco rejects.
-- Another output wrapper sits beside the HTML page and gets its own branch where the build chooses the output.
-- A further back end implements one of the two interface kinds and adds an output kind, as the MLIR generator does.
-
-### Examples of changes that would break the theory
-- Making the generator read typed or specialized data to improve its output ties it to the native path's representation, which is free to change for native reasons. If both back ends would benefit, put the improvement in the optimizer that builds the erased program.
-- Changing what a program does, such as evaluation order, in the JavaScript emitter alone makes the reference disagree with the native path. Change the shared front end or optimizer so every back end inherits it.
-- Giving Elm and Eco kernel modules separate JavaScript names breaks the JavaScript-hosted compiler, whose Eco kernel calls rely on the flat names. Keep the naming flat.
-- Bringing heap layouts, calling conventions or boxing into the JavaScript generator imports decisions that have no meaning there and that change with the native back end. Keep them in global optimization and MLIR generation.
-- Copying a native behavior into JavaScript to make the two agree reverses the direction of parity, since the parity rules make native match JavaScript. Check those rules first, and fix the native side if it is the one that differs.
-
 ## References
 
 Parent: [compiler.md](/docs/compiler).

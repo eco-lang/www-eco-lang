@@ -145,28 +145,6 @@ The tests are the executable form of the heap rules: object kind words, the nurs
 
 One rule covers the collector's determinism: its decisions never depend on how far its helper threads have got. Tests compare counters across helper modes, and jitter settings perturb the helpers' schedule to show that the counters still agree.
 
-## Examples of changes that fit the theory
-A change fits when it adds a check at the layer that can see its bug, runs it on the shipped configuration, and shows that the check can fail.
-
-- An added heap object kind or layout rule gets a generator and a survival property of the existing shape (allocate, root, collect minor and major, compare snapshots), runs on the default region nursery, and cites the rule.
-- An added collector mode or setting gets a unit suite, a scenario in the ThreadSanitizer driver so races in it are visible, and an environment route through the one function that builds test configurations.
-- A found concurrency defect gets a deterministic arm with two threads ordered by relaxed flags, a reached check and an expected-failure row, plus a unit guard. When it is fixed, the row flips, the faulty shape becomes a mutant, and the guard is revert-checked.
-- A change to a lock-free protocol or a memory order gets a GenMC driver over the real header, with a mutant for each order it relies on, and the file joins the canary's pins.
-- An added platform service or kernel hold gets a case in an isolated suite, marked POSIX-only where it is, that checks cancel and kill release the hold.
-- A test that must run in its own process is registered with the isolated suites, not the in-process ones.
-
-## Examples of changes that would break the theory
-A change breaks the theory when it makes a check quieter without making the code more correct.
-
-- Switching a test, or the whole run, to the legacy nursery to make it pass. The run then tests a collector users never run; use the legacy helper only where the legacy nursery is the subject, or fix the region path.
-- Ordering a deterministic arm with a mutex or acquire and release to stop flakiness. That removes the race under test; keep the relaxed flags, or move the check to GenMC.
-- Silencing a ThreadSanitizer report with a suppression or a compiler flag. The race stays in the code; make the access atomic or ordered instead.
-- Updating a canary hash to quiet the build. The hash exists to force a re-audit; re-audit the models it names and record the verdicts first.
-- Letting a guard pass vacuously, by not asserting its precondition or by allowing a mutant to pass. Such a guard proves nothing; assert the precondition and require the flag.
-- Running the platform services in the runner process, or adding a forked child to the harness. Either brings back inherited state and stolen children; spawning is the one path, and direct fork is only for tests whose subject is fork.
-- Putting a workaround into allocator code that only ThreadSanitizer needs. Production then carries code it does not need; change the driver or stub the harness instead.
-- Skipping the opt-in tiers for collector concurrency work. The everyday targets cannot see those bugs, so any allocator change that touches atomics, locks, fork hooks or helper jobs runs GenMC, the guards and the default ThreadSanitizer run.
-
 ## References
 
 Parent: [verification.md](/docs/verification). Related: [concurrency-models.md](/docs/concurrency-models) for the formal models and the canary.

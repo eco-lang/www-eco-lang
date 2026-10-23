@@ -184,27 +184,6 @@ Eco specializes each member of a recursive group separately rather than the grou
 
 A default set for a signature's head arrow, and set slots on the payloads of named types, measure neutral or worse, so neither is used. Eco has no per-mechanism switches, for the reason given under the one switch.
 
-## Examples of changes that fit the theory
-A change fits when it puts a member into a slot through one of the existing channels, or gives two loads one identity so that unification carries the set, and leaves ⊤ or unknown wherever it cannot be sure.
-
-- A flow of function values that the analysis misses gets an injection where the value is created, or a settle write after the list is empty, with ⊤ or unknown as the fallback. It is pinned by an invariant and a test. The flows of partial applications along a result spine, of local functions used at several types, and of sets bound by pattern matching each have this shape.
-- A kernel that can carry functions is audited for the three properties that rule a license out, as the license table's module documentation lists them: a value kept by one call and read by a later one, a value erased into an opaque type, and a function value the kernel creates. It is then given a row whose evidence records the audit, and its files are added to the manifest. When a licensed kernel's C++ changes, the audit is repeated before the hash is regenerated.
-- A set that fails to reach a slot is fixed by shared identity: give the arrow an identity so that unification carries the set.
-- A further consumer reads the stored annotations in global optimization, and treats ⊤, unknown and a lower bound alike as "not a single known function".
-- Compile-time work skips trivial or inert signatures and memoizes per global, never per call site.
-
-## Examples of changes that would break the theory
-A change breaks the theory when it makes a set look more complete than the evidence, or makes a signature depend on one caller.
-
-- Reading an unwritten slot as empty, or turning a lower bound back into a set. Either one fabricates completeness, which becomes a false singleton and then a miscompile. Leave the slot unknown and find the missing flow.
-- Licensing a kernel, or regenerating its hash, without the audit. A wrong license is a miscompile, while a missing one only costs speed.
-- Copying sets by hand between two slots that separate loads created. It duplicates what unification does and drifts from it. Give the arrow an identity.
-- Making a signature read the item in flight, its demand or its specialization number. A signature belongs to its definition group and is computed before any specialization; put instantiation-specific facts in the item or at read-back.
-- Building a specialization's body for one caller's set rather than for the stored join. A later demand under the same key would then run code built for a smaller set.
-- Raising or setting the set-size or per-global caps to rescue termination. Termination comes from tying members to the stored demand, the finite join and the watchdogs; a loop that needs a cap to end is a bug in one of those.
-- Adding a switch around a mechanism. It splits a shared traversal. Ship the mechanism under the one switch and check that it changes only the emitted code it should.
-- Giving multi-member sets a fast path in one consumer. That is sum lowering, a change of representation that needs its own design.
-
 ## References
 
 Parent: [compiler.md](/docs/compiler). Runs inside: [monomorphization.md](/docs/monomorphization). Consumer: [global-optimization.md](/docs/global-optimization).

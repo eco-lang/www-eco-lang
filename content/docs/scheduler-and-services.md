@@ -182,39 +182,6 @@ The scheduler and its services are singletons that are never destroyed, and thei
 
 One component, `Spawn`, starts child processes. It takes plain data and never touches the heap. It spawns rather than forks. A fork copies the whole Eco heap and runs the handlers that stop the collector's helper threads, only to throw all of it away when the child starts its program. On Windows it passes handles to the child explicitly and can tie the child's life to the parent's.
 
-## Examples of changes that fit the theory
-A change fits when it keeps every heap interaction on the eco thread, finds processes by id, and keeps the program alive only through named holds.
-
-- A blocking service is a worker holding plain data, a ready queue, a token from `parkResume`, a drain and readiness test registered with the loop, and a hold kind. The wait service's per-consumer queues and the HTTP progress queue have this shape. An evented HTTP client that runs requests concurrently would fit behind the same service interface, because the loop sees only its queues.
-- A Task-returning kernel uses `makeBinding`, or `makeAsyncBinding` with the hold taken before the body returns, so the work runs when stepped and the loop knows to wait for it.
-- An effect manager goes into the manager table, through the system library's preamble or as a port. It then gets dispatch, the self-message step and tagging with no scheduler change, because the platform runtime finds managers only through that table.
-- A cancelable wait returns a kill handle that withdraws the work and releases the hold exactly once, in the manner of `withdrawParkedTimer` and `RequestControl`.
-- A consumer that must act when the program goes quiet, or a host that must watch the loop, uses a quiescence listener, a stop hook or the activity hook, and keeps its arming state to itself.
-- A fast path for a primitive result goes in the stepper, beside the unboxed Succeed path.
-- Wider process ids keep the theory intact: widen the id field, or key the latest-process table and the router by a full-width id, and remove a table entry when its process finishes. Either way, finding a process by id stays the rule, and it becomes exact.
-
-## Examples of changes that would break the theory
-Each of these breaks one of the three rules: Elm only on the eco thread, processes found by id, liveness only through holds.
-
-### Work done in the wrong place
-
-- Doing the system call in the kernel function's body, or caching a result inside a Task. The Task stops describing work, and a shared Task acts once. Build a Binding and let its body do the work.
-- Touching a heap reference, the allocator or a closure call from a worker, even to allocate the result. That repeats the timer corruption. Return plain data and build the value in the drain.
-- Adding locks around stepping so that Elm runs on several threads. The collector and every service assume one mutator. Parallel Elm belongs to the heap-per-thread design.
-- Forking to start a child. It copies the heap and stops the collector's helpers. Use `Spawn`.
-
-### Process identity
-
-- Changing a process or Task in place to save an allocation. It creates old-to-young pointers the collector cannot see. Build a fresh one and look the process up by id.
-- Keeping a pointer to a process across a step, or storing one for later. The pointer goes stale at the next step. Store the id.
-- Putting the same logical process on the queue more than once before it is stepped, for example several self-messages followed by one drain. The snapshots' mailboxes overlap and messages repeat. Drain once per message.
-
-### Liveness
-
-- Changing the hold count directly, or adding a private counter, to keep the program alive. The diagnostic report then misses a reason the program is running. Take a named hold.
-- Letting an effect handler or self-message handler park, or dispatching effects outside the drain that ran the update. The manager's state is lost, and the loop can exit before the subscription's hold exists. Keep the handler's Task synchronous.
-- Treating a source that merely exists, such as an open listener, as a reason to stay alive. The program then never exits on its own. Take a hold only while waiting for a result.
-
 ## References
 
 Parent: [runtime.md](/docs/runtime). Sibling: [garbage-collector.md](/docs/garbage-collector).

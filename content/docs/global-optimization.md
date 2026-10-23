@@ -167,27 +167,6 @@ These passes show the shape any pass placed after call annotation must have. Hoi
 
 Settings whose answer is known are deleted, as the [parent](/docs/compiler) explains for the whole compiler. That is why the stamp phase's body-fingerprint check and its devirtualization have no switches. Each transform is also preceded by a separate counting pass that sizes its opportunity. The count is kept apart from the transform so that it can check the transform instead of sharing its traversal, and some transforms, such as the closed-argument lifting, never get past the count.
 
-## Where changes go
-
-A change fits when it adds a proof that declines by default, takes identity from the minting module and call records from annotation, and respects the order: copying and reshaping before the stamp phase, verbatim moves only after it.
-
-### Examples of changes that fit the theory
-- Another kernel, or better knowledge of one, is a row added or audited in the kernel table. Every pass that reads the table picks it up with no further change.
-- Another whole-program pass is a pure function in the step list behind its own setting with a decided hash token. It comes with a counting pass first and a validation check. Its place relative to stamping and annotation follows from whether it copies code or moves it. Common subexpression elimination and the constant passes have this shape.
-- Another way to resolve a callee is a further guarded outcome in the stamp phase that declines by default and counts each reason it declines. Devirtualization and the partial-application fast stamp have this shape.
-- Another call kind or call fact is computed in `computeCallInfo`, carried across re-annotation if the stamp phase sets it, and pinned by a numbered invariant with a completeness check.
-- Another arity cleanup before monomorphization takes identity from the minting module and counts the bodies it examines, so its reach can be measured.
-- A wider representation, such as a larger closure arity limit, lands as a local guard in each pass that builds closures: the stamp phase, eta-expansion and the inliner.
-
-### Examples of changes that would break the theory
-- Making MLIR generation work out stages from types when a call record is wrong. That splits the decision across two phases again. Fix the computation of the record, or what it can see.
-- Re-staging the branches of a join, or inserting wrappers so that a join looks known. The runtime already handles the join correctly. Remove the join earlier, through eta-expansion, or leave the call generic.
-- Stamping or devirtualizing on layout or type alone. Same-layout candidates can compute different functions, and choosing any one of them is a miscompile. Require a unique match or unanimous fingerprints, and decline otherwise.
-- An inlining or copying pass after the stamp phase, or a copy that keeps its identity numbers. Stamps name instances, and a copy that keeps its numbers puts two bodies under one member. Run the pass before monomorphization through the minting module, or before stamping with fresh numbers.
-- A local test of whether a kernel is pure inside one pass. It drifts from the audited table, and only the table is checked. Read the kernel table.
-- Merging, dropping or moving anything that may reach `Debug`, or sharing constructed values that may hold a Float. Both change what a program observably does. Consult the purity analysis and exclude constructions. Constant hoisting as written checks only direct references to `Debug` kernels, so it needs the transitive check before it can be switched on.
-- Switching an off pass on because it looks obviously good. Each one is off on measurement, so measure again first. Adding switches instead of deciding also breaks the theory, because switches split traversals that the passes would otherwise share.
-
 ## References
 
 Parent: [compiler.md](/docs/compiler). Related: [monomorphization.md](/docs/monomorphization), [lambda-set-specialization.md](/docs/lambda-set-specialization), [mlir-generation.md](/docs/mlir-generation).

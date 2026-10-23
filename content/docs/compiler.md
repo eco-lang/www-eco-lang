@@ -137,29 +137,6 @@ The self-compilation chain runs the compiler under Node, so the JavaScript engin
 
 Immutability holds for the compiler's own code as well as for the programs it compiles. The compiler keeps its stores in immutable arrays even where a mutable store would compile faster, because Elm code must never observe mutation, and a mutable store depends on a usage contract the compiler cannot check.
 
-## Where a change belongs
-
-A change fits when it computes its fact in the half and at the step that can compute it once, keeps the per-module half independent of settings, and reaches both the build and the tests through the shared step list.
-
-### Examples of changes that fit the theory
-- A whole-program pass is a function in the step list at its place in the order, a setting whose hash contribution is decided, and a separate build step that calls it. The tests pick it up through the step list with no further work. Alias forwarding, eta-expansion, common subexpression elimination, deduplication and hoisting each have this shape.
-- A validator returns success or a message, runs when validation is on, and is called by both the build and the tests, so a broken property stops either one at the same step. The prune and closure-staging checks are examples.
-- A tunable value extends the right group of the settings record, its decoder and its default, and contributes to the hash if it can change generated code. The decoder applies its fields by position, so keep their order equal to the record's parameter order. A switch for the collection before the back end changes no generated code and has no hash token; the constant-thunk setting changes generated code and has one.
-- Retiring a setting whose value is settled deletes the setting and the code it guarded in one change, gated on byte-identical output, so the deletion is provably a no-op.
-- A per-module fact the typed back end needs is computed in the typed per-module driver while the solver's state exists, carried in the cached typed artifact and its file format, and kept independent of settings. The function-type stamping and the per-file type table follow this pattern.
-- A phase directory goes into the layer list when it is created, so the direction of its dependencies is enforced from the start.
-
-### Examples of changes that would break the theory
-- Calling passes directly from a test or another driver instead of through the step list. The pipelines drift, and tests check output production never emits. Add the step to the step list and call it from there; the guard script already rejects direct calls from the two harnesses.
-- Reading the environment or doing input and output in the settings record or the step list. That breaks the purity that lets the build and the tests share them. Read the value in the build driver and pass it in through the settings. One census in the per-module driver already reads the environment; it is an exception, not a pattern to copy.
-- Making per-module compilation depend on a setting. A cached typed artifact that varied with a setting would need cache keys finer than the one settings hash, and those do not exist, so builds would reuse stale artifacts. Compute anything setting-dependent in the whole-program half.
-- Running the erased optimizer on the typed path, or feeding JavaScript generation from the typed program. The forms are exclusive per build, and the erased path stays identical to Elm's so that it can serve as the bootstrap's reference. Put typed work on the typed path and leave the erased path alone.
-- A setting and the hash out of step. A setting that changes output without contributing to the hash leaves stale caches, and one that changes only a report but contributes causes needless rebuilds. Decide the token when the setting is added.
-- A switch that is off by default with no measurement behind it. It splits a traversal that would otherwise be shared, and nothing exercises its other side. Measure first, and ship the mechanism on or not at all.
-- An earlier layer importing a later one, or an exemption from the layer rule. Either one lets an early phase depend on a decision made later. Move the shared definitions down to the earliest layer that uses them, as the type-variable helpers and the table of inline kernel operations are. Treat the unchecked directories as if the rule covered them.
-- Phase algorithms in the syntax tree modules. Every layer imports those modules, so an algorithm there hides which phase owns it. Put it in the phase that runs it, as graph assembly, the specialization registry and the typed join are.
-- Recursion that grows with program size, use of the standard graph library, or a mutable store that Elm code can observe. The first two overflow the JavaScript stack during self-compilation, and the third breaks the guarantee the compiler itself relies on. Use explicit work stacks, the compiler's own graph module and immutable arrays.
-
 ## References
 
 Parent: [eco.md](/docs/theory).

@@ -93,8 +93,6 @@ A row drifts when the code under it moves and the row does not. The catalog is e
 3. The description outlives the mechanism. One code generation rule says an aggregate construction has no producer, when the code generator emits it by default.
 4. A number is cited for the wrong rule, as in the closure environment verifiers above.
 
-The narrative documents around the catalog drift the same way. The compiler's own theory file explains why purity licenses optimization and lists a few key invariants, but it describes a six-phase pipeline whose directory names do not match the tree and does not mention the specialization solver or the lambda set rules. The catalog and the code win where they disagree.
-
 The project builds a mechanical drift check only where drift is itself the danger, and each such check guards a single row. The TLA+ canary pins the code each collector model describes and warns when it changes, failing only under a strict build setting. The guard script for kernel claims fails the build when a C++ file cited as evidence changes without its hash being updated in the manifest, or when the manifest's pins and the cited files differ. The files it pins are those cited by the licensed rows of the lambda-set kernel table and by every row of the kernel type table; the table of purity and allocation facts that the optimizer reads cites C++ evidence in its rows but is not pinned, and neither is the runtime machinery that every kernel shares. The guard script for large heap objects checks that their bodies are read only through approved accessors. Elsewhere, when a checker turns out to be vacuous, the fix goes on the check side: the checker is rewritten and the row amended to say what is really checked.
 
 ## Adding, amending and retiring a rule
@@ -103,23 +101,9 @@ A rule normally lands in one commit with the code it governs, the checker that t
 
 A row's text changes in place. When a mechanism changes, the number, phase, category and status stay, and the description is rewritten or extended to state the rule as it holds. When a mechanism is removed, the row stays with status retired, the reason, and its former text. Both follow from citation by number: a reader holding a number from any plan, commit or comment must be able to find what it meant.
 
-### Examples of changes that fit the theory
-- A rule for a mechanism lands with the mechanism, as one line in the right banner block or appended after the last banner. It takes the next free number in its family, a status that matches what checks it at that moment, and a source column naming the module, the checker and related rules. The checker lands in the same commit with the number in its test description or error text, so the first failure leads to the rule.
-- A change to a representation fact amends every linked representation and forbidden-assumption row together. The models are linked only by those rows, so amending one and not the others leaves two rows that contradict each other.
-- A checker found to be weaker than its rule is made honest, and the row is amended to say what the checker really checks. The status then describes the check that exists.
-- A rule whose violation no local check can see gets a guard script cited from the row, which puts a mechanical check exactly where drift would otherwise go unnoticed.
-
-### Examples of changes that would break the theory
-- A phase that relies on a neighbor's representation choice without a representation, cross-phase or forbidden-assumption row. The assumption is then invisible and unchecked, and it breaks when the neighbor changes. Add or amend the linking row and a checker that cites it.
-- Weakening or deleting a failing checker without touching the row. The row then claims a check that is gone. Fix the phase, or amend or retire the row and say why.
-- Renaming or deleting a module without grepping the catalog and the test design document for it. Stale source columns come from exactly this. Update every row and test path that names the module in the same commit.
-- Reusing a freed number, renumbering rows, or keeping a number a plan has changed. Every citation of the old number then points at the wrong rule. Take the next free number and check the plan's final numbering before quoting it in code.
-- Choosing a status by aspiration, such as enforced for something only reviewed. Readers trust the status to say whether a check exists. Use documented until a check cites the row.
-- Compiling tests through a different pipeline from production to get past a failure. The test then proves nothing about the compiler users run. Fix the failure in the production steps.
-
 ## References
 
-Parent: [invariants-and-design.md](/docs/invariants-and-design).
+Parent: [eco.md](/docs/theory).
 
 - `design_docs/invariants.csv`: the catalog. List the banners with `grep -n '^# [A-Z]'`. Banner order: REP, CANON, TYPE, NITPICK, POST, TOPT, ECOT, MONO, GOPT, CGEN, HEAP, BFUSE, BFOPS, XPHASE, FORBID, IO_ERR, KERNEL_TASK_IO, PORT, LSS; then append order (HEAP_036 onward, CGEN_070 onward, LIVE, GC_MODEL, SYS, VDOM).
 - Rows named above: REP_001 (independent models); CGEN_028 (case alternatives end in a yield, the excerpt); CGEN_029 (case tag count) and CGEN_062 (no closure environment on the heap), the misused number; CGEN_025, CGEN_034 and REP_AGG_001 (descriptions outlived by the code); MONO_019 and XPHASE_011 (marked tested, checkers deleted); MONO_005 (checker covers half the rule); BFOPS_001 to BFOPS_031 (enforced, uncited); MONO_021, LSS_038 and CGEN_079 (checkers made honest); GC_MODEL_001, LSS_022 and HEAP_081 (guard scripts); LSS_012 (a number not to reuse); GOPT_001 to GOPT_003 (the one renumbering). Retired examples: CGEN_055, HEAP_047, HEAP_061, KERN_007.

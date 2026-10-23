@@ -102,29 +102,6 @@ The compiler works out which functions can reach each call ([lambda-set-speciali
 
 The failure is a prompt to audit again. Editing a pinned file and refreshing the manifest without re-checking each claim lets the compiler make direct calls that the C++ does not justify, and the program then miscompiles with no error.
 
-## Changing Elm's kernels
-
-A change fits when it keeps the JavaScript contract, leaves representation to the runtime and the calling convention to the compiler, and roots in fixed space. A change that moves one of those decisions into a kernel breaks the theory.
-
-### Examples of changes that fit the theory
-- A kernel function for an existing module: a declaration in `KernelExports.h`, the C++ export in the module's exports file, a row in the JavaScript inventory, a row in the compiler's facts table (which treats an unaudited kernel conservatively), and an end-to-end test in the package's test directory. The completion of elm/core and the Parser, Regex and Url kernels have this shape.
-- A typed sibling for a kernel that numbers pass through often: one C++ function with the suffix, and one case in the compiler's sibling selection.
-- A dialect operation for a small kernel whose type fixes its behavior, with the C++ export kept as its lowering target and generic fallback.
-- Another package backed natively: build its values as ordinary custom types, write the layout once in a header shared with the Elm declaration, and add a test that pins the match, as elm/html does.
-- Another IO kernel: a task binding built with the shared helpers, its payload and resume function rooted before the body runs, and a liveness hold for any long wait.
-- A fix to a representation bug in a kernel, such as a rebuilt list with the wrong kind of slot: the fix, a focused unit or end-to-end test, then a fresh audit of every pinned row whose file changed before the manifest is refreshed.
-
-### Examples of changes that would break the theory
-- Caching a heap pointer, or an address derived from one, in a C++ static or other off-heap structure without registering it as a root. The collector moves the object and the cache points at the old copy. Use a registered slot, or a handle id into a side table as regex does.
-- A root push per element, or any rooting that grows with the input. It overflows the root stack on large inputs. Root the buffer once, or build on the heap.
-- Testing heap tags inside a generic kernel to special-case a type and avoid a compiler change. The tag test runs on every call and hides the type from the optimizers. Add a typed sibling or a dialect operation.
-- IO done when a task-returning kernel is called. The task loses its ordering, and a blocking call stalls the scheduler. Do the work in the binding's body.
-- Calling an Elm function by a fixed arity, or by reading its code pointer. A closure of the other shape is corrupted. Go through the runtime's apply entries.
-- Allocating a zero-length string, bytes value or constructor. It compares unequal to the constant and breaks the allocator's minimum size. Return the constant.
-- Reading a string's or a list's storage directly. The kernel then works for one representation and breaks when the runtime adds another. Use the runtime's operations.
-- Editing a pinned file and refreshing the manifest without re-auditing its rows. The compiler keeps trusting claims the code does not meet. Re-check each claim, then refresh.
-- Making a browser-only function return a quiet default. A program that cannot work would appear to. Leave the assertion, or provide a host.
-
 ## References
 
 Parent: [kernels.md](/docs/kernels). Related: [garbage-collector.md](/docs/garbage-collector), [scheduler-and-services.md](/docs/scheduler-and-services), [lambda-set-specialization.md](/docs/lambda-set-specialization), [system-libraries.md](/docs/system-libraries).

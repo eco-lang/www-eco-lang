@@ -119,24 +119,6 @@ The erased path keeps its own untyped copy of this phase. The typed pattern comp
 
 The work above is safe because of four guarantees from the front end. The repair step after solving gives every expression a complete type and a solver variable, and supplies the types of kernel functions. Name resolution forbids shadowing, which makes the binder lookup unambiguous and the renamed parameters fresh. The pattern checks have passed, so decision trees are complete. And the cached typed format records the graph exactly, except for the fields filled with defaults on reading.
 
-## Examples of changes that fit the theory
-A change fits when it looks at one module, keeps every node's type and solver variable, and is correct before the concrete types are known.
-
-- A rewrite of an operator or a call that builds its nodes from the original node's metadata and needs no concrete type. The short-circuit and pipe rewrites each have this shape, as a small change in the binary operator case.
-- Another boundary-merging rule shaped like the existing two: structural, guarded by a type check, and leaving the code alone when unsure.
-- Another kind of port payload in the typed port code, with the matching change in the erased copy if the JavaScript path needs it.
-- Another kind of top-level declaration, registered in the module graph together with its annotation, as record-alias and custom-type constructors are.
-- More solver information for monomorphization, carried as data on each node or in the computed class records.
-
-## Examples of changes that would break the theory
-- A rewrite that needs a concrete type, such as handling Int keys differently from String keys. The type here is still polymorphic, so the rewrite cannot tell which case it is in and slows the others: rewriting `compare` here would cost String keys a second walk. Do it after monomorphization; the rewrite of `case compare a b of` into a direct three-way comparison is done as a pattern rewrite on the generated MLIR for this reason.
-- Choosing arity, staging or currying here beyond the merging rules, or teaching monomorphization to flatten functions. Two phases would then decide the same thing. Leave those decisions to global optimization.
-- Building a node whose metadata disagrees with what the solver recorded, or giving a function-typed definition its body's variable. Nothing checks it here, and monomorphization later crashes or specializes wrongly. Build each node's metadata from the node it replaces or from the binder.
-- Typing an operator or a global reference from its scheme instead of from its use. The scheme cache would then hold one use's type, or an operator would carry the enclosing definition's constraint. Type it from the solver's answer at the use.
-- Fixing a pattern, port or case bug in one copy only, when the same code exists in the other. The bug stays on the other path. Check the sibling module and fix both.
-- Moving a rewrite into name resolution because it is easier there. Error messages, documentation and interface files read the canonical tree and must see the source as written. Keep the rewrite here.
-- Depending on the used-fields set or the `main` flag of a graph read from the cache. Both are defaults after reading. Recompute what is needed from the graph, or use the marker the build already carries.
-
 ## References
 
 Parent: [compiler.md](/docs/compiler). Related: [front-end.md](/docs/front-end), [monomorphization.md](/docs/monomorphization), [global-optimization.md](/docs/global-optimization), [mlir-generation.md](/docs/mlir-generation).

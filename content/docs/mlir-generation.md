@@ -184,38 +184,6 @@ The C++ side reads several facts by name or number, and each must stay in step w
 
 Code generation supplies no garbage collection roots. The back end computes them from pointer liveness in LLVM, so nothing here has to be kept in step with the collector.
 
-## Changing the generator
-
-A change fits when it carries a decision in from upstream, converts representations only where two forms meet, and gives the verifier a rule for any fact a later pass depends on.
-
-### Examples of changes that fit the theory
-- A typed operation for a kernel function: one builder, plus an arm in the intrinsic emitter that global optimization's intrinsic selection chooses, using the existing boxing helpers. Typed string comparison, value equality and inline string length have this shape.
-- A shortcut map keyed by specialization id: built once in the context, consulted at one shared place such as the reference to a global, and leaving the original function in place. Shared constant constructors and constant folding both work like this.
-- A representation fact a later pass needs: stamped at every point that emits the operation and checked by a verifier rule, so a missing stamp fails in MLIR. The unboxed result kind on generic calls, the logical type annotations and the field kinds follow this pattern.
-- A structural impossibility fixed by an operation that expresses it rather than by placeholders, as the group allocation of mutually recursive closures does.
-- A capacity limit raised with extra kind words, with a located compile error at the remaining limit.
-- A kernel, registered with its per-instance types so that its declaration is generated, with no special handling at its call sites.
-- Another kind of type, or of primitive, in the debug type table, changed in all five places in one commit. The unit primitive kind has this shape: an Elm-side tag, the matching runtime enumerator and a printer arm that names the shared empty word as `()`.
-- Printing another kind of value with its type: register the type where the value is created or printed, as list literals and record creation do, and pass the id as an operand or attribute.
-
-### Examples of changes that would break the theory
-- Working out a call kind, parameter grouping, closure kind or layout inside expression generation. It duplicates a fact upstream already proves, and the two will drift. Carry it on the call, closure or constructor shape from global optimization or monomorphization.
-- Boxing one kind of argument at one call form because a callee disagrees. The next kind of argument fails the same way. Box to the callee's registered parameter types at every call site, and add a verifier rule so the next mismatch fails in MLIR.
-- Reading a stored Bool, or any stored boxed value, directly at the primitive type wanted. That reads part of a pointer and inverts Bool tests. Read the field as an eco value and then unbox it.
-- Repairing types in C++ after the fact, or letting the lowering infer a kernel's types from its uses. Both hide the bug that produced the wrong type. Emit the right type and let the verifier reject the wrong one.
-- Closing an unfinished branch region with a dummy return or yield, or emitting the low-level allocation operations directly. Both break forms that the C++ passes rely on. End every decision tree path in its yield, and use the construction operations.
-- Keeping per-function data in the context without clearing it between functions, or accumulating data across the whole module. Either grows memory across the stream and can leak names from one function into the next. Clear it with the other per-function state.
-- Generating one definition's body inside another with the caller's context unchanged, for inlining, folding or a template. Let names in the spliced body then collide with the caller's. The opposite mistake, resetting the SSA counter as for a fresh function, reuses numbers the caller has already defined. Reset and restore every name-keyed field, keep the counters running and convert the result to the callee's ABI, as `generateConstThunkRef` does. A scope field added to the context must join its reset and restore list.
-- Giving an Int, Float or Char constant a memo slot. The collector would scan the raw number as a pointer. Fold the constant at its references, or design a slot kind the collector does not scan.
-- Evaluating a constant body in the compiler and emitting the result. The value would depend on the host running the compiler. Emit the body and let LLVM fold it.
-- Trusting the text form when debugging a numeric problem. It prints some floats and escapes differently. Compare bytecode, or fix the printer.
-- A faster calling form with no check that some call site profits, or with no verifier rule behind it. Without the check it is pure overhead, and without the rule a broken promotion reaches LLVM. The worker selections in `Backend.elm` show the required shape.
-- Changing a type's heap layout without the table following, for example ordering fields by another function in construction while the table still uses the shared layout function. The printer then pairs names and child types with the wrong slots. Change the shared layout function, which both use.
-- Adding or reordering a type kind on one side only. Nothing checks that the two sides agree, so the runtime misreads the descriptor. Change all five places together.
-- Merging the typed `Debug.toString` kernel back into the one that closures call, or giving that one a type-id parameter. A closure call passes one argument, so the second would be garbage. Keep typed printing on saturated calls.
-- Keeping the type registry per function, by clearing it with the per-function state or emitting a table per batch. Ids would be reused across functions while the runtime expects one dense table for the program. Leave it an accumulator.
-- Working around a miscompile of the self-hosted compiler by changing the compiler's own source. The bug stays in code generation for the next program to hit. Fix code generation and pin the case with a test.
-
 ## References
 
 Parent: [compiler.md](/docs/compiler). Related: [bytes-fusion.md](/docs/bytes-fusion), [value-representation.md](/docs/value-representation), [closures-and-calls.md](/docs/closures-and-calls).

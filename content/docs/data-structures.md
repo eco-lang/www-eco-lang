@@ -140,42 +140,6 @@ Every operation here is C++ that the stack maps cannot see, so it must not keep 
 4. Allocate everything first, then fill without allocating. The blank-string allocators and `listChunkChain` return raw write pointers that are valid only until the next allocation.
 5. Root a buffer of heap values with one record for the whole buffer, never one per element. One record per element overflows the shadow stack of 65,536 records on a large list, and a build check rejects root pushes inside loops.
 
-## Where rules and comments disagree
-
-Some descriptions of these structures in the rules and the code comments would mislead a change.
-
-- The invariant catalog's rule on string forms says there are four forms and that compiled code allocates only UTF-16 leaves. There are six, and ASCII literals become UTF-8 leaves.
-- The same rule says that equality and comparison flatten both strings when they are below the flatten limit and use `charAt` above it. The code never flattens to compare. Making it do so would put an allocation, and so a possible collection, inside every string comparison.
-- The flatten limit is a heap configuration setting, 128 Ki units by default, not a constant.
-- A comment on the slice constructor says the caller must root the base. The constructors pass their arguments in the allocation call's roots array.
-- The tiny-slice limit is described as a count of bytes. It is compared against a length in UTF-16 code units.
-- A comment on the chunk view says `take` makes a view in constant time. `take` copies its elements; only `drop` makes a view.
-- The invariant catalog's rule on the empty constant says it equals a zero-length heap string. Only the kernel's comparison of boxed slots treats them as equal; every other equality and ordering path treats them as different. The rule holds only because no constructor makes a zero-length string.
-
-## Examples of changes that fit the theory
-
-A change fits when every form still means the same content, the header still records the logical length, and only the runtime's own operations depend on which form a value has.
-
-- An added string form is a tag placed before the free and forwarding tags, a structure, its size calculation and tracing in the collector, a case in each `StringOps` reader, and the sites that create it. The UTF-8 leaf and view have this shape, and they touch kernels only where kernels create strings, because no kernel reads string storage directly.
-- Retuning the flatten limit, the tiny-slice limit, the minimum UTF-8 view length or the rope limits is a heap configuration change. It changes speed and memory, never results, and the tests size their ropes from the configured limit, so they keep testing ropes.
-- Keeping more results in the cheaper ASCII form is a change to one constructor that can see the content, as character conversion, `cons`, short slices and mixed flattening are.
-- Implementing rope rebalancing goes in the single function that decides whether to flatten, `maybeFlattenOrRebalance`, where its tests are already evaluated. Its rebalance branch is empty and also unreachable, because it fires only for structural flattening and the only caller, `ensureFlat`, asks for random access. A rebalance therefore needs a caller as well as a body.
-- An added bulk list producer counts its input, tests whether a chain is eligible and fits, builds the chain, fills it with a chain writer and finishes it. Simpler still, it calls the existing builder that makes a list from a buffer of elements. Either way it produces cells or views under the same rules as `reverse` and `append`.
-- An added kernel string or list operation reads through `charAt`, the segment walker, `ensureFlat` or a cursor, and builds through the blank-string allocators or the list builders. It then works for every form there is and every form added later.
-- Allowing UTF-8 strings that are not all ASCII changes creation policy and index translation inside `StringOps`, not the layout of the view.
-
-## Examples of changes that would break the theory
-
-- Casting to the UTF-16 leaf's structure and reading its code units, or reading cons fields directly, in a kernel or in compiled code. It works on the commonest form and fails on a slice, a rope, a UTF-8 string or a chunk view. Go through `StringOps` after `ensureFlat`, or through a cursor.
-- Producing a list view, or an added list form, without the program-wide switch. Compiled projections that know only cons cells would misread it. Gate the form like chunks, and teach the compiled projections to read it.
-- Allocating a zero-length string, UTF-8 leaf or byte buffer. It would compare unequal to `""` and break the collector's 16-byte minimum. Return the empty constant.
-- A slice or view whose base is another slice, or a large payload. Slice chains grow without bound, and a slice over a payload can outlive the header that keeps the payload alive. Collapse to the deepest base, and point at the large header.
-- Writing into a backing or a string after it is published, such as consing into spare room in a backing or caching a widened copy on a UTF-8 view. Either creates old-to-young pointers that nothing records. Allocate a fresh object, or keep a side cache that is registered as a root.
-- A chunk producer that allocates between building a chain and finishing its fill, or that never clears the builder bit. The writer's raw pointers go stale, or a builder escapes into the program. Allocate everything first, fill, then finish.
-- Holding a raw pointer, or a pointer from the segment walker, across an allocation, or pushing one root record per element in a loop. Use one of the five idioms.
-- Equality or ordering that compares tags or pointer words before content. Two equal strings in different forms, or one list split into chunks differently, must compare equal. Compare content.
-- Creating a UTF-8 form from bytes that have not been checked, or that are not ASCII. Every constant-time shortcut assumes the byte count equals the code-unit count. Gate creation with the scanner in `Utf8.hpp`.
-
 ## References
 
 Parent: [runtime.md](/docs/runtime). Related: [garbage-collector.md](/docs/garbage-collector) (tracing, the large-object space, builders, rooting machinery), [value-representation.md](/docs/value-representation) (embedded constants, element kinds, array layout), [elm-kernel.md](/docs/elm-kernel) (kernel code, the JSON heap form), [bytes-fusion.md](/docs/bytes-fusion) (fused encoders and decoders), [lowering-passes.md](/docs/lowering-passes), [global-optimization.md](/docs/global-optimization), [mlir-generation.md](/docs/mlir-generation) (compiled list producers).

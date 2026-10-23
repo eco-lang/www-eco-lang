@@ -118,28 +118,6 @@ Merging identical allocating operations, as common subexpression elimination wou
 
 The backend is correct only if five things outside it hold. The front end meets the dialect's contract: typed signatures, explicit layout attributes, the remaining arity on partial applications, and kernel declarations whose calling conventions the compiler computed; the lowering does not repair them. The four representation models stay independent, and the backend never infers one from another. The heap layout and the allocator are exactly what the inline expansions assume. The stack map section survives linking, since the runtime walks every stack map block in the image. And runtime and kernel symbols resolve by name: the JIT registers them explicitly while AOT links the same archives statically, so a symbol missing from the JIT's registration shows up only when the JIT tests run.
 
-## Changing the backend
-
-A change fits when it carries out a decision the compiler made rather than making one, keeps every heap pointer visible to statepoint rewriting, and keeps whole-program work in MLIR so that the LLVM side stays parallel.
-
-### Examples of changes that fit the theory
-- A fast path for a hot runtime operation: a bodiless marker in the lowering, and inline code in the backend's expansion, written on garbage-collected pointers and placed before statepoint rewriting, with the runtime symbol registered for the JIT and a rule added to the catalog. Field reads, nursery allocation, the equality fast path and list projections all have this shape.
-- An analysis that needs the whole program: an MLIR pass that stamps attributes before the split, which each partition checks again locally. Reachability, capacity hoisting and the leaf stamps are built this way.
-- A platform or output kind: a branch in the link step and its own explicit handling of the stack map section, with the lowering left alone. The macOS link, the Windows link and the glibc set for shared libraries are examples.
-- A kernel intrinsic or typed operation: an operation in the dialect, its verifier and a lowering pattern, plus rules for the models it touches, keeping the boxing rules of the representation models.
-- A diagnostic: behind an environment switch or the lowering validation setting, so that release builds still skip verification between passes.
-
-### Examples of changes that would break the theory
-- Emitting a runtime call on a hot path from the lowering because it is quicker to write than a marker. Each call is a statepoint with its spills; write a marker and its expansion, or call a helper that cannot collect.
-- Letting an integer derived from a heap pointer live across a call, or removing a fold-proof conversion because it folds correctly in one case. The next inlining decision can make it stale. Fix the representation crossing instead.
-- Adding a serial whole-module LLVM step before the split. It costs the parallelism of everything after it; compute the fact in MLIR and pass it down as an attribute.
-- Expanding a marker after statepoint rewriting, or adding a step that does. Any call or pointer conversion it creates is invisible to the rewriting. Place it with the other expansions.
-- Marking a function as a leaf by name or by hand. A wrong mark leaves a collecting call with no stack map. Only the propagation pass stamps generated functions, and LLVM's statepoint pass defines what counts as a leaf.
-- Giving one tool its own copy of statepoint rewriting, data layout or frame-pointer setup. The copies drift and the tools stop agreeing; route the tool through the shared routine.
-- Detecting the host CPU, or searching the host for C library files during the link. Either ties the output to the build machine; use the fixed targets and the bundle's own archives.
-- Working out a kernel's calling convention in the lowering, for example from its name. It will disagree with the compiler; extend the compiler's kernel tables.
-- Merging or dropping allocating operations with generic elimination passes that do not model allocation. Object identity is observable through NaN equality, so model allocation effects first.
-
 ## References
 
 Parent: [eco.md](/docs/theory). Children: [eco-dialect.md](/docs/eco-dialect), [lowering-passes.md](/docs/lowering-passes), [native-drivers.md](/docs/native-drivers).

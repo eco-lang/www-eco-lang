@@ -192,37 +192,6 @@ Fused encoding and decoding of byte sequences uses a separate dialect, `bf`, des
 
 Six operations for reference counting do nothing in a design whose collector traces. They are kept for possible experiments with reusing memory. Nothing emits them, and the first pass of the lowering reports an error for any that appears, so none reaches code generation.
 
-## Where the written record disagrees with the code
-
-Several descriptions of the dialect outside the code claim more than the code does, and a reader who trusts them will assume checks that do not exist. Trust the verifiers in `EcoOps.cpp`.
-
-The design document on MLIR verification shows the call, closure-creation and extension verifiers checking full signatures; only the bounded extension check exists. It also says the closure-capture checking pass always runs before lowering and that verification runs between passes; that pass is compiled in, and inter-pass verification is on, only in validation builds. Comments in the call and extension verifiers say signature checking is deferred to that pass, but it checks only closure captures.
-
-The dialect description in the TableGen file gives Char as a 32-bit integer and mentions a reference count in the header. Char is 16 bits, and the collector traces. The comment above the field fold says a kind-0 slot accepts a single-bit operand, which the slot-kind check rejects.
-
-Some invariant rows are stale. Two say the aggregate operations have no producer, which the compiler's default output contradicts. One says the generic extension of a partial application always yields a boxed value; it can yield a primitive. Two rows and a few code comments cite the wrong identifier for the closure-environment and aggregate rules, and two rows mention a deleted allocation operation. The References list gives the identifiers.
-
-## Examples of changes that fit the theory
-A change fits when it keeps the verifier local, keeps layout derived from types, and gives every fact one representation.
-
-- Another typed intrinsic is one operation with a precise description and a lowering pattern. Mark it pure only if it neither allocates nor has observable effects, or if it reads immutable data and its description says why. A variable-size allocating operation stays without traits. String and list append, structural equality, the code-unit read and list map have this shape.
-- Another allocating operation implements the root-carrier interface, chooses one of the three root layouts, and counts operands from its declared counts in every verifier and fold, because the preparation pass may append roots to it and the module is verified again afterward.
-- Widening a size limit changes the constant in the runtime's heap header together with the header encoding. The verifier picks up the constant itself; add a rejected-input test at the edge, as for arity 2047 and fields 2040 and 2047.
-- A tighter check becomes another case in an operation's verifier, or in its symbol check if it needs one lookup, with a negative test under `test/codegen/`. The bounded extension check is the model: walk a short way, and give up when unsure.
-- An optimization hint is a discardable attribute with a verifier precondition and a defined pass that strips it, as the call purity marker has.
-- Another consumer of aggregates uses the existing building, conversion and projection operations, so the set of types stays fixed and the boxing rules stay in one place.
-
-## Examples of changes that would break the theory
-- A walk over the module, or a signature lookup by scan, inside an operation's verifier. It runs on every parse and after every pass in validation builds, and that cost is why the verifier does not check signatures. Put whole-module checks in a pass, and use the symbol hook for a single cached lookup.
-- Reading `slot_kinds` in the lowering, or deriving layout from anything but the operand types. It turns a cross-check into a second source of truth that can disagree with the first. Derive layout from the types.
-- Tolerating a second representation for compatibility, such as a heap constructor with zero fields or a packed bitmap that is quietly ignored. Equality and stale caches both depend on there being one. Reject it in the verifier.
-- Letting a single-bit Bool into a heap or closure slot, or an aggregate into a closure operand. The collector reads the slot as a boxed word. Box the Bool; closures take only boxed values and primitives.
-- Adding a safepoint marker operation, or computing roots during the lowering. By then boxed values are integers and liveness cannot see them; fix a root problem in the LLVM types and attributes instead.
-- Marking an allocating operation pure so that it can be merged. Object identity is observable through NaN equality; merging needs a guard that no Float is reachable.
-- Adding a pass-specific attribute with no verifier check and no point where it is stripped. Unknown attributes are carried and ignored silently, so a wrong one is never noticed.
-- Mixing the two dialects. Byte-fusion operations do not belong in eco, and eco semantics do not belong in the byte-sequence dialect, or neither can change without the other.
-- Emitting a reference-counting placeholder in anticipation of reference counting. The lowering turns it into a compile error; reviving reference counting means designing its lowering first.
-
 ## References
 
 Parent: [backend.md](/docs/backend). This node has no children. The consumers of the verified module are described in [lowering-passes.md](/docs/lowering-passes), and its producer in [mlir-generation.md](/docs/mlir-generation). The byte-sequence dialect is described in [bytes-fusion.md](/docs/bytes-fusion).

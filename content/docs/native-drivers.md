@@ -89,27 +89,6 @@ The JIT compiles a module in memory, from the same shared routine, and runs it i
 
 AOT binaries get the runtime and the kernels by linking their archives. The JIT has no link, so it registers every runtime symbol by name in a table. A symbol missing from that table shows up only when the JIT tests run.
 
-## Changing the drivers
-
-A change fits when the drivers stay thin, every whole-program fact is settled before the split, and Elm code stays on its one thread.
-
-### Examples of changes that fit the theory
-- A whole-program analysis is computed in MLIR or in the compiler, carried as an attribute or module flag, checked by the splitter when it crosses a partition boundary, and checked again locally by each worker. Reachability, the leaf stamps and the capacity plan all work like this.
-- An output kind or platform becomes a link profile or a per-platform link function in the link step, plus an extension in the output choice. The macOS and Windows links and the glibc profile for libraries have this shape.
-- A host-facing capability, such as a flag, a hook or another kind of port, extends the embedding C interface, keeps Elm on the eco thread, and lets the Node addon wrap it.
-- An optimization tier or setting becomes an option on the job description that the shared routine honors, so every driver gets it at once.
-- A kernel that must keep the program alive takes a hold through the scheduler's interface rather than adjusting a counter directly, so the idle hook stays truthful for embedded and Node hosts.
-- A runtime function the compiled code calls is added to the JIT's symbol table at the same time as to the archives, so the JIT tests can run it.
-
-### Examples of changes that would break the theory
-- Re-implementing statepoint rewriting, internalization or the partition count inside one driver. The copies drift; route the change through the shared routine.
-- Computing a whole-program fact after the split, or letting one partition read another's bodies. It destroys the independence the split depends on; decide the fact in MLIR and stamp it.
-- Downgrading a missing or inconsistent stamp at a partition boundary to a warning. A wrong plan or leaf stamp is a collector safety bug; fix the producer.
-- Recording toolchain paths at configure time in a shipped bundle, or adding a dependency on a host library to a bundle profile. The bundle then works only on the build machine; resolve the path when the compiler runs and ship the input.
-- Calling Elm or touching the heap from a host thread in the embedding layer. The heap has one mutator and no write barrier; queue bytes and wake the loop.
-- Making the executable link dynamic, or adding an option whose only legal value is its default. Each output kind has one correct link mode.
-- Treating the value the compiled main returns as an exit status. It is an Elm value; use the exit code the runtime holds.
-
 ## References
 
 Parent: [backend.md](/docs/backend). Siblings: [eco-dialect.md](/docs/eco-dialect), [lowering-passes.md](/docs/lowering-passes).

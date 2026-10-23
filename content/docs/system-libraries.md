@@ -124,30 +124,6 @@ The library's documentation says its macOS code paths are untested and Windows i
 
 Third-party documentation tools run only the stock Elm compiler, which rejects kernel imports and effect modules. The library's documentation is therefore built from a generated copy of its sources with those parts rewritten, rather than through a wrapper that stands in for the stock compiler, which breaks builds.
 
-## Where a change to these libraries belongs
-
-A change fits when it leaves heap access on the eco thread, passes only neutral values across the kernel, does its IO inside a binding's body or on a service, gives every wait one hold, and keeps the Elm wrapper the same on both targets. A change breaks the theory when it bends one of those rules to save a step.
-
-### Examples of changes that fit the theory
-- A new `eco/system` module or operation takes an Elm API, a kernel home whose name no other package uses, C++ on the existing services, a JavaScript kernel with identical signatures, a manager if the module has effects, and tests in the end-to-end suite with directives for real differences. Sockets, WebSockets, reading a stream line by line, setting the terminal title and HTTP server endpoints have this shape.
-- A new fallible operation adds an error code and decodes it in the module that owns it, alongside that module's other failure kinds.
-- A new long-lived wait takes a hold for the wait and releases it exactly once on every path, including kill and cancel.
-- A new blocking system call goes to the worker pool. A new socket-like protocol is a layer on the reactor's connection abstraction, as HTTP/1.1, HTTP/2 and WebSocket are.
-- A function the compiler needs goes into `eco/kernel` as an Elm wrapper, a JavaScript kernel and a C++ export, with its body in a binding and its errors as tuples, and with a matching function in the stock-Elm implementation.
-- A platform fix maps an operating system's error onto the documented one on both targets.
-
-### Examples of changes that would break the theory
-- Returning a record or a package's custom type from a kernel to skip a decode in Elm. The kernel cannot know the compiler's layout, so the value can be misread. Return a tuple and build the Elm value in the wrapper.
-- Doing IO when the kernel is called. Tasks built together would then run as they were built, and a slow call would stall the eco thread. Put the work in the binding's body or hand it to a service.
-- Reading a heap argument after parking or submitting, or giving a service thread a heap pointer. The collector may move the object first, and only the eco thread may touch the heap. Copy the arguments out first and give the service plain data.
-- Changing the pending-work counter directly, or holding a program open for a resource's lifetime rather than for a wait. Exit then depends on the resource and the target rather than on what the program waits for. Take a hold for the wait.
-- Calling `eco/kernel` from an application, or making `eco/system` depend on it. `eco/kernel` changes with the compiler and with its stock-Elm implementation, and those changes would reach programs. Add the function to `eco/system`.
-- Hiding target-specific behavior in an Elm wrapper. The shared test suite stops being a specification of both targets. Keep the wrapper identical and mark the difference in the tests.
-- Giving a kernel home the same name as one in another package. The compiler's kernel tables key homes without their prefix, so the two would silently share facts. A guard script in the full test target rejects a colliding `eco/system` home; choose a distinct one rather than working around it.
-- Starting a child with `fork`. It copies the heap and runs the collector's fork handler. Use the runtime's spawn primitive.
-- Fixing a WebSocket framing rule, or any shared parsing rule, in one target only. The codecs must agree, or the suite checks two different protocols. Change both.
-- Exposing libcurl-specific behavior in the Elm API. The HTTP engine is meant to be replaceable without changing the Elm API. Keep the behavior inside the C++.
-
 ## References
 
 Parent: [kernels.md](/docs/kernels). Sibling: [elm-kernel.md](/docs/elm-kernel). Related: [scheduler-and-services.md](/docs/scheduler-and-services) for the scheduler, async sources and the runtime's HTTP service.
