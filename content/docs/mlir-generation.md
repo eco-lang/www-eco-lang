@@ -208,6 +208,6 @@ Documents:
 
 Invariants (`design_docs/invariants.csv`):
 
-- Codegen rules: CGEN_001, CGEN_008, CGEN_011, CGEN_014, CGEN_015, CGEN_038, CGEN_039, CGEN_041, CGEN_047, CGEN_048, CGEN_059, CGEN_060, CGEN_064, CGEN_065, CGEN_068, CGEN_080, CGEN_082, CGEN_CLOSURE_004. CGEN_014 names a graph field (`ctorLayouts`) that is `ctorShapes` in the code; CGEN_034, CGEN_056 and CGEN_058 say a generic partial application always returns a boxed value, but an unboxed primitive result is allowed.
+- Codegen rules: CGEN_001, CGEN_008, CGEN_011, CGEN_014, CGEN_015, CGEN_038, CGEN_039, CGEN_041, CGEN_047, CGEN_048, CGEN_059, CGEN_060, CGEN_064, CGEN_065, CGEN_068, CGEN_080, CGEN_082, CGEN_CLOSURE_004.
 - Representation and heap: REP_ABI_001, REP_SSA_001, REP_HEAP_001, REP_HEAP_002, REP_BOUNDARY_001 to REP_BOUNDARY_003, REP_CLOSURE_001, REP_CONSTANT_001, REP_AGG_001, HEAP_019, HEAP_035.
 - Kernels and upstream: KERN_006, GOPT_001, GOPT_003.

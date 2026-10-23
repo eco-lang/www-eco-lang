@@ -147,7 +147,7 @@ Invariants (`design_docs/invariants.csv`):
 - BFOPS_006, BFOPS_007, BFOPS_010: exact width and one allocation.
 - BFOPS_012, BFOPS_029: no load without a passing check. BFOPS_016, BFOPS_017: failure is a branch to `Nothing`.
 - BFOPS_030, BFOPS_032: layout stays in the runtime helpers.
-- False for an encoder with an opaque leaf: BFUSE_001 (all or nothing), BFOPS_036 (no intermediate allocations), BFOPS_037 (no interpreter calls). BFOPS_021 cites `BFTypes.td`, which does not exist; the cursor type is in `BFOps.td`.
+- BFUSE_001 (decoders all or nothing; encoders may fuse partially around an opaque leaf), BFOPS_036 (no intermediate allocations), BFOPS_037 (no interpreter calls; an opaque encoder part calls the kernel's own size and write walkers). BFOPS_021: the opaque cursor type, defined in `BFOps.td`.
 
 Design documents:
 

@@ -117,7 +117,7 @@ Documents:
 
 Invariants (`design_docs/invariants.csv`):
 
-- HEAP_005, HEAP_031: stores only into fresh objects. HEAP_SNAPSHOT_001: published values are immutable. HEAP_018: states that values are acyclic; out of date for closures.
+- HEAP_005, HEAP_031: stores only into fresh objects. HEAP_SNAPSHOT_001: published values are immutable. HEAP_018: Elm value data is acyclic; closures are the exception.
 - HEAP_BUILDER_001 to HEAP_BUILDER_003: objects under construction in the runtime and kernels.
 - HEAP_004: adding object kinds. HEAP_007: one mutator per process.
 - HEAP_008, HEAP_028, REP_CONSTANT_001, HEAP_029: pointer words and embedded constants. FORBID_HEAP_001: telling constants apart.
@@ -125,4 +125,4 @@ Invariants (`design_docs/invariants.csv`):
 - HEAP_020, FORBID_HEAP_003: rooting in C++. HEAP_030, HEAP_034: inline allocation and forwarding checks.
 - KERNEL_TASK_IO_001, KERNEL_TASK_IO_002: deferred kernel IO.
 - LIVE_001 to LIVE_006: holds. PORT_004, PORT_006, PORT_007: ports, the eco thread and JSON flags.
-- GC_DET_001: collector policy does not depend on helper-thread progress. GC_MODEL_001: the model canary.
+- GC_DET_001: collector policy does not depend on helper-thread progress. The model canary's rule is in `test/tla/README.md` "The canary".
