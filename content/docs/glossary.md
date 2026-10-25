@@ -6,7 +6,7 @@ sectionOrder: 1
 order: 7
 ---
 
-The terms used across these pages, each defined as Eco uses it, with a link to the article that explains it in full.
+These are the terms used across the Eco documentation. Each is defined as Eco uses it, which is sometimes narrower than the general meaning, and links to the article that explains it in full.
 
 ## ABI
 
@@ -14,7 +14,7 @@ The application binary interface: how a value is passed across a function call. 
 
 ## Boxed and unboxed
 
-An unboxed value is a raw machine number held directly in a register or field. A boxed value is a 64-bit word that is either a pointer to a heap object or a small constant embedded in the word itself. Eco unboxes only `Int`, `Float` and `Char`. See [Value representation](/docs/value-representation).
+An *unboxed* value is a raw machine number held directly in a register or field. A *boxed* value is a 64-bit word that is either a pointer to a heap object or a small constant embedded in the word itself. Eco unboxes only `Int`, `Float` and `Char`. See [Value representation](/docs/value-representation).
 
 ## Closure
 
@@ -34,11 +34,11 @@ The state where a compiler, rebuilt from its own source by itself, produces byte
 
 ## JIT and AOT
 
-Just-in-time compilation turns code into machine code in memory just before running it; ahead-of-time compilation writes an executable to run later. Eco's tests use an in-memory JIT, users run the AOT compiler, and the two share all of the backend except the final step. See [The backend](/docs/backend).
+*Just-in-time* compilation turns code into machine code in memory just before running it. *Ahead-of-time* compilation writes an executable to run later. Eco's tests use an in-memory JIT, users run the AOT compiler, and the two share all of the backend except the final step. See [The backend](/docs/backend).
 
 ## Kernel
 
-A function with no Elm body, implemented by the platform. Stock Elm writes its kernels in JavaScript; Eco reimplements them in C++ so that unmodified Elm packages run natively, and adds its own kernels for IO. See [Kernels](/docs/kernels).
+A function with no Elm body, implemented by the platform. Stock Elm writes its kernels in JavaScript. Eco reimplements them in C++ so that unmodified Elm packages run natively, and adds its own kernels for IO. See [Kernels](/docs/kernels).
 
 ## Lambda set
 
@@ -46,7 +46,7 @@ For a place in the program that holds a function, the set of functions that can 
 
 ## LLVM
 
-A widely used compiler backend that optimizes a low-level intermediate language and emits machine code for many processors. Eco hands LLVM its program after its own passes have lowered it, and uses LLVM's support for precise garbage collection. See [The backend](/docs/backend).
+A widely used compiler backend that optimises a low-level intermediate language and emits machine code for many processors. Eco hands LLVM its program after its own passes have lowered it, and uses LLVM's support for precise garbage collection. See [The backend](/docs/backend).
 
 ## Lowering
 
@@ -70,7 +70,7 @@ The garbage-collection term for code that allocates objects and changes pointers
 
 ## Nursery and eden
 
-The nursery is the young part of Eco's heap, collected often. New objects are allocated in eden, part of the nursery, by bumping a pointer; each minor collection copies eden's survivors into one of a few survivor extents in the same nursery. See [The garbage collector](/docs/garbage-collector).
+The nursery is the young part of Eco's heap, collected often. New objects are allocated in eden, part of the nursery, by bumping a pointer. Each minor collection copies eden's survivors into one of a few survivor extents in the same nursery. See [The garbage collector](/docs/garbage-collector).
 
 ## Partial application
 
@@ -82,11 +82,11 @@ A point in compiled code where the garbage collector may run. At each safepoint 
 
 ## Specialization
 
-Making a version of a function for one particular use, so it can be compiled with more facts known. Monomorphization specializes by type; lambda-set specialization specializes calls by which functions can reach them. See [Monomorphization](/docs/monomorphization).
+Making a version of a function for one particular use, so it can be compiled with more facts known. Monomorphization specializes by type, and lambda-set specialization specializes calls by which functions can reach them. See [Monomorphization](/docs/monomorphization).
 
 ## SSA
 
-Static single assignment: a form of intermediate code in which every value is defined exactly once. MLIR is in SSA form, and Eco's SSA form of a value can differ from its form at a call or in the heap; a `Bool` is a one-bit integer only in SSA. See [Value representation](/docs/value-representation).
+Static single assignment: a form of intermediate code in which every value is defined exactly once. MLIR is in SSA form. In Eco a value's SSA form can differ from its form at a call or in the heap: a `Bool` is a one-bit integer only in SSA. See [Value representation](/docs/value-representation).
 
 ## Staging and arity
 

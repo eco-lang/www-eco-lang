@@ -15,11 +15,11 @@ In a higher-order language most calls go through a function value: `List.map f x
 
 ## A set on every arrow
 
-Two Elm values of type `Int -> Int` can come from different lambdas. The type checker does not tell them apart, but code generation wants to. So during monomorphization every function arrow in a type carries one more thing: a set of the functions that can be there. When the unifier merges two types, it also joins their sets, so a function value's identity flows wherever its type flows, with no separate dataflow analysis.
+Two Elm values of type `Int -> Int` can come from different lambdas. The type checker does not tell them apart, but code generation needs to. During monomorphization, every function arrow in a type carries one more thing: the set of functions that can be there. When the unifier merges two types, it also joins their sets, so a function value's identity flows wherever its type flows, with no separate dataflow analysis.
 
 The sets also become part of each specialization's key. A higher-order function gets one copy for each set of functions its callers pass, and inside each copy the calls through its function parameter know their target.
 
-Every consumer of the analysis asks one question: is this set a single known function? A set with one member can become a direct call. A set with two or more always uses the generic path, because Eco does not turn a function type into a sum over its members. The analysis is therefore judged on the single-member sets it finds, and on never claiming one falsely: a set that is missing a member looks smaller than it is, and a false singleton becomes a direct call to the wrong code.
+Every consumer of the analysis asks one question: is this set a single known function? A set with one member can become a direct call. A set with two or more always uses the generic path, because Eco does not turn a function type into a sum over its members, as full defunctionalization in MLton or Roc does. The analysis is therefore judged on the single-member sets it finds, and on never claiming one falsely: a set that is missing a member looks smaller than it is, and a false singleton becomes a direct call to the wrong code.
 
 ## A direct call through a function parameter
 
@@ -96,9 +96,9 @@ three different functions can reach `g`, so its set has three members, and the c
 
 ## What it is worth
 
-The best measurement is the compiler compiling itself, which is a large, very higher-order Elm program. We compared a compiler built with the lighter monomorphization engine, which has no lambda sets, against one built with the default engine and the analysis on, both compiling the same source. With lambda sets, roughly three quarters of the generic closure applications became direct or fast calls, and the share of calls with a statically known target rose from about 84% to about 94%.
+The best measurement we have is the compiler compiling itself, a large and heavily higher-order Elm program. We compared a compiler built with the lighter monomorphization engine, which has no lambda sets, against one built with the default engine and the analysis on, both compiling the same source. With lambda sets, roughly three quarters of the generic closure applications became direct or fast calls, and the share of calls with a statically known target rose from about 84% to about 94%.
 
-The analysis is not free. It has been a large share of the compiler's own compile time, and on the compiler as a workload it has not been clear that the run time it saves outweighs that cost. The analysis and its solver have since been made much cheaper, but we have not repeated the cost-benefit measurement, so we claim no figure in either direction.
+The analysis is not free. It has been a large share of the compiler's own compile time, and on the compiler as a workload it has not been clear that the run time it saves outweighs that cost. The analysis and its solver are now much cheaper than when that was measured, but we have not repeated the comparison, so we claim no figure in either direction.
 
 ## Demand-driven, where the paper is staged
 
@@ -106,9 +106,9 @@ The design comes from Brandon and others, "Better Defunctionalization through La
 
 The paper works in two passes. First it infers sets over the whole program, bottom-up in dependency order, and whatever a definition cannot know about its callers becomes a set *parameter* of that definition. Then a second pass runs top-down from the entry point and makes one copy of each definition for each set of concrete arguments its callers pass, filling the parameters in.
 
-Eco does both inside monomorphization's list of demands. When a call to a global function is translated, Eco looks up a summary of that function, computed once and memoized: how its arrows' sets relate to one another. That is the bottom-up half. It then reads back the callee's type with the sets the call's arguments carry and files that as a new demand. That is the top-down half: a different set gives a different key, and so a different copy. Because demands start from `main`, code that nothing reaches is never analyzed at all.
+Eco does both inside monomorphization's list of demands. When a call to a global function is translated, Eco looks up a summary of that function, computed once and memoised: how its arrows' sets relate to one another. That is the bottom-up half. It then reads back the callee's type with the sets the call's arguments carry and files that as a new demand. That is the top-down half: a different set gives a different key, and so a different copy. Because demands start from `main`, code that nothing reaches is never analysed at all.
 
-Three things push Eco this way. Elm is polymorphic and the paper's language is not, so an arrow inside a polymorphic type has no concrete set until a specialization fixes the type; specializing by type and by set is one decision. Monomorphization already has everything the analysis needs, a store per demand, a unifier, a worklist and a registry of keys. And not holding an annotated copy of the whole program matters when the compiler compiles itself on a JavaScript heap.
+We chose this order for three reasons. Elm is polymorphic and the paper's language is not, so an arrow inside a polymorphic type has no concrete set until a specialization fixes the type; specializing by type and by set is one decision. Monomorphization already has everything the analysis needs, a store per demand, a unifier, a worklist and a registry of keys. And not holding an annotated copy of the whole program matters when the compiler compiles itself on a JavaScript heap.
 
 The cost is that a summary is a fixed fact. A definition cannot hand an unknown to its callers to fill in, as the paper's parameters do. Where it cannot know, the set is recorded as "any function" or as unknown. Much of the lost precision comes back another way: the function's body is solved again in each specialization with the demand's concrete sets already in place, and two loads of the same annotation share their set slots.
 
@@ -116,15 +116,17 @@ Demands also arrive one at a time, so a specialization built for an early demand
 
 ## Unknown is not empty
 
-When a slot is read back at the end of a demand, it has one of four forms: a set of members; "any function", written ⊤; unknown, when nothing ever wrote to it; or a lower bound, "at least these members". An unwritten slot never reads back as empty. An empty set would claim the arrow is dead, and a set missing a member becomes a false singleton. ⊤ and unknown are treated alike by code generation but kept apart in the compiler, because they mean different things: ⊤ is deliberate widening, unknown is a flow that nothing recorded, and keeping them apart lets each be measured and fixed on its own.
+When a slot is read back at the end of a demand, it has one of four forms: a set of members; "any function", written ⊤; unknown, when nothing ever wrote to it; or a lower bound, "at least these members". An unwritten slot never reads back as empty, because an empty set would claim the arrow is dead, and a set missing a member becomes a false singleton.
+
+The two that look alike are kept apart. *⊤* is deliberate widening: the compiler chose to give up on that arrow. *Unknown* is a flow that nothing recorded. Code generation treats them the same way, but the compiler keeps them distinct so that each can be measured and fixed on its own.
 
 ## Kernels are opaque unless licensed
 
-The analysis cannot see into the C++ [kernels](/docs/kernels), so every arrow that crosses a kernel boundary becomes ⊤ by default. That is always safe, and only costs precision. A kernel can instead carry a license in an audited table saying how function values pass through it; most licensed kernels pass functions only along the type variables their Elm type shares, so the set that comes out is the set that went in. About 250 kernels are licensed.
+The analysis cannot see into the C++ [kernels](/docs/kernels), so every arrow that crosses a kernel boundary becomes ⊤ by default. That is always safe and costs only precision. A kernel can instead carry a license in an audited table saying how function values pass through it; most licensed kernels pass functions only along the type variables their Elm type shares, so the set that comes out is the set that went in. About 250 kernels are licensed.
 
-A wrong license is worse than none, because it produces a populated set that is missing members. Each row of the table therefore records its audit evidence, the audited C++ files are pinned by hash, and the default build fails when a pinned file changes without the table being reviewed.
+A wrong license is worse than none, because it produces a populated set that is missing members. Each row of the table records its audit evidence, the audited C++ files are pinned by hash, and the default build fails when a pinned file changes without the table being reviewed.
 
-> **Designs we didn't use.** Exporting unknowns as quantified set parameters is the paper's own answer, and we built a form of it: inclusion constraints instantiated per caller. It gave byte-identical output on every program we measured, so Eco does not carry them.
+> **Designs we didn't use.** Exporting unknowns as quantified set parameters is the paper's own answer, and we built a form of it, as inclusion constraints instantiated per caller. It gave byte-identical output on every program we measured, so Eco does not carry the extra machinery.
 
 ## Further reading
 

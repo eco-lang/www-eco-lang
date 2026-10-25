@@ -54,7 +54,7 @@ typedef struct {
 } HPointer;
 ```
 
-The trick is in the low three bits. Every heap object is 8-byte aligned, so the low three bits of its address are always zero. Eco puts the constant code and the pointer indicator exactly there. For a heap pointer those bits are zero, and the 40-bit `ptr` field starting at bit 3 holds the rest of the address. So the low 43 bits of the word *are* the raw address: dereferencing needs no base register, no add and no shift. The heap is reserved below 2^43 bytes (8 TB) so that every address fits.
+The design rests on the low three bits. Every heap object is 8-byte aligned, so the low three bits of its address are always zero, and Eco puts the constant code and the pointer indicator exactly there. For a heap pointer those bits are zero, and the 40-bit `ptr` field starting at bit 3 holds the rest of the address. The low 43 bits of the word therefore *are* the raw address: dereferencing needs no base register, no add and no shift. The heap is reserved below 2^43 bytes (8 TB) so that every address fits.
 
 A word with bit 2 set is a constant embedded in the word. It is never allocated and never traced by the collector. The fixed words are:
 
@@ -68,15 +68,15 @@ A word with bit 2 set is a constant embedded in the word. It is never allocated 
 
 For `type Order = LT | EQ | GT`, `LT` is `0x7`, `EQ` is `0x0000080000000007` and `GT` is `0x0000100000000007`. Each saves a 16-byte heap object every time one is produced.
 
-Notice that bit 0 of `False` and `True` is the Bool's own one-bit value. Converting between the SSA form and the word is therefore cheap: boxing a Bool is a select between `0x5` and `0x4`, and unboxing is a compare with `0x5`. Neither allocates.
+Bit 0 of `False` and `True` is the Bool's own one-bit value. Converting between the SSA form and the word is cheap: boxing a Bool is a select between `0x5` and `0x4`, and unboxing is a compare with `0x5`. Neither allocates.
 
-That choice has a consequence. `False` has constant code 0, the same as a heap pointer, so code can never test "is this a pointer?" by looking at the code bits. Bit 2 is the only legal test. Testing for null, or whether the word falls in the heap's address range, is ruled out too, because the range depends on where the heap happens to be reserved.
+This choice has a cost. `False` has constant code 0, the same as a heap pointer, so code can never test "is this a pointer?" by looking at the code bits. Bit 2 is the only legal test. Testing for null, or whether the word falls in the heap's address range, is ruled out too, because the range depends on where the heap happens to be reserved.
 
 ## One Empty for five types
 
 A single word, `0x6`, stands for `()`, `[]`, `Nothing`, `""` and `{}`. Merging them is safe because Elm is typed: the type checker guarantees that each is only produced and matched where its own type is expected, so the word never has to say which empty it is. The cost is that a `case` cannot learn the constructor from the word alone, so when it meets Empty it reads a reserved tag instead.
 
-The merge also means an embedded value must exist *only* in its embedded form. Equality concludes "not equal" as soon as one side is an embedded constant and the words differ. A heap object holding `LT`, or a heap string of length zero, would compare unequal to the real `LT` or `""`. So every producer returns the constant, and no zero-length heap string is ever built.
+The merge also means an embedded value must exist *only* in its embedded form. Equality concludes "not equal" as soon as one side is an embedded constant and the words differ. A heap object holding `LT`, or a heap string of length zero, would compare unequal to the real `LT` or `""`. Every producer returns the constant, and no zero-length heap string is ever built.
 
 ## A real example
 
@@ -100,7 +100,7 @@ Here is the list `[ 1, 2, 3 ]` and the value `Rect 2 3` as Eco's compiler emits 
 
 ## Slot kinds: how the collector tells numbers from pointers
 
-Every slot of a heap object carries a two-bit kind: `00` boxed word, `01` raw Int, `10` raw Float, `11` raw Char. The collector reads only these kinds, so it can tell a raw integer from a pointer without knowing any Elm types.
+Every slot of a heap object carries a two-bit kind: `00` boxed word, `01` raw Int, `10` raw Float, `11` raw Char. The collector reads only these kinds, so it can tell a raw integer from a pointer without knowing any Elm types. OCaml solves the same problem the other way, by stealing the low bit of every integer, which leaves it 63 bits. We prefer to keep `Int` at a full 64 bits and put the information in the object instead.
 
 Four codes is exactly boxed plus three primitives, which is why only `Int`, `Float` and `Char` are ever raw. A raw Bool would spend a code for nothing, since boxing a Bool costs nothing. Small objects (cons cells, tuples) keep their kinds in the 8-byte object header. Larger ones (records, custom types, closures) keep them in a packed word after the header, with extra kind words at the end of the object when there are many fields, so a field always stays at its own position however many fields there are.
 
@@ -122,7 +122,7 @@ Code generation decides whether to convert by comparing the value's actual SSA t
 
 Below this there is a fifth, mechanical form. Inside LLVM, a boxed value has the type `ptr addrspace(1)`, which is how LLVM knows which values are heap pointers the collector may move. It becomes a plain integer only at the instant it is written to or read from memory.
 
-> **Designs we didn't use.** The first word encoding stored a 40-bit *offset* from a heap base rather than a pointer. Every dereference paid an add and a shift, and its `True` and `False` shared no bit with the one-bit Bool, so the current encoding replaced it.
+> **Designs we didn't use.** The word could store a 40-bit *offset* from a heap base rather than the address itself. We rejected it because every dereference pays an add and a shift, and its `True` and `False` share no bit with the one-bit Bool, so boxing and unboxing a Bool would no longer be a single select or compare.
 
 ## Further reading
 

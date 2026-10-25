@@ -6,7 +6,7 @@ sectionOrder: 4
 order: 3
 ---
 
-Every Elm function value in Eco is a closure on the heap, and its header says everything needed to call it: how many arguments it takes, how many it already holds, and how each one is stored. So one runtime routine can apply *any* closure to *any* number of arguments, with no help from the call site. Because that generic path is always correct, every faster path the compiler adds is optional, and the compiler takes one only where it can prove, or cheaply check, that it is safe.
+Every Elm function value in Eco is a closure on the heap, and its header says everything needed to call it: how many arguments it takes, how many it already holds, and how each one is stored. One runtime routine can therefore apply *any* closure to *any* number of arguments, with no help from the call site. Because that generic path is always correct, every faster path the compiler adds is optional, and the compiler takes one only where it can prove, or cheaply check, that it is safe.
 
 > **Background**
 >
@@ -56,13 +56,13 @@ typedef struct {
 } Closure;
 ```
 
-Notice that the remaining arity is `max_values - n_values`, read from the header alone. The descriptor is static data emitted next to the compiled code, so the collector never traces it. The slot kinds cover every parameter of the stage, captured or still to come, so the runtime can convert each incoming argument to the form the body expects. A C++ kernel passing boxed values and compiled code passing a raw `Int` both end up producing exactly the encoding the body was compiled for. Parameters past the twentieth keep their kinds in extra words at the end of the object, so a stage can take up to 2047 parameters while the common case reads only the packed word.
+The remaining arity is `max_values - n_values`, read from the header alone. The descriptor is static data emitted next to the compiled code, so the collector never traces it. The slot kinds cover every parameter of the stage, captured or still to come, so the runtime can convert each incoming argument to the form the body expects. A C++ kernel passing boxed values and compiled code passing a raw `Int` both end up producing exactly the encoding the body was compiled for. Parameters past the twentieth keep their kinds in extra words at the end of the object, so a stage can take up to 2047 parameters while the common case reads only the packed word.
 
 The result kind lives on the closure rather than at the call site because a call site often cannot know it. For a staged closure, the static type at the call site describes an inner function, not the real return; a kernel calling a closure has no static type at all. Only `Int`, `Float` and `Char` are ever stored raw; `Bool` is boxed in every slot (see [Value representation](/docs/value-representation)).
 
 ## Generic apply is always correct
 
-The runtime's generic apply looks at the closure header and splits into three cases: too few arguments, exactly enough, or too many. In outline:
+The runtime's generic apply looks at the closure header and splits into three cases: too few arguments, exactly enough, or too many. This is the eval/apply model GHC also uses, where the callee's arity is read from the function value at run time rather than assumed by the caller. In outline:
 
 ```text
 apply(closure, args[0..n)):
@@ -108,7 +108,7 @@ Extending a partial application never changes the closure in place. It allocates
 
 ## Faster paths, proven or guarded
 
-The compiler records on every call through a function value what it could establish about the callee. The faster paths come in two sorts, and the difference matters:
+The compiler records on every call through a function value what it could establish about the callee. The faster paths come in two sorts, and the difference decides what a bug in the compiler's analysis would cost:
 
 - A **proven** path trusts a fact the compiler recorded and checks nothing at run time. The `singleton_fast` calls above are proven: the compiler names the one function the closure can be.
 - A **guarded** path reads the closure header, compares it with what the call site knows, and falls back to generic apply on any mismatch. It cannot miscompile.
@@ -120,13 +120,13 @@ The compiler records on every call through a function value what it could establ
 | The remaining arity, and the call is partial | the runtime's extend routine | only that the stage does not overflow |
 | Nothing, or only parameter types | generic apply, behind a fast edge | everything, from the header |
 
-The fast edge is the guarded path for calls the compiler could not pin to one closure. A generic call site knows how many arguments it passes and their kinds, but not how many captures the callee holds. So each descriptor carries a small table, `sat[N]`, of entries that each take exactly N new arguments in registers and load the captures themselves. The fast edge reads the packed word and checks that the closure needs exactly N more arguments, that all its kinds fit in the packed word, that its result kind and remaining slot kinds match the call site's, and that `sat[N]` exists. If every check passes, the call goes straight to the entry and skips the argument array, its root registration and the runtime's argument splicing. Any failure takes the unchanged generic path, so a missing entry costs speed, never correctness.
+The fast edge is the guarded path for calls the compiler could not pin to one closure. A generic call site knows how many arguments it passes and their kinds, but not how many captures the callee holds. Each descriptor therefore carries a small table, `sat[N]`, of entries that each take exactly N new arguments in registers and load the captures themselves. The fast edge reads the packed word and checks that the closure needs exactly N more arguments, that all its kinds fit in the packed word, that its result kind and remaining slot kinds match the call site's, and that `sat[N]` exists. If every check passes, the call goes straight to the entry and skips the argument array, its root registration and the runtime's argument splicing. Any failure takes the unchanged generic path, so a missing entry costs speed, never correctness.
 
 ## How much it matters
 
 On the compiler compiling itself, the whole generic path (generic apply, the saturated dispatch and the extend routine) is a couple of percent of CPU cycles in self time. Lambda-set specialization is what keeps it that low. In one measurement, the same self-compile was run by a compiler built without lambda-set specialization and by one built with it: generic applications fell by roughly three quarters, and the share of calls with a statically known target rose from about 84% to about 94%.
 
-> **Designs we didn't use.** We rejected a uniform boxed calling convention with a generated partial-application wrapper per closure. Lambdas are typed end to end instead, so captured `Int`s, `Float`s and `Char`s flow raw, and the only wrapper left is the one behind the descriptor's array-taking entry.
+> **Designs we didn't use.** We rejected a uniform boxed calling convention with a generated partial-application wrapper per closure, because it would box every captured number on the way in and unbox it on the way out. Lambdas are typed end to end instead, so captured `Int`s, `Float`s and `Char`s flow raw, and the only wrapper left is the one behind the descriptor's array-taking entry.
 
 ## Further reading
 

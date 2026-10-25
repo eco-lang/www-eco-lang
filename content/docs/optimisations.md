@@ -6,7 +6,7 @@ sectionOrder: 1
 order: 5
 ---
 
-Each of Eco's optimisations runs at the first stage where the fact it depends on is known: some need only one module, some need concrete types, some need the whole program, and some need the machine code. This page lists them all in that order, each with a sentence or two and a link to the article that explains it.
+An optimisation can only use what is known at the point it runs. Some facts are known within one module, some only once types are concrete, some only once the whole program is linked, and some only in the machine code. Each of Eco's optimisations therefore runs at the earliest stage that has the fact it needs, and this page lists them in that order, each with a sentence or two and a link to the article that explains it.
 
 > **Background**
 > - [Monomorphization](/docs/glossary#monomorphization): making one copy of a generic function for each type it is used at.
@@ -15,19 +15,21 @@ Each of Eco's optimisations runs at the first stage where the fact it depends on
 > - [Nursery and eden](/docs/glossary#nursery-and-eden): the area where new objects are allocated, and collected young.
 > - [Write barrier](/docs/glossary#write-barrier): extra code a garbage collector adds to every pointer store.
 
+One principle runs through all of them: we judge an optimisation by the work it removes, not by how clever it is. A copying collector makes short-lived objects almost free and copies only those that survive into the old generation, so an optimisation that saves allocations can still change nothing in run time unless it also reduces what is retained. That lesson took a few experiments to learn.
+
 The examples below are real output from Eco 0.2.0, with attributes trimmed. [A tour through the compiler](/docs/tour) shows several of them in the context of one whole program.
 
 ## Before types are concrete
 
-These run on each module by itself, before the whole program is known, and keep every type the checker recorded. See [Local optimization](/docs/local-optimization).
+These run on each module by itself, before the whole program is known, and every rewrite keeps the type the checker recorded. See [Local optimization](/docs/local-optimization).
 
-**Decision trees.** A `case` is compiled into a tree of tests in which each part of the value is examined at most once, and a branch reached by several paths is shared rather than copied. A complete match needs no final test: in a `case` over three constructors, the third is whatever is left.
+**Decision trees.** A `case` is compiled into a tree of tests in which each part of the value is examined at most once, and a branch reached by several paths is shared rather than copied. A complete match needs no final test, because in a `case` over three constructors the third is whatever is left.
 
 **Tail calls become loops.** A function that calls itself in tail position becomes a loop. `sumTo acc n = if n <= 0 then acc else sumTo (acc + n) (n - 1)` comes out as an `scf.while` loop over two `i64` values, with no call and no stack growth.
 
 **Operator rewrites.** `&&` and `||` become conditionals, so the right-hand side is only evaluated when needed, and `|>` and `<|` become plain calls with no function value in between.
 
-**Merging function boundaries.** `adder a = \b -> a + b` is written as a one-argument function that returns a function. Eco merges the two into one two-argument function, `Stage_adder_$_5 : (i64, i64) -> i64`, so a full call to `adder` builds no intermediate closure.
+**Merging function boundaries.** `adder a = \b -> a + b` is written as a one-argument function that returns a function. Eco merges the two levels into one two-argument function, `Stage_adder_$_5 : (i64, i64) -> i64`, so a full call to `adder` builds no intermediate closure.
 
 ## Whole program
 
@@ -48,7 +50,7 @@ These need every module linked, starting from `main`. See [Global optimization](
 
 **Inlining and pruning.** After monomorphization, small specializations are inlined into their callers, and those left without references are removed. A function that calls one of its own parameters, such as `twice f x = f (f x)`, gets a larger budget, because inlining it lets the function it was given be called directly.
 
-**Direct and fast calls.** Each call through a function value is given a call kind: the callee's arity is known, or it is a single known function to call by its fast entry point, or nothing is known and the runtime's generic apply has to inspect the closure. Code generation emits whatever the call kind says. See [Closures and calls](/docs/closures-and-calls).
+**Direct and fast calls.** Each call through a function value is given a call kind. Either the callee's arity is known, or it is a single known function called by its fast entry point, or nothing is known and the runtime's generic apply has to inspect the closure. Code generation emits whatever the call kind says, and never works it out again. See [Closures and calls](/docs/closures-and-calls).
 
 ## Code generation
 
@@ -83,15 +85,15 @@ These happen in the C++ backend and LLVM. See [The backend](/docs/backend) and [
 
 **Inline bump allocation.** Allocating a fixed-size object is a pointer bump and one compare, inlined into the compiled code. Only the rarely taken branch calls the runtime, and that branch is also the only place a collection can start.
 
-**Fast paths as markers.** The lowering emits allocations and some other fast paths as calls to marker functions, such as `__eco_alloc_inline`. They stay opaque, and so are left alone, through the MLIR passes and the translation to LLVM, and are expanded into their inline form before statepoint rewriting, the step that records which stack values are heap pointers.
+**Fast paths as markers.** The lowering emits allocations and some other fast paths as calls to marker functions, such as `__eco_alloc_inline`. Because the markers are opaque, the MLIR passes and the translation to LLVM leave them alone. They are expanded into their inline form just before statepoint rewriting, the step that records which stack values are heap pointers.
 
-**Parallel LLVM partitions.** An optimized build is split into partitions that LLVM compiles on separate threads. With it, the backend compiles the compiler's own source in about twenty seconds.
+**Parallel LLVM partitions.** An optimised build is split into partitions that LLVM compiles on separate threads. This lets the backend compile the compiler's own source in about twenty seconds.
 
 ## Runtime
 
 See [The runtime](/docs/runtime), [The garbage collector](/docs/garbage-collector) and [Runtime data structures](/docs/data-structures).
 
-**A generational collector without a write barrier.** In Elm an object never changes after it is built, so an old object can never come to point at a younger one. The generational collector therefore needs no write barrier, and compiled code stores pointers with plain stores. It also shapes how we judge optimisations: an object that dies young costs a copying collector almost nothing, while one that survives has to be copied into the old generation, so what matters is how much retention or executed work a change removes, not how many allocations.
+**A generational collector without a write barrier.** In Elm an object never changes after it is built, so an old object can never come to point at a younger one. The generational collector therefore needs no write barrier, and compiled code stores pointers with plain stores.
 
 **Concurrent marking and parallel minor collections.** The old generation is marked on background threads while the program runs, and young collections are shared among several threads. On the compiler compiling itself, the worst pause is under 100 ms, where a single-threaded collector would pause for nearly three seconds.
 

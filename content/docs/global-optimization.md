@@ -6,7 +6,7 @@ sectionOrder: 2
 order: 6
 ---
 
-After monomorphization every function has concrete types, but nothing yet says how each call should be made: as a direct jump to a known function, as a fast call into a known closure, or through the runtime's generic apply. Global optimization makes all of those decisions, in one place, and writes each one onto its call. Its rule is to prove or decline. A missed proof costs only speed, because the generic path is always correct. A wrong proof is a silent miscompile.
+After monomorphization every function has concrete types, but nothing yet says how each call should be made: as a direct jump to a known function, as a fast call into a known closure, or through the runtime's generic apply. Global optimization makes all of those decisions in one place and writes each one onto its call. Its rule is to prove or decline. A missed proof costs only speed, because the generic path is always correct. A wrong proof is a silent miscompile.
 
 > **Background**
 >
@@ -16,7 +16,7 @@ After monomorphization every function has concrete types, but nothing yet says h
 
 ## A small example
 
-This program, from the examples we compile for these docs, has the shapes global optimization exists for: a function that returns a lambda, a definition that is just another name, and a partial application used as a function.
+This program, from the examples we compile for these docs, has the shapes global optimisation exists for: a function that returns a lambda, a definition that is just another name, and a partial application used as a function.
 
 ```elm
 adder a = \b -> a + b
@@ -65,22 +65,22 @@ Here is what reaches MLIR, compiled with the inliner turned down (`ECO_INLINE_TH
 
 Four things happened.
 
-- `scale` is one function of three integers. [Local optimization](/docs/local-optimization) merged the two function boundaries, and global optimization gave the closure the type of its real parameters. In `main`, `s 4 5` became a single direct call, `Stage_scale_$_1(3, 4, 5)`. The merge has a cost: `k * k` now runs on every call of `s` rather than once when `s` is built. Here that is one multiplication.
+- `scale` is one function of three integers. [Local optimization](/docs/local-optimization) merged the two function boundaries, and global optimisation gave the closure the type of its real parameters. In `main`, `s 4 5` became a single direct call, `Stage_scale_$_1(3, 4, 5)`. The merge has a cost: `k * k` now runs on every call of `s` rather than once when `s` is built. Here that is one multiplication.
 - `inc` was written with no parameters. Eta-expansion gave it the one its type declares (`%_eta3`), so it is an ordinary one-argument function that calls `adder` directly.
 - `dup` has gone. It was only another name for `twice`, and alias forwarding pointed every use of it at `twice` itself. `main` calls `Stage_twice_$_4` directly.
-- Inside `twice`, the two calls of `f` became direct calls of `Stage_inc_$_3`. The lambda set for `f` held only `inc`, so global optimization devirtualized the calls. The parameter `%f` is still passed but is no longer read.
+- Inside `twice`, the two calls of `f` became direct calls of `Stage_inc_$_3`. The lambda set for `f` held only `inc`, so global optimisation devirtualised the calls. The parameter `%f` is still passed but is no longer read.
 
 ## Prove the call, or leave it generic
 
-Elm functions are curried. A function of type `Int -> Int -> Int` can be applied to both arguments at once or to one at a time. Monomorphization writes every function type in curried form and says nothing about stages; global optimization chooses them.
+Elm functions are curried. A function of type `Int -> Int -> Int` can be applied to both arguments at once or to one at a time. Monomorphization writes every function type in curried form and says nothing about stages; global optimisation chooses them.
 
-The fallback is always available. A closure's header says how many arguments it still needs and how to call it, so the runtime can apply any closure to any number of arguments ([Closures and calls](/docs/closures-and-calls) shows how). The fast paths are another matter. They load captured values from fixed positions and jump to fixed code with no check at run time. So every pass in this phase declines by default and acts only on a narrow license it can check.
+The fallback is always available. A closure's header says how many arguments it still needs and how to call it, so the runtime can apply any closure to any number of arguments ([Closures and calls](/docs/closures-and-calls) shows how). The fast paths are another matter. They load captured values from fixed positions and jump to fixed code with no check at run time. Every pass in this phase therefore declines by default and acts only on a narrow license it can check.
 
-Staging is decided here and nowhere else. When the specializer and the code generator each work out call shapes for themselves, they can disagree, and the code generator ends up guessing arities from context. With one deciding phase, monomorphization can ignore staging altogether, and [MLIR generation](/docs/mlir-generation) only reads the record it is given.
+Staging is decided here and nowhere else, and in our view this is the only safe place to decide it. When the specializer and the code generator each work out call shapes for themselves, they can disagree, and the code generator ends up guessing arities from context. With one deciding phase, monomorphization can ignore staging altogether, and [MLIR generation](/docs/mlir-generation) only reads the record it is given.
 
 ## The steps, in order
 
-![The steps around global optimization, in order](/images/docs/global-optimization-steps.svg)
+![The steps around global optimisation, in order](/images/docs/global-optimization-steps.svg)
 
 Two steps run *before* monomorphization, and their job is to put a visible callee at more call sites, because a lambda set can only shrink to one member where a call names a concrete lambda or a top-level function.
 
@@ -100,7 +100,7 @@ Every lambda carries an identity number that the lambda-set analysis keys on. A 
 
 ## The four call kinds
 
-Each call leaves global optimization with one of four kinds. They appear in the MLIR as the `_call_kind` attribute on a closure application:
+Each call leaves global optimisation with one of four kinds. They appear in the MLIR as the `_call_kind` attribute on a closure application:
 
 | Call kind | Meaning | Where it shows up |
 |---|---|---|
@@ -122,9 +122,9 @@ The order of the tests is the policy. A known segmentation needs every test to p
 
 Every pass that needs to know what a C++ kernel does reads the same table: whether it allocates, whether it can fail, which arguments are functions, whether two calls can be merged. The table is a whitelist. A kernel with no row licenses nothing.
 
-`Debug` output is observable on the native path, because optimized native builds keep `Debug` calls. So no pass may delete, merge or reorder an expression that can reach a `Debug` kernel, directly or through the functions it calls. A whole-program analysis works out which specializations can.
+`Debug` output is observable on the native path, because optimised native builds keep `Debug` calls. Therefore no pass may delete, merge or reorder an expression that can reach a `Debug` kernel, directly or through the functions it calls. A whole-program analysis works out which specializations can.
 
-> **Designs we didn't use.** We wrote a staging solver that grouped closures into classes, voted on one staging per class and wrapped the closures that disagreed. On every program we measured it inserted no wrappers, and the output without it was byte for byte the same, so we removed it.
+> **Designs we didn't use.** A staging solver could group closures into classes, vote on one staging per class and wrap the closures that disagree. We built one, and on every program we measured it inserted no wrappers and the output without it was byte for byte the same, so Eco does without it.
 
 ## Further reading
 

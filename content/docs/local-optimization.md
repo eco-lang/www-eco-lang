@@ -6,7 +6,7 @@ sectionOrder: 2
 order: 3
 ---
 
-Some optimizations need the whole program and concrete types. Others can be done on one module, with nothing known yet about whether `a` will turn out to be `Int` or `String`. Local optimization is the second kind. It turns pattern matches into decision trees, self-recursive functions into loops and a few operators into the code they stand for, and it does all of it without losing a single type, because the phases after it specialize the program from those types.
+Some optimisations need the whole program and concrete types. Others can be done on one module, with nothing known yet about whether `a` will turn out to be `Int` or `String`. Local optimization is the second kind. It turns pattern matches into decision trees, self-recursive functions into loops and a few operators into the code they stand for, and it does all of it without losing a single type, because the phases after it specialize the program from those types.
 
 > **Background**
 > - Decision tree: a compiled `case`, where each test looks at one part of the value and picks the next test.
@@ -19,7 +19,7 @@ A rewrite belongs in this phase only if it passes three tests: it looks at one m
 
 Every expression in the phase's output carries two pieces of type information: its type in the type checker's terms, which may still contain variables such as `a` or `number`, and the solver variable the [front end](/docs/front-end) recorded for it. Any rewrite that builds a node has to supply both. Each rewrite reuses the type and variable of the node it replaces for the nodes it builds, and that discipline is what keeps the types right.
 
-The erased path, which produces JavaScript, runs Elm's own untyped copy of this phase instead, unchanged, so that Eco's JavaScript stays identical to Elm's. The typed copy mirrors the same algorithms. The price is that a fix to one copy must be made by hand in the other.
+The erased path, which produces JavaScript, runs Elm's own untyped copy of this phase instead, unchanged, so that Eco's JavaScript stays identical to Elm's. The typed copy mirrors the same algorithms. We accept the cost of that, which is that a fix to one copy must be made by hand in the other, because JavaScript output identical to Elm's is worth more to us than one shared implementation.
 
 ## Pattern matches become decision trees
 
@@ -74,7 +74,7 @@ This is the top of the code Eco produces for `describe` (trimmed: attributes rem
   }) {case_kind = "bool"} : (i1) -> !eco.value
 ```
 
-The first test compares the list's tag with the tag of the empty list. The second reads the head and compares its tag with `Just`'s. There is no test for `Nothing`: once the head is known not to be `Just`, it must be `Nothing`, so the `Nothing :: rest` branch is simply the other side. Inside the `Just` branch the content is read as an unboxed `i64` and compared with `0` directly.
+The first test compares the list's tag with the tag of the empty list. The second reads the head and compares its tag with `Just`'s. There is no test for `Nothing`: once the head is known not to be `Just`, it must be `Nothing`, so the `Nothing :: rest` branch is the other side. Inside the `Just` branch the content is read as an unboxed `i64` and compared with `0` directly.
 
 Each step into a value also records what kind of container it is looking inside, a list, a pair, a triple or a custom type, so that code generation can use a typed projection such as `eco.project.list_head` rather than a generic one. The pattern checks have already run, so every tree is complete and needs no fallback branch.
 
@@ -151,7 +151,7 @@ Local optimization merges such a boundary. A function whose body, after its loca
   "eco.return"(%6) : (i64) -> ()
 ```
 
-Merging is not free, and it is worth being exact about what it does. The `let` now runs on every call, so `k * k` is computed each time `scale` is applied to all three arguments, even when the program applies it to `k` once and reuses the result. For a multiplication that does not matter. For expensive work it does. In this program
+Merging is not free. The `let` now runs on every call, so `k * k` is computed each time `scale` is applied to all three arguments, even when the program applies it to `k` once and reuses the result. For a multiplication that does not matter. For expensive work it does. In this program
 
 ```elm
 makeLookup : List Int -> Int -> Bool
@@ -165,9 +165,9 @@ makeLookup xs =
 isIn = makeLookup [ 1, 5, 9 ]
 ```
 
-`makeLookup` becomes one two-argument function whose body calls `Set.fromList` and then `Set.member`, so `List.filter isIn` rebuilds the set for every element it tests. The source suggests the set is built once; the compiled code builds it each time. This happens at default settings in 0.2.0, and we are treating it as a compiler issue to fix rather than a trade-off to keep.
+`makeLookup` becomes one two-argument function whose body calls `Set.fromList` and then `Set.member`, so `List.filter isIn` rebuilds the set for every element it tests. The source suggests the set is built once; the compiled code builds it each time. This is a known issue at default settings in 0.2.0. We treat it as a compiler bug to fix, not a trade-off to keep, because a rewrite should never make a program do more work than its source describes.
 
-Merging runs before monomorphization because monomorphization keeps whatever function structure it is given. The final grouping of each function's parameters is decided later, by [global optimization](/docs/global-optimization), once the whole program is known; its eta-expansion step is what turns a simple nested lambda with no `let` in between, such as `adder a = \b -> a + b`, into a two-argument function.
+Merging and eta-expansion are easy to confuse. *Merging*, done here, joins a function to the function its body returns, moving any local bindings inside. *Eta-expansion*, done later, adds parameters to a function whose body is a bare lambda. Merging runs before monomorphization because monomorphization keeps whatever function structure it is given. The final grouping of each function's parameters is decided later, by [global optimisation](/docs/global-optimization), once the whole program is known; its eta-expansion step is what turns a simple nested lambda with no `let` in between, such as `adder a = \b -> a + b`, into a two-argument function.
 
 ## Further reading
 

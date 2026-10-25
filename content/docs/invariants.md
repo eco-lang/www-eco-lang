@@ -6,7 +6,7 @@ sectionOrder: 5
 order: 3
 ---
 
-Eco is two programs that must agree on everything: a compiler written in Elm that emits MLIR, and a back end, runtime and kernels written in C++ that consume it. No type system spans that boundary. If the compiler and the runtime disagree about how a closure stores a `Bool`, both sides still compile and the program fails at run time. So we write the agreements down as numbered rules, 417 of them, and every check that enforces a rule quotes its number.
+Eco is two programs that must agree on everything: a compiler written in Elm that emits MLIR, and a back end, runtime and kernels written in C++ that consume it. No type system spans that boundary. If the compiler and the runtime disagree about how a closure stores a `Bool`, both sides still compile and the program fails at run time. We therefore write the agreements down as numbered rules, 417 of them at the time of writing, and every check that enforces a rule quotes its number.
 
 > **Background**
 >
@@ -17,7 +17,7 @@ Eco is two programs that must agree on everything: a compiler written in Elm tha
 
 The catalogue is a single flat file with one rule per line: its number, the phase it belongs to, a category, a status, the rule itself, and the sources that implement or check it. A number is a family prefix and three digits. `CGEN_` rules constrain code generation, `HEAP_` rules the heap layout and collector, `MONO_` and `LSS_` rules the specialization passes, and so on. Code generation and the heap are the largest families, with about ninety rules each.
 
-The status says what stands behind a rule: 294 are *enforced* by a check that runs, 42 are *tested*, 57 are *documented* but not yet checked, and the remaining 24 are implemented, implied, structural or retired. Numbers are never reused, because they are quoted in commit messages, code comments, test names and crash messages, and a reader holding an old number must land on the rule it meant. A retired rule keeps its row and says why it was retired.
+The status says what stands behind a rule. At the time of writing 294 are *enforced* by a check that runs, 42 are *tested*, 57 are *documented* but not yet checked, and the remaining 24 are implemented, implied, structural or retired. Numbers are never reused, because they are quoted in commit messages, code comments, test names and crash messages, and a reader holding an old number must land on the rule it meant. A retired rule keeps its row and says why it was retired.
 
 A rule's check lives wherever it is cheapest to write: an Elm checker over the compiler's intermediate forms, a verifier on an MLIR operation, an MLIR fixture, a runtime unit test, an end-to-end program or a TLA+ model. The quoted number is the only link between rule and check.
 
@@ -27,7 +27,7 @@ Here is how one rule runs through the system. Elm says integer division never cr
 
 ```text
 CGEN_084;MLIR_Codegen;IntegerDivision;tested;Integer division and remainder are total
-on all of Int, with wrapping two's-complement results (2026-10-24): x // 0 = 0,
+on all of Int, with wrapping two's-complement results: x // 0 = 0,
 x // -1 = 0 - x wrapping (MIN_INT // -1 = MIN_INT), remainderBy 0 x = remainderBy -1 x = 0,
 modBy -1 x = 0 and modBy 0 x = 0 in the inline lowering. ...
 ```
@@ -67,7 +67,7 @@ From the kernel export tests (trimmed). A failure in either test names the rule,
 
 ## What the catalogue does not do
 
-No tool reads the file. It stays accurate because a rule normally lands in one commit with the code it governs and the check that tests it. A status is the author's claim at the last edit; the checks are the authority on what is actually checked. A checker that turns out to inspect nothing is rewritten, and its row amended to say what is really checked, rather than left to promise coverage it does not give.
+No tool reads the file. It is a discipline, not a mechanism, and it stays accurate because a rule normally lands in one commit with the code it governs and the check that tests it. A status is the author's claim at the last edit; the checks are the authority on what is checked. A checker that turns out to inspect nothing is rewritten, and its row amended to say what it does check, rather than left to promise coverage it does not give.
 
 ## Further reading
 

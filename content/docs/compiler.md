@@ -15,23 +15,23 @@ Eco's compiler works in two halves with a cache between them. The first half loo
 
 ## Two halves
 
-The per-module half parses a module, resolves its names, type checks it, runs Elm's pattern checks and applies the optimizations that do not need concrete types. Its output is one typed graph per module, which the build caches on disk. It depends only on the module's source and the interfaces of the modules it imports, so an unchanged module is not compiled again.
+The per-module half parses a module, resolves its names, type checks it, runs Elm's pattern checks and applies the optimisations that do not need concrete types. Its output is one typed graph per module, which the build caches on disk. It depends only on the module's source and the interfaces of the modules it imports, so an unchanged module is not compiled again.
 
 The whole-program half links the cached graphs into one typed program rooted at `main` and runs a fixed list of steps over it. It specializes every function to the concrete types it is used at, works out which functions can reach each call, inlines, removes what nothing reaches any more, settles how each call is made, and writes the result as eco-dialect MLIR for the C++ [backend](/docs/backend).
 
 ![The parts of the Eco compiler and what passes between them](/images/docs/compiler-pipeline.svg)
 
-Two properties of Elm make the whole-program half safe. Elm has no side effects, so inlining, deleting unreachable code or copying a function for one type changes nothing a program can observe. And the whole program is known, so the second half can start from `main` and see every use of every function.
+Two properties of Elm make the whole-program half safe. Elm has no side effects, so inlining, deleting unreachable code or copying a function for one type changes nothing a program can observe. And the whole program is known, so the second half can start from `main` and see every use of every function. Languages with separate compilation and mutable state, such as C++ or OCaml, have to be more conservative on both counts.
 
 ## Compute each fact once, where it can be computed
 
-The rule that shapes the compiler is that each fact is computed once, at the step that can compute it, and passed forward as data. The type of every expression is a fact about one module, so the front end records it. The concrete types a function is used at, the functions that can reach a call and how each call is made are facts about the whole program, so the second half decides them. Later steps read these decisions and never derive them again. The C++ passes follow the same rule one boundary further on: they read the compiler's decisions as attributes on the dialect's operations.
+Each fact is computed once, at the step that can compute it, and passed forward as data. That rule shapes the whole compiler. The type of every expression is a fact about one module, so the front end records it. The concrete types a function is used at, the functions that can reach a call and how each call is made are facts about the whole program, so the second half decides them. Later steps read these decisions and never derive them again, so two steps cannot disagree about the same fact. The C++ passes follow the same rule one boundary further on: they read the compiler's decisions as attributes on the dialect's operations.
 
 ## Typed or erased, chosen once per build
 
-Stock Elm's optimizer throws types away, because JavaScript does not need them. Eco's native path does need them, so Eco keeps a typed form of the optimized program beside Elm's erased one rather than changing Elm's. MLIR and native outputs take the typed path. JavaScript and HTML take the erased path, Elm's own optimizer and generator, so Eco's JavaScript is what Elm produces.
+Stock Elm's optimiser throws types away, because JavaScript does not need them. Eco's native path does need them. Rather than change Elm's optimiser, Eco keeps a typed form of the optimised program beside Elm's erased one. MLIR and native outputs take the typed path. JavaScript and HTML take the erased path, Elm's own optimiser and generator, so Eco's JavaScript is what Elm produces.
 
-Both paths share one constraint generator, which records each expression's solver variable only in typed mode. We once kept two near-identical generators, and they drifted until they reported the same record-update error at different places in the source.
+Both paths share one constraint generator, which records each expression's solver variable only in typed mode. In our view one generator with a mode is the only safe arrangement: two near-identical generators drift, and ours once drifted far enough to report the same record-update error at different places in the source.
 
 ## The parts
 
@@ -41,20 +41,20 @@ The typed path has six parts, in the order a program passes through them.
 - **[Local optimization](/docs/local-optimization)** rewrites each module before types are concrete: pattern matches become decision trees and self-recursion becomes loops.
 - **[Monomorphization](/docs/monomorphization)** starts from `main` and makes one specialization of each function for each concrete type it is used at, typing each one with the type checker's own unifier.
 - **[Lambda-set specialization](/docs/lambda-set-specialization)** works out which functions can reach each call. It is not a separate pass: it runs inside monomorphization, in the same solver.
-- **[Global optimization](/docs/global-optimization)** inlines, regroups curried functions by the arguments they really take, and records how every call is made.
+- **[Global optimization](/docs/global-optimization)** inlines, regroups curried functions by the arguments they take, and records how every call is made.
 - **[MLIR generation](/docs/mlir-generation)** writes the finished program out in the eco dialect. Everything has been decided by then, so it only reads decisions. [Bytes fusion](/docs/bytes-fusion) is a fast path inside it for `elm/bytes` encoders and decoders.
 
 Beside them sit [JavaScript output](/docs/javascript-output), Elm's original generator, and [the build driver](/docs/build-driver), which runs everything over a project from the cache.
 
 ## The build and the tests run the same steps
 
-The whole-program half is a list of pure functions: number every variable, apply the pre-monomorphization rewrites, monomorphize, inline and prune, then globally optimize, with checkers between the steps. The build and the test suites call the same functions in the same order, because a harness with its own copy of the pipeline drifts and ends up checking output the real compiler never produces.
+The whole-program half is a list of pure functions: number every variable, apply the pre-monomorphization rewrites, monomorphize, inline and prune, then globally optimise, with checkers between the steps. The build and the test suites call the same functions in the same order, because a harness with its own copy of the pipeline drifts and ends up checking output the real compiler never produces.
 
 ## Compiler code must also run as JavaScript
 
 The compiler is itself an Elm program, and before a native binary exists it runs under Node (see [The compiler compiles itself](/docs/bootstrap)), so the JavaScript engine's stack and heap limits apply to it. Recursion that grows with program size would overflow the stack on thousands of specializations, so graph algorithms use explicit work stacks and long chains such as `let` sequences are walked in tail-recursive loops that Elm compiles to plain loops.
 
-On the compiler's own source, the native self-compile takes about a minute, several times faster than before this work, with roughly half the peak memory ([Performance](/docs/performance)).
+On the compiler's own source, the native self-compile takes about a minute, several times faster than the compiler once managed, with roughly half the peak memory ([Performance](/docs/performance)).
 
 ## Further reading
 

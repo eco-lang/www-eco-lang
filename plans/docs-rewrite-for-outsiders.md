@@ -602,3 +602,6 @@ also belong there.
 - **No history lessons.** Describe the outcome and the constraint it leaves, not a blow-by-blow
   account of how we got there. No exact dates; a month is the finest grain, used only for project
   background in `why-eco.md`. Counts are "at the time of writing".
+- **Voice.** All articles were rewritten to the house voice in `plans/docs-voice.md` (edited "we",
+  opinions with reasons, paired definitions, candid limits, -ise spelling in prose; page and phase names
+  such as "Global optimization", and the terms specialization and monomorphization, keep -ize).

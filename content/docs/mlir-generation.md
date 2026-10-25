@@ -6,7 +6,7 @@ sectionOrder: 2
 order: 7
 ---
 
-By the time MLIR generation runs, every decision that changes what the program means has been made: which function each call reaches, how its arguments are grouped, what each closure captures. Generation only reads those decisions and spells them out, one MLIR function per specialization. Its own job is representation: where a value lives as a raw machine number, where it is a pointer to a heap object, and where two such forms meet and one must be converted to the other.
+By the time MLIR generation runs, every decision that changes what the program means has been made: which function each call reaches, how its arguments are grouped, what each closure captures. Generation reads those decisions and spells them out, one MLIR function per specialization. Its own job is representation: where a value lives as a raw machine number, where it is a pointer to a heap object, and where two such forms meet and one must be converted to the other.
 
 > **Background**
 >
@@ -35,7 +35,7 @@ main =
     text (String.fromInt (magnitude point))
 ```
 
-Read naively, this program allocates two tuples: one returned by `divMod`, and `point`. At default settings Eco allocates neither. This is the output (trimmed: operand types and most function attributes removed):
+Read naively, this program allocates two tuples: the one returned by `divMod`, and `point`. At default settings Eco allocates neither. This is the output (trimmed: operand types and most function attributes removed):
 
 ```mlir
   "func.func"() ({
@@ -72,7 +72,7 @@ Three things carry the idea.
 
 The original `divMod` and `magnitude` are still emitted as small shims that build or unpack a real heap tuple and call the worker, for any route that needs the boxed form, such as passing `divMod` as a function value. A worker is created only where at least one direct call site gains from it, because without one the worker and its shim are pure overhead. Results are promoted for 2- and 3-tuples; parameters for 2- and 3-tuples and for single-constructor custom types of 2 to 6 fields.
 
-Compare a tuple that is carried round a loop. In
+A tuple carried round a loop is different. In
 
 ```elm
 minMax xs =
@@ -89,9 +89,9 @@ the accumulator crosses the loop as a boxed value, so every step builds a new he
 
 ## Reading decisions, not making them
 
-Every fact that could change behaviour arrives on the program graph. A call carries its call kind and the grouping of its callee's parameters, decided by [global optimization](/docs/global-optimization). A closure carries its captures. A constructor carries its shape. Generation never works these out again. If it did, two places would derive the same fact, and when they disagreed the symptom would surface in the verifier or in LLVM, far from the cause.
+Every fact that could change behaviour arrives on the program graph. A call carries its call kind and the grouping of its callee's parameters, decided by [global optimisation](/docs/global-optimization). A closure carries its captures. A constructor carries its shape. Generation never works these out again. We hold to this because two places deriving the same fact will sooner or later disagree, and the symptom then surfaces in the verifier or in LLVM, far from the cause.
 
-That split makes a wrong output easy to place: it is either an upstream decision or a conversion at a boundary. Generation crashes on a mismatch it cannot convert rather than patching it. Its conversion function knows exactly two kinds of conversion, between a primitive and a boxed value and between a boxed tuple and its SSA form. A 64-bit integer meeting a 64-bit float is not converted, because two primitive types that disagree mean an earlier phase produced a wrong type, and converting here would hide it.
+That split makes a wrong output easy to place: it is either an upstream decision or a conversion at a boundary. Generation crashes on a mismatch it cannot convert rather than patching it. Its conversion function knows exactly two kinds of conversion: between a primitive and a boxed value, and between a boxed tuple and its SSA form. A 64-bit integer meeting a 64-bit float is not converted, because two primitive types that disagree mean an earlier phase produced a wrong type, and converting here would hide it.
 
 ![How MLIR generation walks the specialized graph](/images/docs/mlir-generation-flow.svg)
 
@@ -102,17 +102,17 @@ Generation builds one context holding every whole-program table the functions ne
 A value has three forms, and they differ on purpose.
 
 - The **ABI form** is how a value crosses a function boundary or sits in a closure. Int is a 64-bit integer, Float a 64-bit float and Char a 16-bit integer (one UTF-16 code unit, the unit the runtime stores strings in). Everything else, Bool included, is a pointer-sized boxed value.
-- The **SSA form** is whatever an operation really produced. Generation carries that type with every value.
+- The **SSA form** is whatever an operation actually produced. Generation carries that type with every value.
 - The **heap form** is how a value is stored in an object's field. Int, Float and Char may sit unboxed there, and each field has a two-bit kind saying which.
 
 Conversions happen only where two forms meet: at a call, a capture, a field store or read, and a return. Tracking the real SSA type, rather than recomputing one from the Elm type at each use, is what keeps those conversions right.
 
-Bool shows the policy most clearly. Inside a function a Bool is a single bit, because a bit can drive a branch directly. Heap fields can only tell a pointer from an Int, a Float or a Char, and True and False exist in the runtime as constants embedded in the pointer word. So a Bool is boxed to one of those constants when it is passed, captured or stored, and unboxed back to a bit when it is read. [Value representation](/docs/value-representation) has the full rules.
+Bool shows the policy most clearly. Inside a function a Bool is a single bit, because a bit can drive a branch directly. Heap fields can only tell a pointer from an Int, a Float or a Char, and True and False exist in the runtime as constants embedded in the pointer word. As a result, a Bool is boxed to one of those constants when it is passed, captured or stored, and unboxed back to a bit when it is read. [Value representation](/docs/value-representation) has the full rules.
 
 ## What each kind of Elm code becomes
 
 - **Constructors** become small functions that build a heap object with its tag, size and field kinds. A constructor with no fields becomes a shared constant, and a reference to it emits the constant in place of a call.
-- **Closures** that capture variables get a function, named with a `$cap` suffix, that takes the captures and then the parameters with their real types. The 0.2.0 release also emits a second `$clo` wrapper that takes the closure pointer; newer versions drop it. Closures in one `let` block that refer to each other are allocated together by one operation, so every sibling's pointer exists before any capture is written.
+- **Closures** that capture variables get a function, named with a `$cap` suffix, that takes the captures and then the parameters with their real types. The 0.2.0 release also emits a second `$clo` wrapper that takes the closure pointer; later versions do not. Closures in one `let` block that refer to each other are allocated together by one operation, so every sibling's pointer exists before any capture is written.
 - **Calls** take the form their call kind dictates: a direct `eco.call`, or an `eco.papExtend` that applies a closure, carrying the kind so that the lowering can pick the fast path or the generic one.
 - **Pattern matches** become nested `eco.case` operations that yield values, each branch a single block, so that a later pass can turn each into structured control flow.
 - **Tail-recursive functions** become an `scf.while` loop whose body is a case. A branch that makes a tail call yields the next arguments; a branch that returns yields its result and a flag that ends the loop.
@@ -132,7 +132,7 @@ A heap object records its tag, its size and its field kinds, but no names. On th
 
 ## Writing the bytecode
 
-The compiler is a garbage-collected Elm program, so holding the whole module in memory and then its text would make memory peak at code generation. Instead it writes MLIR bytecode incrementally. Bytecode refers to its shared tables of strings, types and operation names only by index, and when those tables only grow, an index written early stays valid, so each function can be encoded and dropped. The bytecode reaches the C++ back end through a temporary file inside the one `eco` process.
+The compiler is a garbage-collected Elm program, and holding the whole module in memory, and then its text, would make memory peak at code generation. It writes MLIR bytecode incrementally instead. Bytecode refers to its shared tables of strings, types and operation names only by index, and when those tables only grow, an index written early stays valid, so each function can be encoded and dropped. The bytecode reaches the C++ back end through a temporary file inside the one `eco` process.
 
 A text form exists for reading, and it is what every listing in these docs is. You can get it for your own program with `eco make src/Main.elm --text-mlir --output=main.mlir`. It is a view, not an equal of the bytecode: it drops source locations and prints some floats inexactly, so numeric problems are investigated on the bytecode.
 

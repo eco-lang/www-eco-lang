@@ -55,9 +55,9 @@ Wider and mixed writes fuse the same way. An encoder of one `unsignedInt8` and t
 
 An encoder fuses from fixed-width integer and float writes, copies of a `Bytes` value, UTF-8 strings, `sequence` of a literal list, and one list idiom: `sequence (unsignedInt32 e (List.length xs) :: List.map f xs)`, where `f` reads as fixed-width writes. Before allocating, the fused code adds up the size. Fixed-width writes contribute constants, which are folded together. Each part whose width varies adds one term at run time: a string's UTF-8 width, a `Bytes` value's length, or the list length times the item width.
 
-Knowing the size first gives one buffer, no growth and no copying. It is also why writes need no bounds checks: every write was counted in the size, so a write past the end cannot happen unless a write was left out of the count.
+Knowing the size first gives one buffer, with no growth and no copying. It also removes the bounds checks. Every write was counted in the size, so a write can only run past the end if the count left it out.
 
-A subtree that cannot be read, typically a function parameter used as the encoder for each element, does not send the whole encoder back to the kernel. It becomes an *opaque leaf*: an ordinary `Encoder` value, sized and written at the cursor by thin wrappers over the kernel's own size and write routines. Only that subtree goes through the kernel's walker; everything else stays fused, in one buffer whose bytes agree with the kernel's byte for byte. An encoder that is nothing but one opaque leaf is left as a kernel call, since an allocation plus one walk costs more than calling the kernel.
+A subtree that cannot be read, typically a function parameter used as the encoder for each element, does not send the whole encoder back to the kernel. It becomes an *opaque leaf*: an ordinary `Encoder` value, sized and written at the cursor by thin wrappers over the kernel's own size and write routines. Only that subtree goes through the kernel's walker. Everything else stays fused, in one buffer whose bytes agree with the kernel's byte for byte. An encoder that is nothing but one opaque leaf is left as a kernel call, because an allocation plus one walk costs more than calling the kernel.
 
 ## A decoder, fused
 
@@ -108,21 +108,21 @@ The output checks all the bytes the loop needs once, then reads one byte per ste
 
 One `bf.require` covers `count × width` bytes, which is valid because every item has the same width. If it fails, the result is the embedded `Nothing` constant (`eco.constant` kind 2, the word shared by `Nothing`, `[]` and unit). If it passes, the loop reads, counts down and conses each byte onto the accumulator, and the result is wrapped in `Just`. A loop that stops at a sentinel value does not know its length, so it checks before each item instead.
 
-The listing shows only the fused path. Just before it, the compiler still emits a call that builds the `Decoder` value for the loop, which nothing then uses. Unlike the encoder's leftover constructors, that call is not removed and appears in the native code: a small piece of wasted work we have not yet eliminated.
+The listing shows only the fused path. Just before it, the compiler still emits a call that builds the `Decoder` value for the loop, which nothing then uses. Unlike the encoder's leftover constructors, that call is not removed and appears in the native code. It is a small piece of wasted work, and we have not yet eliminated it.
 
 ## Decoders: whole or not at all
 
 An encoder can be fused around an opaque part because the kernel's writer can write one subtree into the middle of a buffer. There is no way to hand the middle of a decode to the kernel and carry on, so a decoder fuses whole or not at all.
 
-Fewer decoders fuse today than the recognizer has patterns for. It has patterns for `map` through `map5`, `andThen`, `succeed`, `fail` and length-prefixed strings. But a decoder that takes arguments, such as `unsignedInt16 BE` or `string n`, has already been inlined into a hand-built decoder around a kernel read by the time fusion runs, and the recognizer does not read that form. In practice that leaves decoders built from argument-free reads such as `unsignedInt8`; our benchmark suite found nothing wider fusing. Even `D.map3 (\r g b -> ( r, g, b )) D.unsignedInt8 D.unsignedInt8 D.unsignedInt8` stays a call to the kernel in the 0.2.0 compiler, because the inliner has already turned the `map3` into a closure the recognizer does not read. Teaching the recognizer those inlined forms is the obvious next step.
+Fewer decoders fuse today than the recogniser has patterns for. It has patterns for `map` through `map5`, `andThen`, `succeed`, `fail` and length-prefixed strings. But by the time fusion runs, a decoder that takes arguments, such as `unsignedInt16 BE` or `string n`, has already been inlined into a hand-built decoder around a kernel read, and the recogniser does not read that form. In practice that leaves decoders built from argument-free reads such as `unsignedInt8`; our benchmark suite found nothing wider fusing. Even `D.map3 (\r g b -> ( r, g, b )) D.unsignedInt8 D.unsignedInt8 D.unsignedInt8` stays a call to the kernel in the 0.2.0 compiler, because the inliner has already turned the `map3` into a closure the recogniser does not read. In our view the next step is to teach the recogniser those inlined forms, rather than to hold back the inliner, because the inliner is what lets fusion see through helpers at all.
 
 ## The kernel is the reference
 
-Fusion takes its correctness from the kernel. It replaces a call only when what it has read describes the whole encoder or decoder, and every case it does not recognize already has a correct answer: leave the call alone. A missed shape costs speed, never a wrong result. Elm values are immutable and expressions have no effects, which is what lets fused code evaluate a value at a different point from the source, or twice, and get the same value.
+Fusion takes its correctness from the kernel. It replaces a call only when what it has read describes the whole encoder or decoder, and every case it does not recognise already has a correct answer: leave the call alone. A missed shape costs speed, never a wrong result. Elm values are immutable and expressions have no effects, and that is what lets fused code evaluate a value at a different point from the source, or twice, and get the same value.
 
 Fused code and the kernel agree on failure: both give `Nothing` for the whole decode on any failing read, and both use the same strict UTF-8 validator. They get there differently. The kernel's decode interpreter throws from the failing read and catches the exception at the top of the decode. Fused code has no combinators to unwind, so it branches: each read sits inside the branch where its check passed, and the failure branch yields `Nothing`, throwing nothing and allocating nothing.
 
-Recognition matches elm/bytes by package, module and function name, and nothing else. It never matches a project's own helper names. Helpers are reached by inlining: the inliner always unfolds the elm/bytes combinators and the compiler's own bytes helpers, so that they dissolve into the calls, list literals and `List.map` the recognizer reads.
+Recognition matches elm/bytes by package, module and function name, and nothing else. It never matches a project's own helper names. Helpers are reached by inlining instead: the inliner always unfolds the elm/bytes combinators and the compiler's own bytes helpers, so that they dissolve into the calls, list literals and `List.map` the recogniser reads.
 
 ## The bf dialect
 
@@ -130,27 +130,27 @@ The dialect's one type, `!bf.cursor`, is a position in a buffer, held as two pla
 
 Generated code never computes an address inside a buffer or string header. It calls runtime helpers for a buffer's length and data pointer, a string's UTF-8 width, and strict UTF-8 decoding. Byte buffers and strings each have several internal forms, and because only the helpers know them, adding a form changes only the helpers. [Runtime data structures](/docs/data-structures) describes those forms.
 
-The dialect is kept separate from eco so that the eco dialect stays stable and fusion can be switched on or off without touching it; the two meet only at heap values.
+We keep the dialect separate from eco for two reasons: the eco dialect stays stable, and fusion can be switched on or off without touching it. The two meet only at heap values.
 
 ## The cursor and the collector
 
 A cursor is a raw pointer into a heap object, and heap objects move. A buffer smaller than 8 KiB lives in the nursery, which a minor collection copies ([The garbage collector](/docs/garbage-collector)). The machinery that relocates pointers across a collection only tracks pointers it knows are heap pointers, and the cursor is not one of them. Fused code can trigger a collection while a cursor is live: an encoder may call a function to compute a value it writes, and reading a `Bytes` value or a string allocates the result.
 
-The lowering of `bf` handles this. Around every point that may collect while a cursor is live, it records the cursor's offset from the buffer's start, and afterwards rebuilds the cursor from the buffer, which the collector does track and relocate. A check then rejects the function at compile time if any use of a cursor can still be reached from its definition through such a point. That is not quite enough for an encoder that keeps writing after a collection: the collector may copy a surviving object to the old generation on the assumption that nothing writes to it any more. So a buffer written after such a point is marked as a *builder*, which the collector keeps young until its last write.
+The lowering of `bf` handles this. Around every point that may collect while a cursor is live, it records the cursor's offset from the buffer's start, and afterwards rebuilds the cursor from the buffer, which the collector does track and relocate. A check then rejects the function at compile time if any use of a cursor can still be reached from its definition through such a point. That is not quite enough for an encoder that keeps writing after a collection, because the collector may copy a surviving object to the old generation on the assumption that nothing writes to it any more. A buffer written after such a point is therefore marked as a *builder*, which the collector keeps young until its last write.
 
 In the common case none of this costs anything. A fused decode loop builds a list cell per item, but a later backend pass turns those cells into pushes onto a scratch stack that cannot collect and builds the list after the loop, so the loop has no point that may collect and its cursor is never rebuilt.
 
 ## What it is worth
 
-Our benchmark suite has a pair of workloads that do the same work: encode a list of bytes, then decode it with a count loop over `unsignedInt8`. In `bytes-static` the decoder is known at compile time and fuses. In `bytes-dynamic` the item decoder is chosen at run time, so it does not. On Eco native, `bytes-static` takes 27 ms and `bytes-dynamic` 71 ms: decoder fusion is worth 2.6x. Stock Elm's JavaScript takes about 245 ms and 240 ms for the two, since it treats them alike.
+Our benchmark suite has a pair of workloads that do the same work: encode a list of bytes, then decode it with a count loop over `unsignedInt8`. In `bytes-static` the decoder is known at compile time and fuses. In `bytes-dynamic` the item decoder is chosen at run time, so it does not. On Eco native, `bytes-static` takes 27 ms and `bytes-dynamic` 71 ms, so decoder fusion is worth 2.6x. Stock Elm's JavaScript takes about 245 ms and 240 ms for the two, because it treats them alike.
 
 These are medians of 11 runs after 3 warm-ups, from a development build of the native compiler. Eco's times come from a 1 ms `Time.now`, so small figures are coarse. Both workloads also generate and encode the data, so the fused decoder's own speed-up is larger than the ratio of the totals.
 
-> **Designs we didn't use.** Matching a project's own helpers by name, such as the compiler's list encoder, would have fused more of the compiler sooner, but would tie fusion to one codebase. Instead the helpers are inlined, and fusion matches what they unfold into.
+> **Designs we didn't use.** Matching a project's own helpers by name, such as the compiler's list encoder, would fuse more of the compiler at once, but it would tie fusion to one codebase. We inline the helpers instead, and fusion matches what they unfold into.
 
 ## Further reading
 
-- [MLIR generation](/docs/mlir-generation) — fusion is one of the specialized emitters layered on the core generator.
+- [MLIR generation](/docs/mlir-generation) — fusion is one of the specialised emitters layered on the core generator.
 - [Lowering passes](/docs/lowering-passes) — where the `bf` lowering runs among the other passes.
 - [Kernels](/docs/kernels) — the elm/bytes kernel that fusion falls back on.
 - [The garbage collector](/docs/garbage-collector) — the nursery and the tenuring that the cursor has to survive.

@@ -6,7 +6,7 @@ sectionOrder: 4
 order: 7
 ---
 
-Elm's built-in functions, from `modBy` to `Json.Decode.decodeString`, are written in JavaScript inside the published `elm/*` packages. A native compiler cannot run JavaScript, so we rewrote those functions in C++, one by one, keeping each one's behaviour. The Elm side of every package stays exactly as published: the same `Json/Decode.elm` compiles to JavaScript and to native code without a line changed. This article shows what a rewritten kernel looks like and the rules that keep it safe on Eco's heap.
+Elm's built-in functions, from `modBy` to `Json.Decode.decodeString`, are written in JavaScript inside the published `elm/*` packages. A native compiler cannot run JavaScript, so Eco has a C++ version of each, with the same behaviour. The Elm side of every package stays exactly as published: the same `Json/Decode.elm` compiles to JavaScript and to native code without a line changed. This article shows what a rewritten kernel looks like and the rules that keep it safe on Eco's heap.
 
 > **Background**
 >
@@ -59,13 +59,13 @@ Each package still ships its JavaScript kernel files. The native path ignores th
 
 Most C++ kernel modules are a pair of files: plain C++ logic (the `modBy` above) and a thin file of C-linkage exports that convert arguments, call the logic and convert the result. One header declares every exported symbol. Each module builds as its own static library, and the linker takes in only the object files a program references.
 
-We keep the packages stock on purpose. They belong to the Elm project, and forking them for native code would mean Eco-specific packages for every program and two copies of each package drifting apart.
+We keep the packages stock on purpose, because they belong to the Elm project and a program should not need Eco-specific versions of them.
 
 ## The compiler owns the call
 
 A kernel call joins two type systems that cannot see each other: Elm's type checker stops at the kernel reference, and C++'s starts at the function definition. Nothing checks the join unless one side owns it, and Eco gives it to the compiler. For each kernel a program uses, the compiler writes one declaration into the emitted MLIR with explicit argument and result types, and every call must match it. The lowering to LLVM reads that declaration and infers nothing from the calls. If the back end rebuilt kernel types by looking at how each kernel is used, there would be two derivations of the calling convention, free to drift apart with no error at either end.
 
-Int, Float and Char always cross as raw machine values; everything else, Bool included, crosses as a pointer to a heap value. That creates a problem for kernels that Elm declares generic over `number` or `comparable`. C++ cannot be generic over unboxed values, and boxing every number passed to a kernel would cost an allocation per call. So where a generic kernel is used at a number type, the C++ provides a typed sibling, and the compiler picks it from the types at the call site after [monomorphization](/docs/monomorphization):
+Int, Float and Char always cross as raw machine values; everything else, Bool included, crosses as a pointer to a heap value. That creates a problem for kernels that Elm declares generic over `number` or `comparable`. C++ cannot be generic over unboxed values, and boxing every number passed to a kernel would cost an allocation per call. Where a generic kernel is used at a number type, the C++ provides a typed sibling, and the compiler picks it from the types at the call site after [monomorphization](/docs/monomorphization):
 
 ```cpp
 int64_t Elm_Kernel_Basics_add_Int  (int64_t a, int64_t b);
@@ -74,11 +74,11 @@ double  Elm_Kernel_Basics_add_Float(double  a, double  b);
 
 The boxed `Elm_Kernel_Basics_add` still exists for call sites whose type is generic even after monomorphization. It reads the heap tag of its first argument, forwards to the right sibling and boxes the result. Addition, list cons, comparison, number-to-string and array push all have siblings.
 
-Some small kernels whose meaning is fixed by the type at the call site, such as list cons, string length, append and the orderings of Int, Float and Char, are replaced by operations in the [eco dialect](/docs/eco-dialect), so the optimizers can fold them with the code around them. Calls across the kernel boundary take a small share of a program's running time, so this buys visibility more than speed. The list higher-order functions such as `List.map` and `List.filter` stay in C++: the C++ versions build each result list once, while the natural Elm versions build intermediate lists, and measurement confirmed the difference.
+Some small kernels whose meaning is fixed by the type at the call site, such as list cons, string length, append and the orderings of Int, Float and Char, are replaced by operations in the [eco dialect](/docs/eco-dialect), so the optimisers can fold them with the code around them. Calls across the kernel boundary take a small share of a program's running time, so this buys visibility more than speed. The list higher-order functions such as `List.map` and `List.filter` stay in C++: the C++ versions build each result list once, while the natural Elm versions build intermediate lists, and measurement confirmed the difference.
 
 ## Facts in place of a body
 
-To the optimizers a kernel has no body to look inside, and there is no link-time optimization across the boundary. The compiler keeps one audited table of facts about each kernel instead: what effect a call has, what it allocates, whether it calls back into Elm, and whether two identical calls may be merged. A kernel with no row is treated as conservatively as possible. Every pass asks the same table, so a judgment about a kernel is made once and every pass agrees.
+To the optimisers a kernel has no body to look inside, and there is no link-time optimisation across the boundary. The compiler keeps one audited table of facts about each kernel instead: what effect a call has, what it allocates, whether it calls back into Elm, and whether two identical calls may be merged. A kernel with no row is treated as conservatively as possible. Every pass asks the same table, so a judgement about a kernel is made once and every pass agrees.
 
 A second table gives selected kernels real types, so the type checker constrains their uses. Each type is a claim about what the C++ does, which can differ from the JavaScript. In JavaScript, `List.fromArray` turns an array into a list. In C++ its one use receives the list that the string-split kernel already returns, so it returns its argument unchanged, and its row says `List a -> List a`. A third set of claims tells [Lambda-set specialization](/docs/lambda-set-specialization) which Elm functions a kernel may call, which lets the compiler turn later calls into direct calls. These are claims about C++ that Elm cannot check, so each row cites the C++ that supports it, and a manifest pins those files by hash. When a cited file changes, the build fails until someone audits the claim again.
 
@@ -88,17 +88,17 @@ Kernels read and build Eco heap values directly through the runtime's helpers. T
 
 A kernel never looks inside a string or a list either. The runtime stores strings and lists in several forms ([Runtime data structures](/docs/data-structures)), and kernels reach them only through the runtime's operations. The kernel decides what `String.split` means; the runtime decides how the pieces are stored.
 
-The collector is precise and moves young objects, and it cannot see C++ local variables. So a kernel that holds heap pointers across an allocation, or across a call back into Elm, first registers them as roots, and reads them back from their rooted slots after every call, because each call may have moved them. A kernel that collects many pointers registers its whole buffer with one record, so rooting costs the same however long the list; a check in the build rejects a root registration inside a loop. A kernel that receives an Elm function calls it through the runtime's generic apply entry, because only the runtime reads the closure header that says how the function takes its arguments ([Closures and calls](/docs/closures-and-calls)).
+The collector is precise and moves young objects, and it cannot see C++ local variables. A kernel that holds heap pointers across an allocation, or across a call back into Elm, first registers them as roots, and reads them back from their rooted slots after every call, because each call may have moved them. A kernel that collects many pointers registers its whole buffer with one record, so rooting costs the same however long the list; a check in the build rejects a root registration inside a loop. A kernel that receives an Elm function calls it through the runtime's generic apply entry, because only the runtime reads the closure header that says how the function takes its arguments ([Closures and calls](/docs/closures-and-calls)).
 
 A kernel never lets Elm code observe a mutation. The collector depends on published values never changing, and a handle onto a mutable store would make Elm code correct only when its uses happened in a strict order the compiler cannot check.
 
 ## Tasks describe work; the scheduler performs it
 
-A kernel that returns a `Task` does no input or output when it is called. It allocates a task binding, a heap object holding a callback, and the scheduler runs that callback when the task actually runs ([Scheduler and services](/docs/scheduler-and-services) follows `Process.sleep` through it). Doing the work at call time would break what a `Task` means. Two tasks built together would run in the order they were built, before the program chose to run either. A read of something that changes, such as the clock, would return the value from when the task was built. And a blocking call would stall the one thread that runs all Elm code.
+A kernel that returns a `Task` does no input or output when it is called. It allocates a task binding, a heap object holding a callback, and the scheduler runs that callback when the task runs ([Scheduler and services](/docs/scheduler-and-services) follows `Process.sleep` through it). Doing the work at call time would break what a `Task` means. Two tasks built together would run in the order they were built, before the program chose to run either. A read of something that changes, such as the clock, would return the value from when the task was built. And a blocking call would stall the one thread that runs all Elm code.
 
 ## Matching JavaScript, and where it doesn't
 
-Elm's JavaScript kernels treat a string as UTF-16, so in Eco a Char is a 16-bit code unit everywhere. Converting a number to a Char clamps it to 16 bits, and the parser kernels index strings by UTF-16 unit, as JavaScript's `charCodeAt` does. Characters outside the 16-bit range are where differences remain. elm/core's `String.foldl` joins a surrogate pair into one character; Eco's version walks code units, so a function folded over an emoji sees two halves rather than one character. Functions that need a browser, such as File, the Debugger and most of Browser, assert when called rather than return something plausible, because a plausible result would make a program that cannot work look as if it does.
+A *code unit* is one 16-bit piece of UTF-16; a *code point* is a whole Unicode character, which may take two units. Elm's JavaScript kernels treat a string as UTF-16, so in Eco a Char is a code unit everywhere. Converting a number to a Char clamps it to 16 bits, and the parser kernels index strings by UTF-16 unit, as JavaScript's `charCodeAt` does. Characters outside the 16-bit range are where differences remain. elm/core's `String.foldl` joins a surrogate pair into one character; Eco's version walks code units, so a function folded over an emoji sees two halves rather than one character. Functions that need a browser, such as File, the Debugger and most of Browser, assert when called rather than return something plausible, because a plausible result would make a program that cannot work look as if it does.
 
 ## Three libraries
 
@@ -112,7 +112,7 @@ Elm's kernels are one of three C++ kernel libraries, and they stand apart becaus
 
 The two Eco libraries invent their own APIs and share a design for doing slow work off the eco thread; [System libraries](/docs/system-libraries) describes them.
 
-> **Designs we didn't use.** Forking the `elm/*` packages for native code would leave two copies of every package to drift apart. Instead the packages are unchanged and only their kernels are rewritten.
+> **Designs we didn't use.** Forking the `elm/*` packages for native code would mean Eco-specific packages for every program and two copies of each package drifting apart. We leave the packages unchanged and rewrite only their kernels.
 
 ## Further reading
 

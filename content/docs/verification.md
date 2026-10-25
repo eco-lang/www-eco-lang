@@ -6,7 +6,7 @@ sectionOrder: 5
 order: 1
 ---
 
-A compiler bug is cheapest to find with the check closest to where it was made. A phase that breaks its contract can still produce a program that prints the right answer, a wrong lowering of one operation can hide among the hundreds a real program uses, and a race between collector threads may show up once in a million runs. So Eco has no single test suite. Each class of bug gets the cheapest check that can catch it, and no layer tries to catch everything.
+A compiler bug is cheapest to find with the check closest to where it was made. A phase that breaks its contract can still produce a program that prints the right answer, a wrong lowering of one operation can hide among the hundreds a real program uses, and a race between collector threads may show up once in a million runs. Eco therefore has no single test suite. Each class of bug gets the cheapest check that can catch it, and no layer tries to catch everything.
 
 > **Background**
 >
@@ -33,7 +33,7 @@ Most of these tests are compiled by the compiler they check, so a bug present in
 
 ## Checkers that walk the compiler's output
 
-The compiler is written in Elm, and its tests are too. A shared corpus of small Elm programs, built as syntax trees rather than source text, is compiled through the same list of whole-program steps that `eco make` runs. Then one checker per rule walks the form a phase produced: the canonical syntax tree, the typed graph, the monomorphic graph, the globally optimized graph, or the Elm data structure the compiler builds just before printing MLIR. A checker never runs the program. It asks a question that must hold for every program, such as whether any SSA name is defined twice.
+The compiler is written in Elm, and its tests are too. A shared corpus of small Elm programs, built as syntax trees rather than source text, is compiled through the same list of whole-program steps that `eco make` runs. Then one checker per rule walks the form a phase produced: the canonical syntax tree, the typed graph, the monomorphic graph, the globally optimised graph, or the Elm data structure the compiler builds just before printing MLIR. A checker never runs the program. It asks a question that must hold for every program, such as whether any SSA name is defined twice.
 
 ```elm
 expectSsaUniqueness : Src.Module -> Expectation
@@ -48,7 +48,7 @@ expectSsaUniqueness srcModule =
 
 From the compiler's test suite, the check that no generated function redefines a visible name. The check takes one program and knows nothing about the corpus, so registering a new case module extends every checker at once, and a program written to test one rule is checked against all of them. A program that fails to compile fails the check; it does not count as a pass with nothing to inspect.
 
-The rule that makes this suite worth running is that it compiles exactly as production does. A harness that assembled its own pipeline could pick a different specialization engine or skip a pass, and then it would vouch for code no user runs. A small script fails the test run if the test harness calls any compiler pass directly instead of going through the shared steps. The suite runs on the JavaScript build of the compiler, so it needs only Elm and Node and can run before any native toolchain exists. Fuzzing varies only the structure of programs: the compiler treats the literal `42` and the literal `7` alike, so random leaf values reach no new code.
+The rule that makes this suite worth running is that it compiles exactly as production does. A harness that assembled its own pipeline could pick a different specialization engine or skip a pass, and would then vouch for code no user runs. A small script fails the test run if the test harness calls any compiler pass directly instead of going through the shared steps. The suite runs on the JavaScript build of the compiler, so it needs only Elm and Node and can run before any native toolchain exists. Fuzzing varies only the structure of programs: the compiler treats the literal `42` and the literal `7` alike, so random leaf values reach no new code.
 
 ## Whole programs that carry their own answer
 
@@ -117,7 +117,7 @@ A fixture is a small hand-written MLIR file fed straight into the back end, with
 // CHECK-NEXT: [eco.dbg] 0{{$}}
 ```
 
-From the fixture that divides the smallest 64-bit integer by −1 (trimmed: the constants and the marker print are omitted). In LLVM, signed division of `MIN_INT` by −1 is undefined behaviour, and on x86 it traps. We wrote this fixture when we noticed that the lowering guarded only against division by zero. An older fixture already computed `MIN_INT // -1` and printed garbage, yet it passed: its expected line was satisfied by an *earlier* output line, because plain `CHECK` lines match anywhere in the output. The new fixture chains its lines with `CHECK-NEXT` and anchors each one at the end of the line, so every result is checked where it is printed. The fix makes Eco's integer division total, with wrapping results; [The numbered invariants](/docs/invariants) follows that rule through the code.
+From the fixture that divides the smallest 64-bit integer by −1 (trimmed: the constants and the marker print are omitted). In LLVM, signed division of `MIN_INT` by −1 is undefined behaviour, and on x86 it traps. The fixture exists because the lowering once guarded only against division by zero. The lesson is in why that went unseen: an older fixture already computed `MIN_INT // -1` and printed garbage, yet it passed. Its expected line was satisfied by an *earlier* output line, because plain `CHECK` lines match anywhere in the output. The new fixture chains its lines with `CHECK-NEXT` and anchors each one at the end of the line, so every result is checked where it is printed. The fix makes Eco's integer division total, with wrapping results; [The numbered invariants](/docs/invariants) follows that rule through the code.
 
 Fixtures reach what no Elm program can. The front end checks a program before it becomes MLIR, so no source can produce a record one field past the heap's limit, a closure with too many arguments, or a malformed operation the dialect's verifier must reject. Each limit has a fixture at the limit that must compile and a twin one past it that must be rejected. The cost is that a fixture says nothing about whether the compiler ever emits its MLIR, so a new lowering gets both a fixture and an Elm program that reaches it from source.
 
@@ -156,9 +156,9 @@ Property tests almost never produce a rare thread schedule, so three more tools 
 
 - **ThreadSanitizer** compiles the real allocator, with only stack unwinding stubbed out, and drives it with a synthetic program while background markers and helpers run. Some harnesses force one known interleaving using only relaxed atomic flags, so the tool sees no ordering except the runtime's own and the race shows on every run.
 - **The [formal models](/docs/concurrency-models)** explore every interleaving of each collector protocol at small sizes, but they assume every thread sees writes in one global order.
-- **GenMC** closes that gap. It explores every execution of a small program that the C11 memory model allows, which matters on ARM, where a relaxed atomic really can be seen out of order. Its drivers compile the real, unmodified allocator headers.
+- **GenMC** closes that gap. It explores every execution of a small program that the C11 memory model allows, which matters on ARM, where a relaxed atomic can be seen out of order. Its drivers compile the real, unmodified allocator headers.
 
-GenMC's story is a useful calibration. When we first ran it, every driver written against the code as it stood passed: it found no new defect in Eco's code, and it confirmed two races that the models and code reading had already found. What it did find were four bugs or gaps in GenMC itself, among them an abort on a `memset` to a constant address and an error report that drops the text of the failed assertion. The drivers work around each one.
+GenMC's results are a useful calibration. Every driver written against the existing code passed: it found no new defect in Eco's code, and it confirmed two races that the models and code reading had already found. What it did find were four bugs or gaps in GenMC itself, among them an abort on a `memset` to a constant address and an error report that drops the text of the failed assertion. The drivers work around each one.
 
 Every concurrency defect any tool finds goes into a register and gets a guard that replays it. While the defect is open the guard is an expected failure, and an expected failure that starts passing fails the run, so a defect cannot vanish unnoticed either. Each fix is checked by reverting it and watching the guard fail again.
 

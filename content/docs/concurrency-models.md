@@ -17,7 +17,7 @@ Eco's collector marks, copies and tenures objects on background threads while th
 
 ## A bug in four lines
 
-The simplest model in the repository shows the whole method. Two threads each set a different bit in one byte, the way two marker threads can mark two objects whose mark bits share a byte. The model is written in PlusCal, an algorithm-like language that translates into TLA+. A constant chooses between a plain read-modify-write, which takes two steps, and an atomic `fetch_or`, which takes one:
+The simplest model in the repository shows the whole method. It is the same lightweight use of TLA+ that engineers at Amazon Web Services have described for finding subtle bugs in distributed protocols. Two threads each set a different bit in one byte, the way two marker threads can mark two objects whose mark bits share a byte. The model is written in PlusCal, an algorithm-like language that translates into TLA+. A constant chooses between a plain read-modify-write, which takes two steps, and an atomic `fetch_or`, which takes one:
 
 ```tla
 (* --algorithm LostBit
@@ -59,7 +59,7 @@ The toy also shows the second half of the method. The plain variant is kept as a
 
 ## Eight models, one per protocol
 
-A single model of the whole heap and every collector thread would have far too many states to explore, so the collector is described by eight small models. They fit together through contracts: named guarantees that one model checks and another assumes, such as "a young object is copied at most once". When a model grows too slow to explore in a few minutes, it is split along a contract rather than given looser bounds.
+A single model of the whole heap and every collector thread would have far too many states to explore. The collector is instead described by eight small models. They fit together through contracts: named guarantees that one model checks and another assumes, such as "a young object is copied at most once". When a model grows too slow to explore in a few minutes, it is split along a contract rather than given looser bounds.
 
 | Model | Protocol |
 |---|---|
@@ -86,7 +86,7 @@ A model is only worth what its link to the code is worth. Each model has a mappi
 
 **Traces from real runs.** A model can pass while describing a different program, for instance if a loop in the model cannot stop where the code's loop can. Special builds of the allocator log events from every thread, and TLC is asked whether some behaviour of the model matches the whole log. A rejected log is a finding: real logs once showed that a loop in the snapshot model could not stop where the code's could.
 
-**The canary.** A model that passes says nothing once the code it describes has changed, so a hash check runs in every build. It takes about a second. A manifest pins the code each model covers, and each pin names the models that must be reread if its hash changes:
+**The canary.** A model that passes says nothing once the code it describes has changed, so a hash check, taking about a second, runs in every build. A manifest pins the code each model covers, and each pin names the models that must be reread if its hash changes:
 
 ```text
 #   <kind>  <sha256>  <path or ->  <id or ->  <models, comma-separated>
@@ -102,7 +102,7 @@ Accepting a changed hash is a separate, audited step. The update command refuses
 
 ## What the models found
 
-Every defect found by any tool, from code reading to a TLC counterexample or a ThreadSanitizer report, goes into one defect register, with a guard that replays it. The register holds 39 entries. Ten were classed as unsound, meaning a live object freed, lost or corrupted; three of those turned out to be ordinary serial bugs found while doing the concurrency work. Every entry is now fixed except one won't-fix: races that need a second mutator in the same process, which the runtime now refuses to start outside test harnesses. Three stories give the flavour.
+Every defect found by any tool, from code reading to a TLC counterexample or a ThreadSanitizer report, goes into one defect register, with a guard that replays it. At the time of writing the register holds 39 entries. Ten were classed as unsound, meaning a live object freed, lost or corrupted; three of those turned out to be ordinary serial bugs found while doing the concurrency work. Every entry is now fixed except one won't-fix: races that need a second mutator in the same process, which the runtime now refuses to start outside test harnesses. Three stories give the flavour.
 
 - **Address reuse after a full collection.** A full collection freed a large young object, and a new object was later allocated at the same address. The next minor collection checked membership by address alone, took the new object for the old one, and left its pointers unhealed, so a live object ended up pointing into a recycled part of the nursery. The fix stamps each entry with the collection that recorded it. The tenuring model reproduces the bug three ways, and the pre-fix behaviour is kept as mutants.
 - **A sweep that finished in the wrong place.** The lazy sweep could complete on a second code path that skipped the check for "a parallel minor collection is running", and so shrink the old generation while other threads were still promoting into it. We found it by reading the code while writing the promotion model; TLC then produced a 25-state counterexample.
@@ -114,7 +114,7 @@ At the time of writing: 8 collector models with 374 registered checks, of which 
 
 The models are evidence about the design and its mapping to the code, not a proof of the C++. They check small heaps, the one inductive proof stops at five objects, and anything a mapping abstracts is argued in the mapping rather than checked. Collector policy (when to collect, how fast to mark) is measured, not modelled.
 
-> **Designs we didn't use.** We considered one large model of the whole collector, but it has far too many states to explore. Small models, each of one protocol and checked against the code it describes, are what TLC can actually finish.
+> **Designs we didn't use.** We considered one large model of the whole collector, but it has far too many states to explore. Small models, each of one protocol and checked against the code it describes, are what TLC can finish.
 
 ## Further reading
 

@@ -1,12 +1,12 @@
 ---
 title: "Runtime data structures"
-description: "Why an Eco String, List or Bytes value can take one of several heap forms, such as ropes, slices, ASCII strings and chunked lists, how the runtime chooses between them, and what the measurements said."
+description: "Why an Eco String, List or Bytes value can take one of several heap forms, such as ropes, slices, ASCII strings and chunked lists, how the runtime chooses between them, and what the choice is worth."
 section: "The runtime"
 sectionOrder: 4
 order: 4
 ---
 
-In Elm a `String` is just a string. In Eco's heap it may be a flat array, a slice of another string, a rope joining two strings, or a compact all-ASCII form, and a `List` may mix single cons cells with views over dense arrays. The runtime picks a form for every value it builds, choosing between sharing and copying, and the choice only ever changes speed and memory, never results. Kernels and compiled code never see which form they hold, which is what lets the runtime add a form without rewriting the code that uses the type.
+An Elm `String` has one meaning but, in Eco's heap, several layouts. It may be a flat array, a slice of another string, a rope joining two strings, or a compact all-ASCII form, and a `List` may mix single cons cells with views over dense arrays. The runtime picks a form for every value it builds, choosing between sharing and copying, and the choice only ever changes speed and memory, never results. Kernels and compiled code never see which form they hold, which is what lets the runtime add a form without rewriting the code that uses the type.
 
 > **Background**
 >
@@ -16,7 +16,7 @@ In Elm a `String` is just a string. In Eco's heap it may be a flat array, a slic
 
 ## One meaning, many layouts
 
-Every form of a type means the same thing. Two equal strings in different forms compare equal, order the same way and print the same. Any code that compares two values by their tags first must therefore pass strings and lists on to a comparison of content.
+Every form of a type means the same thing: two equal strings in different forms compare equal, order the same way and print the same. Any code that compares two values by their tags first must therefore pass strings and lists on to a comparison of content.
 
 A string's header always records its length in UTF-16 code units, whatever its form. `String.length` and slice arithmetic count in those units, so compiled code can read a length inline without testing the form, and a rope can add its children's lengths whatever their encodings.
 
@@ -59,7 +59,7 @@ slice(s, start, end):
   rope:  recurse into the child holding the range, or join two sub-slices
 ```
 
-Notice that ropes appear only above the flatten limit, so everyday strings stay flat and kernel loops, UTF-8 encoding and the parser get one contiguous buffer. Notice also the "chain healing" line: an ASCII result is narrowed back to UTF-8 even when an input was UTF-16. Without it, one UTF-16 operand in a chain of appends would widen every result after it.
+Ropes appear only above the flatten limit, so everyday strings stay flat and kernel loops, UTF-8 encoding and the parser get one contiguous buffer. The "chain healing" line narrows an ASCII result back to UTF-8 even when an input was UTF-16. Without it, one UTF-16 operand in a chain of appends would widen every result after it.
 
 `concat` and `join` build a balanced rope in one pass with a merge stack. Folding left with `++` would build a rope that leans to one side, and walking that is quadratic.
 
@@ -88,13 +88,13 @@ typedef struct {
 } ListBacking;
 ```
 
-Notice that a view's `len` is the length of the whole list from that view onward, not the length of its own run, so `List.length` can stop at the first view it meets. Notice also that a backing has one element kind for all its slots. The collector can scan a backing from its header alone, and a backing of raw `Int`s is never scanned at all.
+A view's `len` is the length of the whole list from that view onward, not the length of its own run, so `List.length` can stop at the first view it meets. A backing has one element kind for all its slots. The collector can scan a backing from its header alone, and a backing of raw `Int`s is never scanned at all.
 
-`::` stays a cell because chunking it would cost more than it saves: a view is larger than a cell, and every compiled `x :: rest` pattern would have to allocate a view for the tail. The savings come from bulk builders. The compiler rewrites elm/core's `reverse`, `append`, `concat`, `take` and `drop` into kernel calls, and loops that accumulate with `::` into pushes onto a scratch stack that one runtime call turns into a list. A batch becomes chunk views only when it has at least four elements of the same kind and fits comfortably in the nursery.
+We keep `::` as a cell because chunking it would cost more than it saves: a view is larger than a cell, and every compiled `x :: rest` pattern would have to allocate a view for the tail. The savings come from bulk builders. The compiler rewrites elm/core's `reverse`, `append`, `concat`, `take` and `drop` into kernel calls, and loops that accumulate with `::` into pushes onto a scratch stack that one runtime call turns into a list. A batch becomes chunk views only when it has at least four elements of the same kind and fits comfortably in the nursery.
 
-Building a chunk chain has to respect the collector. With no write barrier, a backing that was promoted to the old generation before it was filled would end up holding young pointers that nothing records. So every backing and view is created with a *builder* bit set, which keeps it young; the builder fills the chain with no allocation in between and clears the bit before the list escapes.
+Building a chunk chain has to respect the collector. With no write barrier, a backing that was promoted to the old generation before it was filled would end up holding young pointers that nothing records. For that reason, every backing and view is created with a *builder* bit set, which keeps it young; the builder fills the chain with no allocation in between and clears the bit before the list escapes.
 
-Chunked lists are one switch for the whole program, because compiled code reads list cells inline. A kernel that returned a view to compiled code that only knew cons cells would be misread. In a program compiled for chunks, compiled head and tail projections test for a cell and call the runtime for a view.
+Chunked lists are one switch for the whole program, because compiled code reads list cells inline. Compiled code that knew only cons cells would misread a view returned by a kernel. In a program compiled for chunks, compiled head and tail projections test for a cell and call the runtime for a view.
 
 ## Bytes
 
@@ -102,13 +102,13 @@ Chunked lists are one switch for the whole program, because compiled code reads 
 
 ## Who may look inside
 
-Outside the runtime, strings are reached only through a small interface: length, character access, conversion, a call that returns a flat UTF-16 buffer, and a test for UTF-8 with access to its bytes. Lists are reached through cursors and list builders, and `Bytes` through a call that returns a pointer and a length. Because kernels read strings only through these functions, a new string form changes kernels only where they create strings. Nothing checks this boundary mechanically; review and tests that run every operation on every form keep it.
+Outside the runtime, strings are reached only through a small interface: length, character access, conversion, a call that returns a flat UTF-16 buffer, and a test for UTF-8 with access to its bytes. Lists are reached through cursors and list builders, and `Bytes` through a call that returns a pointer and a length. Because kernels read strings only through these functions, a new string form changes kernels only where they create strings. Nothing checks this boundary mechanically. Review keeps it, along with tests that run every operation on every form.
 
 ## What chunked lists are worth
 
-On the compiler compiling itself, chunked lists cut cons cells by roughly 50%, all objects by nearly 5% and list spine bytes by approximately 25%. Wall time is about the same with and without them, but minor-collection time and peak memory are lower with them, so they are on by default. This fits a general pattern: on this workload, cutting allocation does not move wall time, but cutting promotion into the old generation does.
+On the compiler compiling itself, chunked lists cut cons cells by roughly 50%, all objects by nearly 5% and list spine bytes by approximately 25%. Wall time is about the same with and without them, but minor-collection time and peak memory are lower with them, and we think that is reason enough to leave them on by default. The result fits a general pattern on this workload: cutting allocation does not move wall time, but cutting promotion into the old generation does.
 
-> **Designs we didn't use.** We tried *promotion-time* list chunking: when cons cells survive into the old generation, pack runs of them into dense chunks. The idea needs long runs to pay off, but the runs of cons cells that survive turned out to be very short, most of them a single cell, and the measured compile ran slower, so it was reverted.
+> **Designs we didn't use.** *Promotion-time* list chunking would pack runs of cons cells into dense chunks as they survive into the old generation. It needs long runs to pay off, but the cons cells that survive come in short runs, most of them a single cell. Measured, the compile ran slower, so we removed it.
 
 ## Further reading
 

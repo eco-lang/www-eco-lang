@@ -29,7 +29,7 @@ func.func @get_true() -> !eco.value {
 
 After lowering, `True` is the 64-bit word 5, and `[]` in the same fixture is the word 6. The boxed type `!eco.value` has become a plain `i64`. Both numbers come from the runtime's value encoding, described in [Value representation](/docs/value-representation): low bits that mark the word as a constant rather than a heap pointer.
 
-Arithmetic shows why the lowering must carry Elm's meaning, not the machine's. In Elm, integer division is total: `x // 0` is 0. In LLVM, dividing by zero is undefined behaviour, and on x86 it crashes the process; so is dividing the smallest integer by −1, whose true result does not fit. The lowering of `eco.int.div` keeps both divisors away from the machine instruction (trimmed: the comment is shortened):
+Arithmetic shows why the lowering must carry Elm's meaning, not the machine's. In Elm, integer division is total: `x // 0` is 0. In LLVM, dividing by zero is undefined behaviour, and on x86 it crashes the process. Dividing the smallest integer by −1 is undefined too, because the true result does not fit. The lowering of `eco.int.div` keeps both divisors away from the machine instruction (trimmed: the comment is shortened):
 
 ```cpp
 Value lhs = adaptor.getLhs();
@@ -77,7 +77,7 @@ Two fences shape everything else. Garbage-collection preparation ends the window
 
 The first layer works on eco operations only. Its passes either check something the compiler promised or simplify something that is still one or two operations.
 
-Closure simplification is the clearest case. When a closure holding some of a function's arguments is created and immediately given the rest, the pair becomes a direct call. That belongs here because a saturated closure is a two-operation pattern in the eco dialect. After conversion to LLVM the same thing is spread across runtime calls and memory layouts, and is hard to recognise.
+Closure simplification is the clearest case. When a closure holding some of a function's arguments is created and immediately given the rest, the pair becomes a direct call. It belongs here because a saturated closure is a two-operation pattern in the eco dialect. After conversion to LLVM the same thing is spread across runtime calls and memory layouts, and is hard to recognise.
 
 A comparison whose only use is a case on its `LT`, `EQ` or `GT` result becomes nested Boolean tests, which removes both the call and the `Order` value. It runs after closure simplification, so comparisons made through closures are already direct, and before the declaration check, because it may add a declaration for the comparison kernel.
 
@@ -87,7 +87,7 @@ The layer ends with a check that every called function is declared. It never inv
 
 The second layer turns Elm's control flow into MLIR's structured control flow, whose if, switch and while operations hold their branches as nested regions that yield values. That form fits Elm, where a case is an expression: each eco case alternative ends by yielding a value and maps directly onto a value-producing if or switch. Tail-recursive join points map onto while loops.
 
-The fold slot follows. A field projection or tag read from an object built earlier in the same function folds to the stored operand or the constant tag. MLIR's common subexpression elimination has its place in this slot too, and is off. We tried turning it on: three Float equality tests failed. Two constructions that each hold a NaN are separate objects, and the equality kernel answers True when both sides are the same object, as Elm's own JavaScript does; merging them turned a False comparison into True. Object identity is observable in Elm through NaN, so deduplicating an allocation does not preserve meaning.
+The fold slot follows. A field projection or tag read from an object built earlier in the same function folds to the stored operand or the constant tag. MLIR's common subexpression elimination has its place in this slot too, and is off, because it is unsound for Elm: turning it on makes three Float equality tests fail. Two constructions that each hold a NaN are separate objects, and the equality kernel answers True when both sides are the same object, as Elm's own JavaScript does; merging them turned a False comparison into True. Object identity is observable in Elm through NaN, so deduplicating an allocation does not preserve meaning.
 
 The slot must sit before garbage-collection preparation, because preparation strips the purity marker that merging relies on.
 
@@ -128,7 +128,7 @@ These passes run in MLIR rather than LLVM because an MLIR context can be shared 
 
 ## Same output, in parallel
 
-The lowered program is tens of thousands of tiny functions, and many pass boundaries not set by a fact are set by keeping that work parallel. Stages hand out functions in chunks, not one at a time, because MLIR's per-element parallel loop takes a lock for every element. The folder is a module pass for the same reason: run nested per function, its tens of thousands of instances serialized on a lock in MLIR's pass instrumentation.
+The lowered program is tens of thousands of tiny functions, and where a pass boundary is not set by a fact, it is usually set by keeping that work parallel. Stages hand out functions in chunks, not one at a time, because MLIR's per-element parallel loop takes a lock for every element. The folder is a module pass for the same reason: run nested per function, its tens of thousands of instances would serialize on a lock in MLIR's pass instrumentation.
 
 Every parallel stage must produce output byte-identical to the serial path. The native bootstrap reaches its [fixed point](/docs/glossary#fixed-point) by comparing the bytes of successive compilers, so a stage whose output depends on thread scheduling breaks the bootstrap even when its code is correct.
 
@@ -136,7 +136,7 @@ Every parallel stage must produce output byte-identical to the serial path. The 
 
 Several passes check and never fix: the reference-counting guard, the declaration check, the closure-capture check, the purity audit after preparation and the stale-pointer check before boxed stores. Each failure points to a bug in the compiler, and a pass that repaired its input would hide that bug. Most of the checks are compiled only into validation builds, and release builds also skip the verifier between passes, so keeping validation in passes of its own makes removing it free.
 
-> **Designs we didn't use.** A version of the tail-call conversion that fused all three lowerings into one rewrite corrupted memory even on a single thread, so lowering to branches remains a separate step.
+> **Designs we didn't use.** The obvious alternative is a tail-call conversion that fuses all three lowerings into one rewrite. We rejected it because our fused version corrupted memory even on a single thread, and a separate lowering to branches is simpler to get right.
 
 ## Further reading
 

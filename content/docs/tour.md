@@ -6,7 +6,7 @@ sectionOrder: 1
 order: 4
 ---
 
-The fastest way to understand a compiler is to watch one program go through it. This page takes a 49-line Elm program and follows it stage by stage, from source text to a native executable, showing what the compiler actually produces at each step. By the end, a `case` over three shapes has become a three-way branch on a tag, an `Int` list has its numbers stored directly in the list cells, and a function passed as an argument is called directly.
+This page follows one 49-line Elm program through every stage of Eco, from source text to a native executable, and shows what the compiler actually produces at each step. In our view, watching one program go through a compiler explains it faster than any description of the stages. By the end, a `case` over three shapes has become a three-way branch on a tag, an `Int` list has its numbers stored directly in the list cells, and a function passed as an argument is called directly.
 
 > **Background**
 > - [MLIR](/docs/glossary#mlir): a framework for writing compiler intermediate languages, each called a [dialect](/docs/glossary#dialect).
@@ -24,7 +24,7 @@ Every listing of compiler output below comes from Eco 0.2.0. To reproduce it, pu
 eco make src/Main.elm --text-mlir --output=main.mlir
 ```
 
-The `.mlir` ending asks for the compiler's output just before the backend, and `--text-mlir` makes it readable text instead of bytecode. Setting `ECO_INLINE_THRESHOLD=0` in the environment stops the inliner absorbing small functions, which helps when you want to see every function survive. The listings drop the `_operand_types` attribute that Eco puts on every operation, and are marked "trimmed" where they do.
+The `.mlir` ending asks for the compiler's output just before the backend, and `--text-mlir` makes it readable text instead of bytecode. Setting `ECO_INLINE_THRESHOLD=0` in the environment stops the inliner absorbing small functions, which helps when you want to see every function survive. The listings omit the `_operand_types` attribute that Eco puts on every operation, and are marked "trimmed" where they do.
 
 ## 1. The program
 
@@ -80,13 +80,13 @@ main =
         )
 ```
 
-Three things in it are hard for a native compiler. `twice` and `add` do not say what types they work on. `area` receives a value whose shape is only known at run time. And `twice` calls a function it was handed, which in general could be any function at all.
+Three things in it are hard for a native compiler. `twice` and `add` do not say what types they work on. `area` receives a value whose shape is only known at run time. `twice` calls a function it was handed, which in general could be any function at all.
 
 ## 2. The front end: keeping the types
 
 Eco's front end is Elm's own, by way of Guida, a port of the Elm compiler to Elm. It parses the module, resolves every name to the module that defines it, and runs Elm's type checker, so a type error in this program would read exactly as it does under `elm make`.
 
-Stock Elm's type checker answers one question, whether the program is well typed, and throws away its working. Eco keeps the answers, because the stages that follow need the type of every expression. It does this with numbers. While resolving names, the front end gives every expression and pattern a number, and after solving it fills a table indexed by that number:
+Stock Elm's type checker answers one question, whether the program is well typed, and throws away its working. Eco keeps the answers, because the stages that follow need the type of every expression, and it keeps them by number. While resolving names, the front end gives every expression and pattern a number, and after solving it fills a table indexed by that number:
 
 ```elm
 type alias ExprInfo =
@@ -98,13 +98,13 @@ type alias ExprTypes =
     Array (Maybe (Can.Type Name))
 ```
 
-So the expression `w * h` inside `area` has a number, and its entry in the table says `Float`. The expression `a + b` inside `add` has the type `number`. That is as far as the front end can go, because `add` is generic, and nothing can be decided about `number` until the whole program has been seen. Literals such as `1` keep the type `number` for the same reason.
+The expression `w * h` inside `area` has a number, and its entry in the table says `Float`. The expression `a + b` inside `add` has the type `number`. That is as far as the front end can go, because `add` is generic, and nothing can be decided about `number` until the whole program has been seen. Literals such as `1` keep the type `number` for the same reason.
 
 More in [The front end](/docs/front-end).
 
 ## 3. Local optimization: the case becomes a decision tree
 
-Next, each module is optimized on its own, with rewrites that need neither the rest of the program nor concrete types. The most visible is pattern matching. A `case` becomes a decision tree in which each part of the value is tested at most once. The shape of that tree, from the compiler's typed optimized form, is:
+Next, each module is optimised on its own, with rewrites that need neither the rest of the program nor concrete types. The most visible is pattern matching. A `case` becomes a decision tree in which each part of the value is tested at most once. The shape of that tree, from the compiler's typed optimised form, is:
 
 ```elm
 type Decider a
@@ -113,7 +113,7 @@ type Decider a
     | FanOut DT.Path (List ( DT.Test, Decider a )) (Decider a)
 ```
 
-A `Leaf` is a branch body. A `Chain` runs a list of tests and goes one way or the other. A `FanOut` looks at one place in the value (the path) and picks among several tests. For `area`, the tree is a single `FanOut` at the root, `shape`, with the tests "is it a `Circle`?" and "is it a `Rect`?", each leading to a `Leaf`. `Square` becomes the fallback rather than a third test: the match is known to be complete, so if the value is neither of the others it must be a `Square`, and nothing needs to check.
+A `Leaf` is a branch body. A `Chain` runs a list of tests and goes one way or the other. A `FanOut` looks at one place in the value (the path) and picks among several tests. For `area`, the tree is a single `FanOut` at the root, `shape`, with the tests "is it a `Circle`?" and "is it a `Rect`?", each leading to a `Leaf`. `Square` becomes the fallback rather than a third test. The match is known to be complete, so a value that is neither of the others must be a `Square`, and nothing needs to check.
 
 The same stage turns `sumTo`, which calls itself in tail position, into a tail-call definition that will become a loop. It also rewrites `&&`, `||` and the pipe operators into conditionals and plain calls. Every rewritten node keeps the type the front end recorded, because the next stage needs it.
 
@@ -121,7 +121,7 @@ More in [Local optimization](/docs/local-optimization).
 
 ## 4. Monomorphization: one copy per type
 
-Native code has to know how big a value is and which machine instructions operate on it. An `Int` is 64 bits in a register, a `Float` is a 64-bit floating-point register, and a `String` is a pointer to the heap. A generic function such as `add` cannot be compiled once for all of them, so the compiler links all the modules, starts from `main`, and makes one copy of each function for each combination of types it is actually used at. Each copy is called a specialization.
+Native code has to know how big a value is and which machine instructions operate on it. An `Int` is 64 bits in a register, a `Float` is a 64-bit floating-point register, and a `String` is a pointer to the heap. A generic function such as `add` cannot be compiled once for all of them, so the compiler links all the modules, starts from `main`, and makes one copy of each function for each combination of types it is used at. Each copy is called a specialization.
 
 In this program `add` is only ever used on `Int`, so there is one copy, and its `number` has become `Int`. Each specialization's name is its module, its name, and a number that keeps names unique. These are the program's own specializations, with their machine-level signatures:
 
@@ -136,7 +136,7 @@ Main_lambda_0    (i64) -> i64
 
 `i64` and `f64` are unboxed machine integers and floats, and `!eco.value` is a pointer to a heap object. `Main_Rect_$_4` is the `Rect` constructor used as a function. `Main_lambda_0` is `\x -> x * 2`, known to take and return `Int`. From elm/core come `String_fromInt_$_6`, `String_join_$_9`, and two copies of the helper behind `List.map`, `List_foldrHelper_$_14` and `List_foldrHelper_$_20`. One builds a list of strings and the other a list of integers. They are the same Elm code compiled twice, because the element types differ and so do the callbacks.
 
-`twice` is missing from the list. The inliner gives functions that call one of their own parameters a larger budget, because inlining them lets the function argument be called directly, so `twice` was copied into `main` and its specialization removed. That happens even with `ECO_INLINE_THRESHOLD=0`. The gaps in the numbering are specializations like this one, created and later inlined away.
+`twice` is missing from the list. The inliner gives a function that calls one of its own parameters a larger budget, because inlining it lets the function argument be called directly. `twice` was therefore copied into `main` and its specialization removed. That happens even with `ECO_INLINE_THRESHOLD=0`. The gaps in the numbering are specializations like this one, created and later inlined away.
 
 More in [Monomorphization](/docs/monomorphization).
 
@@ -162,7 +162,7 @@ More in [Global optimization](/docs/global-optimization) and [Lambda-set special
 
 ## 6. MLIR generation: writing down the decisions
 
-By now everything is decided, and code generation only writes the decisions down in Eco's own MLIR dialect, the contract between the Elm half of the compiler and the C++ half. The smallest function shows the format (trimmed):
+By this stage everything is decided, and code generation only writes the decisions down in Eco's own MLIR dialect, the contract between the Elm half of the compiler and the C++ half. The smallest function shows the format (trimmed):
 
 ```mlir
 ^bb0(%a: i64, %b: i64):
@@ -194,7 +194,7 @@ Every value is in SSA form: assigned once, with its type written out. `add` is t
   "eco.return"(%14) : (f64) -> ()
 ```
 
-The decision tree has become one `eco.case` with a region per constructor, chosen by the tag stored in the object's header. The fallback `Square` is simply the region for tag 2. Each region reads the fields it needs with `eco.project.custom`, and the fields come out as `f64`: a `Rect`'s two Floats are stored unboxed inside the object, not as pointers to separate boxes.
+The decision tree has become one `eco.case` with a region per constructor, chosen by the tag stored in the object's header. The fallback `Square` is the region for tag 2. Each region reads the fields it needs with `eco.project.custom`, and the fields come out as `f64`: a `Rect`'s two Floats are stored unboxed inside the object, not as pointers to separate boxes.
 
 `main` builds the list `[ 1, 2, 3 ]` from the tail up, starting from the empty list, `eco.constant` kind 2, which is a constant word rather than a heap object:
 
@@ -261,7 +261,7 @@ cont:  %obj = phi [ %top, fast ], [ %r, slow ]
 
 Allocating is a pointer bump and one compare. The end of the allocation area is set in advance to the point where the next minor collection should start, so the same compare means both "the nursery is full" and "time to collect". Only the slow branch can run the garbage collector, and that branch is where LLVM's statepoint machinery records which values on the stack are heap pointers, so the collector can find and move them.
 
-For an optimized build the module is split into partitions, LLVM optimizes and compiles each one on its own thread, and the objects are linked with the prebuilt runtime and kernel libraries:
+For an optimised build the module is split into partitions, LLVM optimises and compiles each one on its own thread, and the objects are linked with the prebuilt runtime and kernel libraries:
 
 ```text
 eco make src/Main.elm --output=main

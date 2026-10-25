@@ -6,7 +6,7 @@ sectionOrder: 5
 order: 4
 ---
 
-The Eco compiler is an Elm program, and before Eco exists the only thing that can compile Elm is the stock Elm compiler, which produces JavaScript. So every native `eco` binary descends from a JavaScript one. The bootstrap is the chain of nine stages that makes that journey, and twice along the way it asks the compiler to rebuild itself and checks that the result is identical, byte for byte.
+The Eco compiler is an Elm program, and before Eco exists the only thing that can compile Elm is the stock Elm compiler, which produces JavaScript. Every native `eco` binary therefore descends from a JavaScript one. The bootstrap is the chain of nine stages that makes that journey, and twice along the way it asks the compiler to rebuild itself and checks that the result is identical, byte for byte.
 
 > **Background**
 >
@@ -39,7 +39,7 @@ The compiler reads files and writes to the console through a handful of its own 
 
 Stage 1 builds the compiler with the HTTP tree. Stage 2 has that compiler build the compiler again with the kernel tree, and from then on nothing needs the server. Two compiler features exist mainly for this hop: compiling a package whose kernel code belongs to an author other than the Elm project, and taking a package from a directory on disk instead of the package registry.
 
-Stage 1 is the only stage built without optimization. The HTTP tree's crash function uses Elm's placeholder for unfinished code, `Debug.todo`, which optimized builds forbid. Dropping optimization in one throwaway stage was cheaper than maintaining a workaround.
+Stage 1 is the only stage built without optimisation. The HTTP tree's crash function uses Elm's placeholder for unfinished code, `Debug.todo`, which optimised builds forbid. We think dropping optimisation in one throwaway stage, whose output no shipped artefact contains, is cheaper than maintaining a workaround.
 
 ## The JavaScript fixed point
 
@@ -58,15 +58,15 @@ add_custom_command(
 )
 ```
 
-From the compiler's build file. If two generations are identical, the compiler's output no longer depends on which compiler built it. This check covers everything written in Elm: parsing, type checking, optimization and JavaScript generation. Stage 5 depends on the stamp, so no MLIR is produced by a JavaScript compiler that has not reproduced itself. Without that explicit edge the build tool would be free to start stage 5 as soon as stage 3's output existed, racing past the check.
+From the compiler's build file. If two generations are identical, the compiler's output no longer depends on which compiler built it. This check covers everything written in Elm: parsing, type checking, optimisation and JavaScript generation. Stage 5 depends on the stamp, so no MLIR is produced by a JavaScript compiler that has not reproduced itself. Without that explicit edge the build tool would be free to start stage 5 as soon as stage 3's output existed, racing past the check.
 
 ## Stage 5: staying inside Node's heap
 
-Every part of Eco that emits MLIR is Elm source, so the first MLIR the compiler ever produces has to come from the compiler running as JavaScript under Node. That self-compile is the heaviest step of the Node half of the chain, and it runs close to the largest heap V8 allows, 16 GB.
+Where does the first MLIR come from? Every part of Eco that emits it is Elm source, so the first MLIR the compiler ever produces has to come from the compiler running as JavaScript under Node. That self-compile is the heaviest step of the Node half of the chain, and it runs close to the largest heap V8 allows, 16 GB. Every Node-hosted stage sets its heap to that maximum.
 
-Running out of heap does not crash the compile. As it nears the limit, V8 spends more and more of its time collecting garbage to stay under it, and the compile slows until it never finishes. Several times, an optimisation that made the native compiler better has pushed this stage to that edge.
+Running out of heap does not crash the compile. As it nears the limit, V8 spends more and more of its time collecting garbage, and the compile slows until it never finishes. A build that looks hung is harder to diagnose than one that fails, and more than once an optimisation that improved the native compiler has pushed this stage to that edge.
 
-So the chain takes precautions. Every Node-hosted stage sets V8's heap to its 16 GB maximum. Stage 5 uses the lighter of the compiler's two specialization engines, which fits comfortably, because its only job is to produce a *correct* first native compiler; its MLIR is less optimized, but nothing that ships is built from it. And for as long as Eco can be bootstrapped from stock Elm through Node, which we intend to keep, any new optimisation has to leave this stage inside 16 GB, even if that means switching the optimisation off here.
+We keep it inside the limit in two ways. Stage 5 uses the lighter of the two specialization engines, because its only job is to produce a *correct* first native compiler, and nothing that ships is built from its output. And any new optimisation has to leave this stage under 16 GB, even if that means switching the optimisation off here. It is a real constraint, but we think bootstrapping from stock Elm is worth keeping: it means anyone can rebuild Eco from source with nothing but Elm and Node.
 
 Stage 5 also deletes the cached typed module files that specialization reads, because the JavaScript stages neither write nor invalidate them, and a stale one crashes specialization.
 
@@ -86,9 +86,9 @@ Until stage 9, compiling a program takes two tools: the native compiler, which e
 
 ## Tests inside the chain
 
-Two end-to-end test suites run at the earliest stage that can run them. The JIT suite needs only the stage 1 compiler. The AOT suite needs the stage 3 compiler and the native back end, so it can run right after the JavaScript fixed point. A native self-compile takes tens of minutes, so run in this order a back-end regression is reported before the expensive native rounds start, and is pinned to the few stages before the gate that caught it. A separate check compiles every test program with the stage 2 JavaScript compiler and the stage 6 native compiler and compares the MLIR byte for byte; any difference is a bug in one of them.
+Two end-to-end test suites run at the earliest stage that can run them. The JIT suite needs only the stage 1 compiler. The AOT suite needs the stage 3 compiler and the native back end, so it can run right after the JavaScript fixed point. A native self-compile takes tens of minutes. Run in this order, a back-end regression is reported before the expensive native rounds start, and is pinned to the few stages before the gate that caught it. A separate check compiles every test program with the stage 2 JavaScript compiler and the stage 6 native compiler and compares the MLIR byte for byte; any difference is a bug in one of them.
 
-> **Designs we didn't use.** We did not check a prebuilt Eco compiler into the repository to start from: the chain would then trust a binary nobody can rebuild from source.
+> **Designs we didn't use.** We did not check a prebuilt Eco compiler into the repository to start from: the chain would then trust a binary nobody can rebuild from source, which is the weakness Ken Thompson described in *Reflections on Trusting Trust*.
 
 ## Further reading
 

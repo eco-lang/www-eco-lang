@@ -23,11 +23,11 @@ Every module takes the same path, whichever tool asked for it.
 
 The compiler writes the module as MLIR bytecode and calls the backend, which lives in the same `eco` executable. The backend loads the module and checks it against [the eco dialect](/docs/eco-dialect), the typed contract between the two halves. About twenty [lowering passes](/docs/lowering-passes) then rewrite it into LLVM's own dialect, each placed where the fact it needs becomes decidable. The module is split into partitions, LLVM compiles each partition on its own thread, and a link step joins the objects with the prebuilt runtime and kernel libraries.
 
-The product compiler, the bootstrap compiler, a developer tool and the test JIT all compile through one shared routine. Separate copies drifted: one tool set the data layout before rewriting statepoints and another after, and programs behaved differently depending on which tool built them. Now the tools differ only in what they do with the finished code.
+The product compiler, the bootstrap compiler, a developer tool and the test JIT all compile through one shared routine. We keep one routine because separate copies drift. If one tool sets the data layout before rewriting statepoints and another sets it after, the same program behaves differently depending on which tool built it. The tools differ only in what they do with the finished code.
 
 ## Finding every heap pointer
 
-Eco's collector moves objects. At every call that might collect, it must know each stack slot and register holding a heap pointer, and be able to replace it with the object's new address. Eco gets this from LLVM rather than computing it by hand. Every boxed value is lowered to a pointer in a separate address space, which Eco's collector strategy marks as garbage-collected memory, and LLVM's statepoint pass works out from liveness which of those pointers survive each call.
+Eco's collector moves objects. At every call that might collect, it must know each stack slot and register holding a heap pointer, and be able to replace it with the object's new address. Eco gets this from LLVM rather than computing it by hand, using the statepoint mechanism LLVM provides for collectors that relocate objects. Every boxed value is lowered to a pointer in a separate address space, which Eco's collector strategy marks as garbage-collected memory, and LLVM's statepoint pass works out from liveness which of those pointers survive each call.
 
 A test fixture shows the effect (trimmed). `%root` is live across two calls that may allocate:
 
@@ -41,13 +41,13 @@ func.func @test_loop_root(%root: !eco.value, %other: !eco.value) -> !eco.value {
 
 Nothing in the input mentions roots. In the LLVM output each call becomes a `gc.statepoint`, and `%root` comes back from each through `gc.relocate`, so the value returned is the twice-relocated pointer. The stack maps go into a section of each object file that the collector reads from the running image, so every link step must keep it.
 
-One danger follows. Compiled code sometimes reads a heap pointer as an integer, to test a tag bit; if that integer is used after a statepoint, it is stale. So Eco places statepoints *before* LLVM's optimizer, not after it as LLVM intends, and until then writes such conversions in a form LLVM cannot fold away.
+One danger follows. Compiled code sometimes reads a heap pointer as an integer, to test a tag bit, and if that integer is used after a statepoint, it is stale. Eco therefore places statepoints *before* LLVM's optimiser, not after it as LLVM intends, and until then writes such conversions in a form LLVM cannot fold away.
 
 ## Whole-program facts first, then split
 
 Some facts need the whole program: which functions can ever run, which can never trigger a collection (so their calls need no statepoint), and where a callee's allocation check can move into its caller. All three are decided in MLIR, before the split, and travel into each partition as attributes that the partition checks again. They must be decided in MLIR because an MLIR context can be shared between threads and an LLVM context cannot: deciding them after translation would need every worker to see every other partition.
 
-The splitter gives each function one owner, balancing partitions by operation count; elsewhere it appears only as a declaration. Losing inlining across partitions measures within noise on the compiler's run time. The analyses assume a closed world: an executable exposes only its entry point, so no outside caller can break them.
+The splitter gives each function one owner, balancing partitions by operation count; elsewhere it appears only as a declaration. The cost is that no call is inlined across partitions, and on the compiler's run time that cost measures within noise. The analyses assume a closed world: an executable exposes only its entry point, so no outside caller can break them.
 
 ## What comes out
 
@@ -59,9 +59,9 @@ The JIT compiles in memory through the same routine, which is how thousands of e
 
 ## Built for compile time
 
-On the compiler's own source the backend takes about twenty seconds. What makes it fast: no repeated linear symbol lookups, partitions compiled in parallel, splitting done in MLIR so translation also runs per partition, and MLIR passes run in parallel. The total CPU time is several minutes, spread across many cores.
+On the compiler's own source the backend takes about twenty seconds. Four choices keep it there: no symbol is looked up by a repeated linear search, partitions compile in parallel, splitting happens in MLIR so that translation also runs per partition, and MLIR passes run in parallel. The total CPU time is several minutes, spread across many cores.
 
-> **Designs we didn't use.** Escape analysis as a pass over the lowered MLIR, to keep values out of the heap, allocated more, not less, because at that level nearly everything looks as if it escapes. The compiler decides which values stay out of the heap instead, while it still knows the program's structure.
+> **Designs we didn't use.** Escape analysis as a pass over the lowered MLIR, to keep values out of the heap, allocates more, not less, because at that level nearly everything looks as if it escapes. The compiler decides which values stay out of the heap instead, while it still knows the program's structure.
 
 ## Further reading
 

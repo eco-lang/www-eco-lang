@@ -6,11 +6,11 @@ sectionOrder: 1
 order: 2
 ---
 
-Eco is distributed as one self-contained bundle per platform. The current release is 0.2.0, published as nightly builds, and it is alpha software: expect bugs, and expect the IO libraries to change.
+Eco is distributed as one self-contained bundle per platform. The current release is 0.2.0, published as nightly builds. It is alpha software, so expect bugs, and expect the IO libraries to change. This page installs it, builds hello world and introduces `eco/system`, the package for programs that run outside the browser.
 
 ## Download
 
-Release bundles are on the [GitHub releases page](https://github.com/eco-lang/eco-compiler/releases), under the tag `v0.2.0-nightly`. There is one per platform:
+Release bundles are on the [GitHub releases page](https://github.com/eco-lang/eco-compiler/releases), under the tag `v0.2.0-nightly`, one per platform:
 
 | Platform | Bundle |
 |---|---|
@@ -43,7 +43,7 @@ curl -L https://github.com/eco-lang/eco-compiler/releases/download/v0.2.0-nightl
     | sudo tar -xz -C /usr/local
 ```
 
-Use `curl` rather than a web browser. A browser marks the download as quarantined, and macOS then refuses to run `eco` because it is not signed by a registered Apple developer. If that happens, clear the mark with `xattr -dr com.apple.quarantine` on the unpacked files.
+Use `curl` rather than a web browser. A browser marks the download as quarantined, and macOS then refuses to run `eco`, because it is not signed by a registered Apple developer. If that happens, clear the mark with `xattr -dr com.apple.quarantine` on the unpacked files.
 
 **Windows.** Unpack the `.zip` and add its `bin` directory to your `PATH`. On Windows, `eco make` links native programs through `clang-cl`, so it needs the Visual Studio 2022 Build Tools and the Windows SDK, with `clang-cl` on the `PATH` (a Developer Command Prompt sets this up).
 
@@ -74,7 +74,7 @@ The extension of the output name chooses what Eco builds:
 | `.html` | a web page, as `elm make` produces |
 | `.mlir` | the compiler's intermediate code, before the back end |
 
-MLIR is written as compact binary bytecode by default. Add `--text-mlir` to get readable text instead, which is the easiest way to see what the compiler did with your program:
+MLIR is written as compact binary bytecode by default. Add `--text-mlir` to get readable text instead. We find this the easiest way to see what the compiler did with a program:
 
 ```text
 eco make src/Hello.elm --text-mlir --output=hello.mlir
@@ -82,7 +82,7 @@ eco make src/Hello.elm --text-mlir --output=hello.mlir
 
 ## Writing programs with eco/system
 
-Eco ships `eco/system`, a package for command-line and server programs: files and directories, child processes, standard input, output and error as streams, the terminal, TCP, UDP, TLS and Unix sockets, an HTTP server (with HTTPS, HTTP/2 and WebSockets), and streaming HTTP bodies on top of `elm/http`. It is resolved from the bundle automatically, and `eco install eco/system` adds it to a project's `elm.json`.
+`eco/system` is the package for command-line and server programs: files and directories, child processes, standard input, output and error as streams, the terminal, TCP, UDP, TLS and Unix sockets, an HTTP server (with HTTPS, HTTP/2 and WebSockets), and streaming HTTP bodies on top of `elm/http`. It is resolved from the bundle automatically, and `eco install eco/system` adds it to a project's `elm.json`.
 
 A program's `main` is a `Platform.Program` whose flags are a `System.Environment`, which Eco builds when the program starts. `System.simpleProgram` makes a one-shot program that runs a task:
 
@@ -110,7 +110,7 @@ eco make src/HttpEcho.elm --output=http-echo && ./http-echo 8080 &
 curl -d hello http://127.0.0.1:8080/some/path
 ```
 
-There are also TCP, UDP, TLS and WebSocket examples (`TcpEcho.elm`, `UdpEcho.elm`, `TlsGet.elm`, `WsEchoServer.elm`, `WsClient.elm`, `WsChat.elm`). For HTTP requests, use `elm/http` as usual. The API of `eco/system` is a port of [gren-lang/node](https://github.com/gren-lang/node) and Gren's `Stream`, so their documentation and examples largely carry over, with lists in place of arrays and `()` in place of `{}`. The package documentation is in the bundle at `share/eco/system/system-kernel-cpp/docs.json`.
+There are also TCP, UDP, TLS and WebSocket examples (`TcpEcho.elm`, `UdpEcho.elm`, `TlsGet.elm`, `WsEchoServer.elm`, `WsClient.elm`, `WsChat.elm`). For HTTP requests, use `elm/http` as usual. The API of `eco/system` is a port of [gren-lang/node](https://github.com/gren-lang/node) and Gren's `Stream`. Because it is a port, Gren's documentation and examples largely carry over, with lists in place of arrays and `()` in place of `{}`. The package documentation is in the bundle at `share/eco/system/system-kernel-cpp/docs.json`.
 
 ## Benchmarks
 

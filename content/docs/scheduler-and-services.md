@@ -19,13 +19,13 @@ When an Elm program calls `Process.sleep 500`, something has to wait half a seco
 
 Eco's [garbage collector](/docs/garbage-collector) allows one mutator per heap, and it needs no write barrier because no object changes once the program can see it. A second thread that ran Elm code, or a worker that allocated its own result, would break both assumptions: an allocation on the worker could trigger a collection that moves an object the eco thread is reading.
 
-So the scheduler is an event loop on the eco thread, and every service that blocks has the same shape. A plain request goes in, a token comes out, and all heap work happens later, back on the eco thread. Timers show what goes wrong otherwise. A thread per sleep that resumed the Elm task from its own thread would allocate off the eco thread and corrupt the collector's state.
+The scheduler is therefore an event loop on the eco thread, and every service that blocks has the same shape. A plain request goes in, a token comes out, and all heap work happens later, back on the eco thread. Timers show what goes wrong otherwise. A thread per sleep that resumed the Elm task from its own thread would allocate off the eco thread and corrupt the collector's state.
 
 ## Tasks and processes are heap values
 
 A task is an ordinary heap object with the six constructors of elm/core's scheduler. `Succeed` and `Fail` carry a result. `AndThen` and `OnError` carry a callback and the inner task to run first. `Binding` carries the callback that does real work, such as starting a timer. `Receive` waits for a message. A process is a running task: an id, a root task, a stack of pending callbacks and a mailbox.
 
-Keeping both as Elm heap values follows elm/core closely. We considered a scheduler built from reference-counted C++ objects; it would fight the collector and drift from elm/core's behaviour.
+We keep both as Elm heap values because that follows elm/core closely. In our view a scheduler built from reference-counted C++ objects would fight the collector and drift from elm/core's behaviour.
 
 A process is never changed in place. Each step that changes its root, stack or mailbox allocates a fresh process with the same id, and the scheduler keeps a table from id to the latest version. The reason is the collector again. A long-lived process sits in the old generation, and the task written into it is usually brand new. Writing a young pointer into an old object is exactly what the barrier-free collector cannot see. Replacing the process costs one allocation per step, and it means that anything that must find a process later (a kill, a message an effect manager sends itself) holds its id, not a pointer to it. Ids are full 64-bit words from a counter that never wraps, and a process's entry leaves the table when it finishes.
 
@@ -114,7 +114,7 @@ If the sleep is killed instead, the kill handle withdraws the pending resume and
 
 ## The event loop
 
-Putting a process on the run queue never runs it; enqueuing takes a lock, pushes and wakes the loop. The loop repeats three steps:
+The loop has the familiar shape of libuv or Node's event loop. Putting a process on the run queue never runs it: enqueuing takes a lock, pushes and wakes the loop. The loop repeats three steps:
 
 1. Drain the run queue, stepping processes until it is empty.
 2. Collect finished outside work: fired timers as above, then every other registered source.
@@ -126,7 +126,7 @@ The run queue, the latest-process table and the pending resumes live in C++ cont
 
 An Elm worker has no obvious end. Eco's rule is that a program runs exactly while it is waiting for something it asked for. Each such wait takes one hold, and the scheduler's count of holds changes only through one small interface. A listener nobody is waiting on holds nothing.
 
-The alternative, deciding liveness resource by resource with counters spread through the code, gives counts that disagree about lifetimes and cancellation, and a program that never exits has no way to say why. With one interface, debug builds abort on a release of an unknown hold or a second release of the same one, and a diagnostic report lists the holds still open by the code that took them.
+We prefer this to deciding liveness resource by resource, with counters spread through the code. Such counts disagree about lifetimes and cancellation, and a program that never exits has no way to say why. With one interface, debug builds abort on a release of an unknown hold or a second release of the same one, and a diagnostic report lists the holds still open by the code that took them.
 
 ## Workers and other sources
 
@@ -142,7 +142,7 @@ Anything else joins the loop by registering a pair of functions: a drain that do
 
 An effect manager turns commands and subscriptions into work: Time, Http and Task from elm/*, the system library's managers, and one pseudo-manager per port. After each `update`, Eco gathers the commands and subscriptions, hands each leaf to its manager, and runs every manager's handler, even one with nothing to do, so that a manager whose subscription list became empty can drop its timers. This dispatch finishes inside the same drain that ran the update. That matters for holds: every hold a new subscription takes exists before the run queue can empty, so the loop never sees a false moment with nothing to do.
 
-A port is just a manager keyed by its name, as in elm/core's JavaScript. Outgoing values reach the host as JSON strings. A host may send an incoming value from any thread: the bytes are copied into a queue, take a hold and wake the loop, and the eco thread decodes them.
+A port is a manager keyed by its name, as in elm/core's JavaScript. Outgoing values reach the host as JSON strings. A host may send an incoming value from any thread: the bytes are copied into a queue, take a hold and wake the loop, and the eco thread decodes them.
 
 ## Start-up and child processes
 
@@ -150,7 +150,7 @@ The program's entry point does no Elm work. It starts one thread with a 64 MB st
 
 Child processes are started with a spawn call, never a fork. A fork would copy the whole Eco heap and the collector's helper threads' state, only to throw it away when the child starts its program.
 
-> **Designs we didn't use.** Parallel Elm by locking the stepper, so that several threads share one heap, was rejected, because the collector and every service assume one mutator per heap. A heap per thread is the direction we would take instead; it is not built.
+> **Designs we didn't use.** We rejected parallel Elm by locking the stepper, so that several threads share one heap, because the collector and every service assume one mutator per heap. A heap per thread is the direction we would take instead. It is not built.
 
 ## Further reading
 

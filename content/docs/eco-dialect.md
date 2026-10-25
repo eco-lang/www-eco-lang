@@ -17,7 +17,7 @@ Eco is written in two languages: the compiler in Elm, the backend and runtime in
 
 ## A small function
 
-Here is an Elm function that scales a shape:
+This Elm function scales a shape:
 
 ```elm
 type Shape
@@ -65,7 +65,7 @@ Nothing in the listing says how big a `Rect` is or how a Float is stored. Those 
 
 ## The compiler describes values, the backend decides memory
 
-The dialect keeps the program's functional structure until the backend chooses a memory layout. Data types, closures and pattern matches stay as operations instead of becoming loads, stores and branches, so the part that knows the collector decides each layout. Raw allocation operations exist in the dialect, but only the lowering creates them. The compiler never writes one, so it never describes memory, only values.
+The dialect keeps the program's functional structure until the backend chooses a memory layout. Data types, closures and pattern matches stay as operations instead of becoming loads, stores and branches. We think layout belongs with the collector, which has to read every object, so the backend, the part that knows the collector, decides each layout. Raw allocation operations exist in the dialect, but only the lowering creates them. The compiler never writes one, so it never describes memory, only values.
 
 The verifier follows from the same split. Whatever it proves, the lowering may assume; whatever it does not prove, the lowering takes on trust. Because it runs on every operation each time a module is read, it is kept to checks that look at one operation, or at most at one symbol found through MLIR's cached symbol table. A check that needs the whole module belongs in a pass.
 
@@ -89,7 +89,7 @@ There are about 140 operations, and they group by what they describe.
 | Heap objects | One construction and one projection per runtime layout (list cell, pair, triple, record, custom type), tag reads, embedded constants, boxing and unboxing, globals | Each one commits to a single runtime layout |
 | Closures and calls | Partial applications, groups of mutually recursive closures, extending a partial application, direct and indirect calls | A call states whether its target is a named function or a closure, and how many arguments remain, so the lowering works out neither |
 | Arithmetic | About 75 operations on Int, Float, Char and Bool | Elm defines results the machine does not, such as integer division by zero giving 0, so each operation names the Elm meaning |
-| Typed intrinsics | String operations, list append and map, array operations, structural equality, comparisons returning an `Order` | Each replaces a call to a generic kernel function with one the lowering can specialize by type |
+| Typed intrinsics | String operations, list append and map, array operations, structural equality, comparisons returning an `Order` | Each replaces a call to a generic kernel function with one the lowering can specialise by type |
 | Aggregates | Building aggregates, moving values between aggregate and heap form, building a closure | The compiler keeps short-lived values out of the heap and says where they must be boxed |
 
 Join points exist because a value-producing case cannot jump out of one of its branches. Tail recursion is written as a jump to a join point, labelled code the function can jump back to with new arguments, and that becomes a loop.
@@ -131,9 +131,7 @@ static uint8_t fieldKind(Type t) {
 
 The type decides the kind and the attribute is only compared with it. The lowering never reads `slot_kinds`: it derives every layout from operand types, so the attribute is a cross-check on the compiler, never a second source of truth. It stays because it is the only check in a production build that the compiler's idea of a layout agrees with the values it passes.
 
-Some reasons behind the rules are worth spelling out.
-
-The kinds are a list of small integers rather than one packed word because the compiler is written in Elm, whose Int is exact only up to 2^53. Two bits per field are needed, not one: a single "unboxed" bit assumes every unboxed field is an Int, and corrupts Floats and Chars when they are boxed again. Old packed-bitmap attributes are rejected rather than ignored, because MLIR would otherwise carry them along as unknown attributes and a stale cached module would go wrong silently.
+Each rule has a reason. The kinds are a list of small integers rather than one packed word because the compiler is written in Elm, whose Int is exact only up to 2^53. Two bits per field are needed, not one: a single "unboxed" bit assumes every unboxed field is an Int, and corrupts Floats and Chars when they are boxed again. Old packed-bitmap attributes are rejected rather than ignored, because MLIR would otherwise carry them along as unknown attributes and a stale cached module would go wrong silently.
 
 The yield rule is strict because a value-producing case lowers to structured control flow, which has no way to leave a branch early. A return inside a branch would have nowhere to go.
 
@@ -145,7 +143,7 @@ A constructor with no fields has one representation because of equality. The equ
 
 Three facts the lowering relies on have no verifier behind them.
 
-A direct call's arguments are not compared with the callee's signature. That check would need a module-wide symbol lookup per call, and those lookups dominated lowering time. A mismatch surfaces in LLVM instead. One bounded case is checked: when the arguments added to a closure can be traced, through a short chain of operations, back to the closure's creation, the verifier compares them with the function's parameters, and gives up silently otherwise. It exists because LLVM's own message for that mismatch, "Calling a function with a bad signature!", says nothing about where it came from.
+A direct call's arguments are not compared with the callee's signature. That check would need a module-wide symbol lookup per call, and such lookups dominate lowering time. A mismatch surfaces in LLVM instead. One bounded case is checked: when the arguments added to a closure can be traced, through a short chain of operations, back to the closure's creation, the verifier compares them with the function's parameters, and gives up silently otherwise. It exists because LLVM's own message for that mismatch, "Calling a function with a bad signature!", says nothing about where it came from.
 
 The masks that mark which fields of a pair or triple are unboxed, and the kind of a list cell's head, are read by the lowering directly. Only the compiler's own tests check them.
 
@@ -155,7 +153,7 @@ The verifier always runs when a module is read; the production compiler skips it
 
 ## Effects and folds
 
-Purity in the dialect is narrow on purpose. Most constructions, projections and arithmetic operations are marked pure, and the fixed-size constructions are pure even though they allocate, so MLIR may delete one whose result is unused. But merging two identical constructions would be wrong. Two objects that each hold a NaN are separate, and the equality fast path compares identity first, so merging them changes the answer of `==`. The pipeline therefore does not run MLIR's common subexpression elimination; that, not the purity mark, keeps allocations apart. Variable-size allocations such as list append carry no traits at all, so MLIR neither merges nor deletes them.
+Purity in the dialect is narrow on purpose. Two permissions are easy to confuse here. An operation that may be *deleted* when its result is unused need not be one that may be *merged* with an identical operation. Most constructions, projections and arithmetic operations are marked pure, and the fixed-size constructions are pure even though they allocate, so MLIR may delete one whose result is unused. But merging two identical constructions would be wrong. Two objects that each hold a NaN are separate, and the equality fast path compares identity first, so merging them changes the answer of `==`. The pipeline therefore does not run MLIR's common subexpression elimination; that, not the purity mark, keeps allocations apart. Variable-size allocations such as list append carry no traits at all, so MLIR neither merges nor deletes them.
 
 A call declares its memory effects explicitly. A direct call may carry a marker, `eco.cse_safe`, that lets it be merged or deleted, but never moved ahead of the condition that guards it. The pass that prepares for garbage collection strips the marker, so no later pass can act on it.
 
@@ -169,7 +167,7 @@ The compiler emits pairs, triples and custom-type values as aggregates by defaul
 
 Fused encoding and decoding of byte sequences uses a separate dialect, `bf`, described in [Bytes fusion](/docs/bytes-fusion). Keeping it apart lets byte fusion be switched on and off without touching the eco operations.
 
-> **Designs we didn't use.** Checking every call against its callee's full signature in the verifier would catch type mismatches early, but the module-wide lookups it needs dominated lowering time, so only the bounded closure check remains.
+> **Designs we didn't use.** Checking every call against its callee's full signature in the verifier would catch type mismatches early, but the module-wide lookups it needs dominate lowering time, so only the bounded closure check remains.
 
 ## Further reading
 

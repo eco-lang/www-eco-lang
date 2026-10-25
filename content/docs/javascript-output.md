@@ -6,17 +6,21 @@ sectionOrder: 2
 order: 9
 ---
 
-Eco still writes JavaScript, with the same generator stock Elm uses. That is not nostalgia. The compiler is itself an Elm program, so before any native binary of it exists it has to run as JavaScript. And Elm's JavaScript output is the established behaviour of Elm programs, the reference the native path is checked against.
+Eco still writes JavaScript, with the same generator stock Elm uses, and we think it should keep doing so for two reasons. The compiler is itself an Elm program, so before any native binary of it exists it has to run as JavaScript. Elm's JavaScript output is also the established behaviour of Elm programs, and so the reference the native path is checked against.
+
+> **Background**
+> - [Kernel](/docs/glossary#kernel): a built-in function with no Elm body, implemented in the host language.
+> - [Fixed point](/docs/glossary#fixed-point): a compiler that rebuilds itself and gets identical output.
 
 ## Choosing JavaScript
 
 The output file name picks the back end, once for the whole build. A name ending in `.js` or `.html` selects this generator, `.mlir` selects MLIR, and any other name selects a native output whose kind the extension decides. With no output name, the build writes `index.html` for a project with one entry point and `elm.js` for several, as `elm make` does.
 
-The `--debug`, `--optimize` and `--sourcemaps` options mean what they mean in Elm and affect only this generator. Development mode writes readable code; debug mode adds the type information the Elm debugger needs; production mode gives the most frequent record fields the shortest names.
+The `--debug`, `--optimize` and `--sourcemaps` options mean what they mean in Elm and affect only this generator. Development mode writes readable code. Debug mode adds the type information the Elm debugger needs. Production mode gives the most frequent record fields the shortest names.
 
 ## Same driver, different program
 
-The JavaScript and MLIR generators are two back ends of one [build driver](/docs/build-driver). They share project loading, caching and error reporting, but not the program they read. A JavaScript build takes the erased path: the front end, then Elm's own optimizer, which drops types, then this generator. The typed, specialized program that feeds MLIR never reaches it, and a JavaScript build writes none of the typed artifacts. The generator's interface takes the erased graph in its type, so a JavaScript back end cannot be handed typed data by accident.
+The JavaScript and MLIR generators are two back ends of one [build driver](/docs/build-driver). They share project loading, caching and error reporting, but not the program they read. A JavaScript build takes the erased path: the front end, then Elm's own optimiser, which drops types, then this generator. The typed, specialized program that feeds MLIR never reaches it, and a JavaScript build writes none of the typed artifacts. The generator's interface takes the erased graph in its type, so a JavaScript back end cannot be handed typed data by accident.
 
 The generator walks the program from its entry points and writes every reachable definition once, dependencies first, inside a single JavaScript function. Decision trees become chains of `if` and `switch`, tail calls become loops, and the file opens with the helpers that make curried calls of two to nine arguments cheap, followed by the kernel JavaScript of the libraries the program uses. All of that is the stock design, left alone so that Eco's output stays interchangeable with Elm's.
 
@@ -41,7 +45,7 @@ var $author$project$Main$area = function (shape) {
 
 This is character for character what stock Elm writes. The constructor is a string tag on a JavaScript object and every number is a JavaScript double. Compare the native version in the tour, where the same `case` reads an integer tag from a heap header and multiplies raw `f64` values. The two outputs share nothing below the decision tree.
 
-One thing Eco did have to change is kernel names. Eco's own kernel package shares module names with Elm's libraries (`File`, `Http`, `Process`), and both `File` kernels define `_File_size`. With stock Elm's flat names, one kernel silently replaced the other and the program failed at load. So Elm kernels keep their stock `_Module_name`, which leaves output for ordinary Elm programs unchanged, and Eco kernels are named `_Eco_Module_name`.
+Kernel names are the one place Eco departs from the stock generator. Eco's own kernel package shares module names with Elm's libraries (`File`, `Http`, `Process`), and both `File` kernels define `_File_size`. Under stock Elm's flat names, one kernel would silently replace the other and the program would fail at load. Elm kernels therefore keep their stock `_Module_name`, which leaves the output for ordinary Elm programs unchanged, and Eco kernels are named `_Eco_Module_name`.
 
 ## Why Eco keeps it
 
@@ -49,11 +53,11 @@ One thing Eco did have to change is kernel names. Eco's own kernel package share
 
 **Browser projects need it.** Because the generator and its options are stock Elm, Eco can replace `elm make` for a browser project.
 
-**The native path needs a reference.** The native runtime's rules for effects and ports are stated as parity with the JavaScript runtime: native matches JavaScript, not the other way round. Our benchmarks compare Eco's JavaScript output with its native output.
+**The native path needs a reference.** The native runtime's rules for effects and ports are stated as parity with the JavaScript runtime, so native matches JavaScript and not the other way round. Our benchmarks compare Eco's JavaScript output with its native output.
 
-The generator reads the erased program because that is stock Elm's design: JavaScript does not need types, so Elm drops them after type checking. Leaving the generator there frees the typed representation to be shaped entirely for native code.
+The generator reads the erased program because that is stock Elm's design. JavaScript does not need types, so Elm drops them after type checking. Leaving the generator there has a cost, since it cannot use anything the typed stages learn, but it frees the typed representation to be shaped entirely for native code.
 
-> **Designs we didn't use.** Feeding the generator from the typed or specialized program, to improve its output, would tie it to data whose shape is chosen for native code and changes for native reasons. An improvement both back ends would benefit from belongs in the optimizer that builds the erased program.
+> **Designs we didn't use.** Feeding the generator from the typed or specialized program, to improve its output, would tie it to data whose shape is chosen for native code and changes for native reasons. An improvement both back ends would benefit from belongs in the optimiser that builds the erased program.
 
 ## Further reading
 

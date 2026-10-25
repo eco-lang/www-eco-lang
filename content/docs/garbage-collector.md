@@ -6,7 +6,7 @@ sectionOrder: 4
 order: 5
 ---
 
-Most generational collectors put a write barrier on every pointer store, so they can track pointers from old objects to young ones. Eco's collector has none, because in Elm an old object can never point at a younger one. The same fact lets it mark the old generation and promote survivors on background threads while the program runs, again without barriers. Its worst pause on the compiler compiling itself fell from nearly three seconds to under a tenth of a second.
+Most generational collectors, such as those in the JVM and V8, put a write barrier on every pointer store so they can track pointers from old objects to young ones. Eco's collector has none, because in Elm an old object can never point at a younger one. The same fact lets it mark the old generation and promote survivors on background threads while the program runs, again without barriers. On the compiler compiling itself, its worst pause is under a tenth of a second, against nearly three seconds for a single-threaded collector.
 
 > **Background**
 >
@@ -19,13 +19,13 @@ Most generational collectors put a write barrier on every pointer store, so they
 
 In Elm a value is built only from values that already exist, so every pointer stored into a new object leads to something of the same age or older. If nothing writes into an object once the program can see it, no old object can ever gain a pointer to a younger one. A young collection then needs only the roots and the young generation. It never searches the old generation for pointers into the nursery, so there is no remembered set, no card table, and no check on each store to maintain them.
 
-None of this needs the heap to be free of cycles, and it is not. A closure that calls itself holds its own pointer, and mutually recursive closures point at each other. Those edges are written while the objects are being created, in the same allocation, so they join objects of the same age. The collector traces cycles like any other graph.
+The argument does not need the heap to be free of cycles, and it is not. A closure that calls itself holds its own pointer, and mutually recursive closures point at each other. Those edges are written while the objects are being created, in the same allocation, so they join objects of the same age. The collector traces cycles like any other graph.
 
-The same property removes the barriers a *concurrent* collector usually needs. If no object that existed when marking began is ever written, every pointer the program holds later leads either to something reachable at that moment or to something allocated since. So background marking needs only a snapshot of the roots at the start, and it treats everything allocated during the cycle as live. It needs no barrier recording overwritten pointers, and no second pause to re-mark.
+The same property removes the barriers a *concurrent* collector usually needs. No object that existed when marking began is ever written, so every pointer the program holds later leads either to something reachable at that moment or to something allocated since. Background marking therefore needs only a snapshot of the roots at the start, and it treats everything allocated during the cycle as live. It needs no barrier recording overwritten pointers, and no second pause to re-mark.
 
 ## Keeping the heap frozen
 
-Elm is immutable, but the heap is written by compiled code and by C++ that could store anywhere. Each writer keeps its own rule:
+*Immutable values* are a property of the language; a *frozen heap* is a property of the runtime, and Eco needs both. The heap is written by compiled code and by C++ that could store anywhere, so each writer keeps its own rule:
 
 1. Compiled code stores only into objects it allocated since its last safepoint. Such an object cannot have moved or aged.
 2. Recursive closures are wired up inside the same allocation, with no safepoint in between.
@@ -33,7 +33,7 @@ Elm is immutable, but the heap is written by compiled code and by C++ that could
 4. A large object that holds pointers, such as a big array, is always allocated young, because its kernel fills it with young pointers afterwards.
 5. Long-lived mutable runtime state, such as the scheduler's process records, lives off the heap and is scanned as a root.
 
-A breach of these rules is not survivable: the default nursery promotes in the background, so a late write could leave an old object pointing into eden after eden has been reset. That is why each writer keeps its rule, and why validation builds check it with a census that hashes surviving objects and reports any hash that changes.
+A breach of these rules is not survivable. The default nursery promotes in the background, so a late write could leave an old object pointing into eden after eden has been reset. Each writer therefore keeps its rule, and validation builds check it with a census that hashes surviving objects and reports any hash that changes.
 
 ## The heap
 
@@ -64,7 +64,7 @@ typedef struct {
 } Header;
 ```
 
-Packed least significant bit first, that is `tag` in bits 0–4, `color` 5–6, `pin` 7, `age` 8–9, `unboxed` 10–15, `refcount` 16–30, `builder` 31 and `size` 32–63. At allocation everything except the tag, the kinds and the size is zero, so the compiler builds the whole header as one 64-bit constant with this formula (from the backend's lowering helpers):
+Packed least significant bit first, the fields are `tag` in bits 0–4, `color` 5–6, `pin` 7, `age` 8–9, `unboxed` 10–15, `refcount` 16–30, `builder` 31 and `size` 32–63. At allocation everything except the tag, the kinds and the size is zero, so the compiler builds the whole header as one 64-bit constant with this formula (from the backend's lowering helpers):
 
 ```cpp
 constexpr unsigned HeaderUnboxedShift = 10;  // tag:5 + color:2 + pin:1 + age:2
@@ -116,13 +116,13 @@ A minor collection never promotes anything itself. Objects that survived the *pr
 
 The old generation is collected by one mark cycle that spans several young collections. The pause that starts a cycle marks the old-generation targets of every root and every young object, then hands that set to background marker threads, which mark while the program runs. Later pauses only help a marker that has fallen behind, and the minor collection after marking finishes classifies blocks for sweeping. A cycle starts when the old generation is filling, when much of it has become garbage, or when the program asks for a collection.
 
-Every collection decision is a function of the program's own state, never of how far a helper thread has got. A synchronous mode therefore reproduces the concurrent one counter for counter, and that is what makes a concurrent change testable. The concurrent protocols are also written as TLA+ models (see [Model-checking the collector](/docs/concurrency-models)).
+Every collection decision is a function of the program's own state, never of how far a helper thread has got. We hold to this because it makes concurrent changes testable: a synchronous mode reproduces the concurrent one counter for counter. The concurrent protocols are also written as TLA+ models (see [Model-checking the collector](/docs/concurrency-models)).
 
 ## Numbers
 
 The measure we use is the compiler compiling itself natively. The worst pause is under 100 ms, and only 1 in 100 pauses is longer than about 20 ms. A single-threaded collector, doing the same work with the program stopped, pauses for nearly three seconds on its major collections. Total time in the collector is a few seconds per self-compile, partly because of the concurrent work and partly because the compiler itself allocates and promotes little.
 
-> **Designs we didn't use.** Most of the collector designs we passed over would let an old object point at a younger one, and so bring barriers back. *Pretenuring*, allocating an object directly in the old generation to save a copy, is one: an object allocated old and filled afterwards is an unrecorded old-to-young pointer.
+> **Designs we didn't use.** *Pretenuring* allocates an object directly in the old generation to save a copy. We do not use it because an object allocated old and filled afterwards is an unrecorded old-to-young pointer, which would bring barriers back.
 
 ## Further reading
 

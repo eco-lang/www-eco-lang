@@ -6,7 +6,7 @@ sectionOrder: 2
 order: 2
 ---
 
-Eco does not have a front end of its own. It uses Elm's: the parser, name resolution, type checker and pattern checks come from Guida, a port of the stock Elm compiler from Haskell to Elm, so Eco accepts the same programs and reports the same errors in the same words. The one thing Eco adds is that the type checker keeps its answers. Stock Elm asks only whether a program is well typed and then throws the working away; Eco records the type of every expression, because the native compiler needs it.
+Eco uses Elm's front end rather than one of its own: the parser, name resolution, type checker and pattern checks come from Guida, a port of the stock Elm compiler from Haskell to Elm, so Eco accepts the same programs and reports the same errors in the same words. The one thing Eco adds is that the type checker keeps its answers. Stock Elm asks only whether a program is well typed and then throws the working away; Eco records the type of every expression, because the native compiler needs it.
 
 > **Background**
 > - Canonical program: the program after name resolution, where every name points at the module that defines it.
@@ -45,7 +45,7 @@ But `fromInt` needs the 1st argument to be:
     Int
 ```
 
-Guida accepts some syntax of its own, such as underscores in number literals and tuples of more than three elements. Eco does not. It keeps one grammar, the standard one, because the point is to compile the Elm that already exists. Projects may declare any Elm 0.19 release, since the language is the same across the 0.19 patch releases.
+Guida accepts some syntax of its own, such as underscores in number literals and tuples of more than three elements. Eco does not. We keep one grammar, the standard one, because the point is to compile the Elm that already exists. Projects may declare any Elm 0.19 release, since the language is the same across the 0.19 patch releases.
 
 The errors follow Elm's model too. Each phase collects every problem it finds rather than stopping at the first, and each is rendered as a report that quotes the source. Anything Eco adds to the front end that can fail reports through the same channel, so a user cannot tell Eco's errors from Elm's.
 
@@ -57,13 +57,13 @@ A module passes through five phases:
 2. **Name resolution** ties every name to its home module, reports duplicate definitions and sorts definitions into groups that refer to one another. In Eco it also gives every expression and pattern a number.
 3. **Constraint generation** walks the module and emits the type equations the solver must satisfy. In Eco it also notes which solver variable stands for each numbered node.
 4. The **solver** runs Hindley-Milner inference over a union-find store, in which variables proved equal are merged into one set with a single representative, its root.
-5. A **repair step**, new in Eco, completes and normalizes the recorded types.
+5. A **repair step**, new in Eco, completes and normalises the recorded types.
 
 Elm's pattern checks run beside these, using Maranget's algorithm to reject `case` expressions that miss a possible value or have a branch that can never match. Later phases rely on this: every decision tree they build is complete.
 
 ## Keeping the type checker's answers
 
-The solver knows only variables, placeholders that unification merges and fills in. The rest of the compiler wants types attached to expressions. The front end joins the two with numbers. Take a familiar polymorphic function:
+The solver and the rest of the compiler see types differently. The *solver* knows only variables, placeholders that unification merges and fills in. The *rest of the compiler* wants types attached to expressions. The front end joins the two with numbers. Take a familiar polymorphic function:
 
 ```elm
 twice : (a -> a) -> a -> a
@@ -87,19 +87,19 @@ Kernel functions are the second gap. A kernel is a built-in implemented in the h
 
 ## Identity comes from the solver
 
-Monomorphization needs to know when two occurrences of a type variable are the same variable, and names cannot tell it. The solver may prove `a` in one place equal to `b` in another, and two modules may both use `a` for unrelated things. So the repair step replaces every solver variable by its union-find root, giving variables proved equal one identity, and stamps every function type with the root it came from. Membership of Elm's built-in classes such as `number` and `comparable` is likewise read from the solver's record, not from the variable's name, because names do not survive unification.
+Monomorphization needs to know when two occurrences of a type variable are the same variable, and names cannot tell it. The solver may prove `a` in one place equal to `b` in another, and two modules may both use `a` for unrelated things. The repair step therefore replaces every solver variable by its union-find root, giving variables proved equal one identity, and stamps every function type with the root it came from. Membership of Elm's built-in classes such as `number` and `comparable` is likewise read from the solver's record, not from the variable's name, because names do not survive unification.
 
 These identities are integers, each wrapped in its own Elm type so that one kind cannot be passed where another is expected. Lambda ids and arrow ids are what monomorphization and [lambda-set specialization](/docs/lambda-set-specialization) use to track which functions flow to which calls.
 
 ## Plain data in compact files
 
-Later builds reload typed modules from the cache rather than checking them again, so everything the front end produces is plain data with an encoder and a decoder. Writing whole types and names out every time they appear makes those files enormous. Each file therefore stores every distinct string and every distinct type once, in tables, and refers to them by index. On the compiler's own source this made the cached typed files about fifty times smaller, and roughly halved the time spent parsing, checking and building. A format version at the start of each file makes a file from an older compiler fail to decode instead of being misread.
+Later builds reload typed modules from the cache rather than checking them again, so everything the front end produces is plain data with an encoder and a decoder. Writing whole types and names out every time they appear would make those files enormous. Each file stores every distinct string and every distinct type once, in tables, and refers to them by index. On the compiler's own source, this makes the cached typed files about fifty times smaller and roughly halves the time spent parsing, checking and building. A format version at the start of each file makes a file from an older compiler fail to decode instead of being misread.
 
 ## Shaped by running as Elm
 
-The compiler is Elm code. During [bootstrap](/docs/bootstrap) it runs under Node, and afterwards natively, and both have a bounded stack. Long chains of `let` bindings, operator applications or list patterns would overflow a traversal that recurses once per link. The constraint generator therefore walks each such chain in a self-tail-recursive loop, which Elm compiles to a plain loop that runs in constant stack, and recurses directly only where depth is bounded by what a person writes by hand, such as nested `case` expressions. The solver's main loop is written the same way.
+The compiler is Elm code. During [bootstrap](/docs/bootstrap) it runs under Node, and afterwards natively, and both have a bounded stack. Long chains of `let` bindings, operator applications or list patterns would overflow a traversal that recurses once per link. The constraint generator walks each such chain in a self-tail-recursive loop, which Elm compiles to a plain loop that runs in constant stack, and recurses directly only where depth is bounded by what a person writes by hand, such as nested `case` expressions. The solver's main loop is written the same way.
 
-The union-find store is an immutable array passed from step to step. A mutable store would be faster, but it depends on a usage contract the compiler cannot check, and Elm code must never observe mutation.
+The union-find store is an immutable array passed from step to step. A mutable store, as in most Haskell and OCaml type checkers, would be faster. We do not use one, because it depends on a usage contract the compiler cannot check, and Elm code must never observe mutation.
 
 ## Numbers shared with the runtime
 

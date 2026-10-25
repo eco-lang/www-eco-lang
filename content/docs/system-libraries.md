@@ -6,7 +6,7 @@ sectionOrder: 4
 order: 8
 ---
 
-Elm was built for the browser, so it has no way to read a file, start a process or listen on a socket. Eco adds one: `eco/system`, an Elm package for command-line programs and servers, whose functions end in C++ kernels for native code and JavaScript kernels for Node. Its API is a port of the Node library of Gren, a language close to Elm. A program written with it is still an ordinary Elm program: it describes work as tasks and commands, and the runtime does the work.
+Elm was built for the browser, and has no way to read a file, start a process or listen on a socket. Eco adds one: `eco/system`, an Elm package for command-line programs and servers, whose functions end in C++ kernels for native code and JavaScript kernels for Node. Its API is a port of the Node library of Gren, a language close to Elm. A program written with it is still an ordinary Elm program: it describes work as tasks and commands, and the runtime does the work.
 
 > **Background**
 >
@@ -74,7 +74,7 @@ There is no HTTP client. Elm's own `elm/http` already runs natively through [Elm
 
 ## Doing slow work off the eco thread
 
-Reading a file, waiting on a socket or running a TLS handshake is too slow to do on the eco thread, which runs every Elm task. But only the eco thread may touch the heap, because the [garbage collector](/docs/garbage-collector) allows one mutator and any allocation can move objects. So an `eco/system` kernel that returns a task follows the same pattern as `Process.sleep` in [Scheduler and services](/docs/scheduler-and-services). Calling it only builds a task binding. When the scheduler runs the binding, its body:
+Reading a file, waiting on a socket or running a TLS handshake is too slow to do on the eco thread, which runs every Elm task. Yet only the eco thread may touch the heap, because the [garbage collector](/docs/garbage-collector) allows one mutator and any allocation can move objects. An `eco/system` kernel that returns a task therefore follows the same pattern as `Process.sleep` in [Scheduler and services](/docs/scheduler-and-services). Calling it only builds a task binding. When the scheduler runs the binding, its body:
 
 1. copies every argument it needs out of the heap into plain C++ data, first, because the later steps can allocate and move the heap objects;
 2. parks the waiting task with the scheduler, which returns a token and takes a hold that keeps the program alive;
@@ -94,7 +94,7 @@ The services are long-lived objects on their own threads, started on first use a
 - One **reactor** thread, built on epoll on Linux and kqueue on macOS, serves every socket, TLS session, HTTP server connection and WebSocket.
 - **Signal** and **file-watch** services each wait for their operating system events.
 
-Sockets share one reactor rather than a thread per connection. One readiness thread scales to many connections, and it gives TLS, HTTP/1.1, HTTP/2 and WebSocket a single connection abstraction, with each protocol layered on top. The reactor files each readiness event under a slot and a generation number rather than the file descriptor, so an event meant for a closed handler is dropped even if the operating system reuses the descriptor number. A listener accepts connections into a queue even before Elm asks for the next one; accepting only on demand would leave a window in which a connection could be lost.
+Sockets share one reactor rather than a thread per connection, the same choice libuv makes for Node. In our view it is the right one: one readiness thread scales to many connections, and it gives TLS, HTTP/1.1, HTTP/2 and WebSocket a single connection abstraction, with each protocol layered on top. The reactor files each readiness event under a slot and a generation number rather than the file descriptor, so an event meant for a closed handler is dropped even if the operating system reuses the descriptor number. A listener accepts connections into a queue even before Elm asks for the next one; accepting only on demand would leave a window in which a connection could be lost.
 
 ## When a program exits
 
@@ -106,7 +106,9 @@ A program runs exactly while it is waiting for something it asked for: a sleep, 
 
 ## Two targets, one Elm layer
 
-Each module of both libraries has an Elm wrapper with the public API, a C++ kernel and a JavaScript kernel, returning the same shapes so one wrapper serves both targets. The JavaScript target of `eco/system` exists so that one end-to-end test suite checks both, and that suite is the library's specification. Its stream implementation is a port of the C++ stream state machine rather than a wrapper over Node's streams, because only the same state machine gives the same answers to the same tests. Where the targets really differ, the test says so with a directive, rather than the difference being hidden in an Elm wrapper. Every module is tested on Linux and macOS, where the end-to-end suite runs in continuous integration. Windows is not supported yet: the package builds there, but most IO functions report that they are not supported.
+Each module of both libraries has an Elm wrapper with the public API, a C++ kernel and a JavaScript kernel, returning the same shapes so one wrapper serves both targets. The JavaScript target of `eco/system` exists so that one end-to-end test suite checks both, and that suite is the library's specification. Its stream implementation is a port of the C++ stream state machine rather than a wrapper over Node's streams, because only the same state machine gives the same answers to the same tests. Where the targets do differ, the test says so with a directive, rather than the difference being hidden in an Elm wrapper.
+
+Every module is tested on Linux and macOS, where the end-to-end suite runs in continuous integration. Windows is not supported yet: the package builds there, but most IO functions report that they are not supported.
 
 > **Designs we didn't use.** Starting child processes with `fork` would copy the whole heap into a child that only wants to run another program, so Eco uses `posix_spawn`.
 
