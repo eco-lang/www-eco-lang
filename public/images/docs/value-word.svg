@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 805 300" width="805" height="300" role="img">
+<title>Layout of the 64-bit Elm value word</title>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#646464"/></marker></defs>
+<style>text{font-family:Inter,system-ui,sans-serif}.n{font-size:13px;fill:#242424}.l{font-size:11.5px;fill:#646464}.m{font-family:"Roboto Mono",monospace;font-size:12px;fill:#242424}.h{font-size:13px;font-weight:600;fill:#242424}</style>
+<text class="h" x="20.0" y="24.0" text-anchor="start">One Elm value outside a function body: a 64-bit word</text>
+<rect x="20.0" y="50.0" width="121.0" height="44.0" rx="4" fill="#F8F8F8" stroke="#BDBDBD" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text class="n" x="80.5" y="69.0" text-anchor="middle">padding</text>
+<text class="l" x="80.5" y="86.0" text-anchor="middle">63–53</text>
+<text class="l" x="80.5" y="112.0" text-anchor="middle">always 0</text>
+<rect x="141.0" y="50.0" width="110.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#BDBDBD" stroke-width="1.4"/>
+<text class="n" x="196.0" y="69.0" text-anchor="middle">ctor index</text>
+<text class="l" x="196.0" y="86.0" text-anchor="middle">52–43</text>
+<text class="l" x="196.0" y="112.0" text-anchor="middle">nullary ctor</text>
+<rect x="251.0" y="50.0" width="440.0" height="44.0" rx="4" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="471.0" y="69.0" text-anchor="middle">pointer</text>
+<text class="l" x="471.0" y="86.0" text-anchor="middle">42–3</text>
+<text class="l" x="471.0" y="112.0" text-anchor="middle">40-bit field</text>
+<rect x="691.0" y="50.0" width="44.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#BDBDBD" stroke-width="1.4"/>
+<text class="n" x="713.0" y="69.0" text-anchor="middle">ptr?</text>
+<text class="l" x="713.0" y="86.0" text-anchor="middle">2</text>
+<rect x="735.0" y="50.0" width="50.0" height="44.0" rx="4" fill="#FFFFFF" stroke="#BDBDBD" stroke-width="1.4"/>
+<text class="n" x="760.0" y="69.0" text-anchor="middle">const</text>
+<text class="l" x="760.0" y="86.0" text-anchor="middle">1–0</text>
+<text class="n" x="20.0" y="142.0" text-anchor="start">ptr? = 0: a heap object. The low 43 bits of the word are its address</text>
+<text class="n" x="20.0" y="160.0" text-anchor="start">(8-byte aligned, so the low 3 bits are already 0). No base register, no shift.</text>
+<text class="n" x="20.0" y="186.0" text-anchor="start">ptr? = 1: a constant held in the word itself, never traced by the collector:</text>
+<text class="m" x="36.0" y="210.0" text-anchor="start">0x4</text>
+<text class="n" x="190.0" y="210.0" text-anchor="start">False</text>
+<text class="m" x="36.0" y="230.0" text-anchor="start">0x5</text>
+<text class="n" x="190.0" y="230.0" text-anchor="start">True</text>
+<text class="m" x="36.0" y="250.0" text-anchor="start">0x6</text>
+<text class="n" x="190.0" y="250.0" text-anchor="start">Empty: shared by (), [], Nothing, "" and {}</text>
+<text class="m" x="36.0" y="270.0" text-anchor="start">0x7 | index &lt;&lt; 43</text>
+<text class="n" x="190.0" y="270.0" text-anchor="start">any other constructor with no fields</text>
+</svg>

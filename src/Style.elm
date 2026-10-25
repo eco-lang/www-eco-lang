@@ -562,6 +562,12 @@ docStyles =
         , Css.property "color" colors.text
         , Css.property "margin" "0 0 18px 0"
         ]
+    , Css.Global.class "eco-doc-figure"
+        [ Css.property "display" "block"
+        , Css.property "max-width" "100%"
+        , Css.property "height" "auto"
+        , Css.property "margin" "12px auto"
+        ]
     , Css.Global.class "eco-doc-blockquote"
         [ Css.property "border-left" ("3px solid " ++ colors.accent)
         , Css.property "background-color" "rgba(76, 175, 80, 0.04)"

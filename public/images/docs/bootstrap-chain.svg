@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="170 -0 544 834" width="544" height="834" role="img" aria-labelledby="t">
+<title id="t">The bootstrap chain from the stock Elm compiler to one native eco binary</title>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#646464"/></marker></defs>
+<style>text{font-family:Inter,system-ui,sans-serif}.n{font-size:13px;fill:#242424}.l{font-size:11.5px;fill:#646464}</style>
+<line x1="300.0" y1="48.5" x2="300.0" y2="98.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="308.0" y="77.2" text-anchor="start">stage 1</text>
+<line x1="300.0" y1="152.0" x2="300.0" y2="208.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="308.0" y="184.0" text-anchor="start">stage 2</text>
+<line x1="300.0" y1="262.0" x2="300.0" y2="326.5" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="308.0" y="298.2" text-anchor="start">stage 3</text>
+<line x1="362.1" y1="345.0" x2="497.2" y2="345.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<rect x="352.0" y="322.0" width="155.2" height="18" fill="#FFFFFF" fill-opacity="0.92"/>
+<text class="l" x="429.6" y="335.0" text-anchor="middle">stage 4: JS fixed point</text>
+<line x1="300.0" y1="363.5" x2="300.0" y2="433.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="308.0" y="402.2" text-anchor="start">stage 5</text>
+<line x1="300.0" y1="487.0" x2="300.0" y2="551.5" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="308.0" y="523.2" text-anchor="start">stage 6: native backend</text>
+<line x1="300.0" y1="588.5" x2="300.0" y2="653.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="308.0" y="624.8" text-anchor="start">stage 7</text>
+<line x1="402.8" y1="680.0" x2="523.1" y2="680.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<rect x="372.6" y="657.0" width="180.8" height="18" fill="#FFFFFF" fill-opacity="0.92"/>
+<text class="l" x="463.0" y="670.0" text-anchor="middle">stage 8: native fixed point</text>
+<line x1="300.0" y1="707.0" x2="300.0" y2="768.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="308.0" y="741.5" text-anchor="start">stage 9</text>
+<rect x="219.4" y="11.5" width="161.2" height="37.0" rx="6" fill="#F8F8F8" stroke="#BDBDBD" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text class="n" x="300.0" y="34.5" text-anchor="middle">stock Elm compiler</text>
+<rect x="212.0" y="98.0" width="176.0" height="54.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="300.0" y="121.0" text-anchor="middle">eco as JavaScript</text>
+<text class="n" x="300.0" y="138.0" text-anchor="middle">(built by stock Elm)</text>
+<rect x="186.1" y="208.0" width="227.8" height="54.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="300.0" y="231.0" text-anchor="middle">eco-boot.js</text>
+<text class="n" x="300.0" y="248.0" text-anchor="middle">(eco compiles itself to JS)</text>
+<rect x="237.9" y="326.5" width="124.2" height="37.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="300.0" y="349.5" text-anchor="middle">eco-boot-2.js</text>
+<rect x="497.2" y="318.0" width="205.6" height="54.0" rx="6" fill="#F8F8F8" stroke="#BDBDBD" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text class="n" x="600.0" y="341.0" text-anchor="middle">eco-boot-3.js</text>
+<text class="n" x="600.0" y="358.0" text-anchor="middle">must equal eco-boot-2.js</text>
+<rect x="182.4" y="433.0" width="235.2" height="54.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="300.0" y="456.0" text-anchor="middle">compiler as MLIR</text>
+<text class="n" x="300.0" y="473.0" text-anchor="middle">(lighter engine, fits in V8)</text>
+<rect x="230.5" y="551.5" width="139.0" height="37.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="300.0" y="574.5" text-anchor="middle">native compiler</text>
+<rect x="197.2" y="653.0" width="205.6" height="54.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="300.0" y="676.0" text-anchor="middle">native compiler, rebuilt</text>
+<text class="n" x="300.0" y="693.0" text-anchor="middle">by the native compiler</text>
+<rect x="523.1" y="653.0" width="153.8" height="54.0" rx="6" fill="#F8F8F8" stroke="#BDBDBD" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text class="n" x="600.0" y="676.0" text-anchor="middle">rebuilt again:</text>
+<text class="n" x="600.0" y="693.0" text-anchor="middle">must be identical</text>
+<rect x="215.7" y="768.0" width="168.6" height="54.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="300.0" y="791.0" text-anchor="middle">one eco binary:</text>
+<text class="n" x="300.0" y="808.0" text-anchor="middle">front end + backend</text>
+</svg>

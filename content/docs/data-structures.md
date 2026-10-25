@@ -1,89 +1,75 @@
 ---
-title: "Runtime Data Structures"
-description: "Strings, lists and byte sequences each have several heap forms, and the runtime picks one for every value it builds."
-section: "Theory"
-sectionOrder: 2
-order: 19
+title: "Runtime data structures"
+description: "Why an Eco String, List or Bytes value can take one of several heap forms, such as ropes, slices, ASCII strings and chunked lists, how the runtime chooses between them, and what the measurements said."
+section: "The runtime"
+sectionOrder: 4
+order: 4
 ---
 
-Strings, lists and byte sequences each have several heap forms, and the runtime picks one for every value it builds. A String is a flat array of UTF-16 code units, a large array whose payload is split from its header, a slice of another string, a rope joining two strings, or one of two all-ASCII UTF-8 forms. A List is a chain of cells that can mix single cons cells with views over dense arrays. Bytes is a flat buffer, a slice of one, or a large buffer split from its header. The empty value of all three is one shared constant, never a heap object. The forms exist so that the runtime can share structure where copying would cost too much and copy where sharing would cost more, under size thresholds that only ever change speed and memory, never results. Kernels and compiled code depend only on a value's content and on the length recorded in its header, never on its form, and only the runtime's own operations look inside. That boundary is what lets the runtime add a form without touching the kernels that use the type.
+In Elm a `String` is just a string. In Eco's heap it may be a flat array, a slice of another string, a rope joining two strings, or a compact all-ASCII form, and a `List` may mix single cons cells with views over dense arrays. The runtime picks a form for every value it builds, choosing between sharing and copying, and the choice only ever changes speed and memory, never results. Kernels and compiled code never see which form they hold, which is what lets the runtime add a form without rewriting the code that uses the type.
+
+> **Background**
+>
+> - A [kernel](/docs/glossary#kernel) is one of Elm's built-in functions, such as `String.append`; Eco's are written in C++.
+> - [Boxed and unboxed](/docs/glossary#boxed-and-unboxed): a list of `Int` can hold its numbers raw, with no pointer per element.
+> - A rope is a tree whose leaves are pieces of a string; appending two ropes allocates one node instead of copying.
 
 ## One meaning, many layouts
 
-Every form of a type means the same thing, and code outside the runtime cannot tell them apart. Two equal strings in different forms compare equal, order the same way, print the same and serialize the same. A list built from cons cells and the same list built as a chain of views behave identically everywhere. Any code that compares two values by their tags first must therefore send strings and lists on to a comparison of content, as the generic comparison in the Elm kernel does ([elm-kernel.md](/docs/elm-kernel)).
+Every form of a type means the same thing. Two equal strings in different forms compare equal, order the same way and print the same. Any code that compares two values by their tags first must therefore pass strings and lists on to a comparison of content.
 
-A String's header records its length in UTF-16 code units, whatever its form. `String.length`, slice arithmetic and rope bookkeeping all count in those units, so making the header field mean exactly that lets compiled code read a string's length inline with no test of the form, and lets a rope add its children's lengths whatever their encodings. The UTF-8 forms hold only ASCII, so for them the code-unit count and the byte count are the same number.
+A string's header always records its length in UTF-16 code units, whatever its form. `String.length` and slice arithmetic count in those units, so compiled code can read a length inline without testing the form, and a rope can add its children's lengths whatever their encodings.
 
-The forms can share structure because no published object is ever written again ([garbage-collector.md](/docs/garbage-collector)). A slice can point into a buffer, a rope into its children and a chunk view into an array, because none of them will change underneath it. The same fact rules some things out. A widened copy of a UTF-8 string cannot be cached on the original, and a list's dense array cannot gain elements after the list is visible.
+The forms can share structure only because no heap object is ever written after it is published (see [The garbage collector](/docs/garbage-collector)). A slice can point into another string's buffer, and a chunk view into an array, because neither will change underneath it.
 
 ## Strings
 
-Each string form answers a cost that a single flat array would pay.
-
-| Form | Layout | Why it exists | Built by |
+| Form | What it holds | Why it exists | When it is built |
 |---|---|---|---|
-| UTF-16 leaf (`Tag_String`) | header and inline code units | the plain form; one contiguous buffer | compiled code for non-ASCII literals; every UTF-16 result of an operation |
-| Large header (`Tag_LargeStringHeader`) | a 16-byte header in the nursery pointing at a payload that never moves | keeps large payloads out of the copying collector | allocation at the large-object threshold; operations treat it as a leaf |
-| Slice (`Tag_StringSlice`) | base string and offset | `slice`, `trim` and `uncons` share the buffer rather than copy it | slicing a long range |
-| Rope (`Tag_StringRope`) | left and right children, height, leaf count | repeated `++` on flat strings copies quadratically | `append`, `concat` and `join` above the flatten limit |
-| UTF-8 leaf (`Tag_StringUtf8Leaf`) | header and inline ASCII bytes | half the memory of UTF-16 for ASCII, and already the bytes UTF-8 output needs | ASCII literals, number and character conversions, ASCII results of operations, ASCII text read by kernels |
-| UTF-8 view (`Tag_StringUtf8View`) | base, offset and byte length | reading a string out of Bytes without a copy | the Bytes string decoder on long ASCII input; slices of UTF-8 strings; large ASCII results |
+| UTF-16 leaf | a header and inline UTF-16 code units | the plain, contiguous form | non-ASCII literals; any non-ASCII result |
+| Large header | a 16-byte header pointing at a payload that never moves | keeps big payloads out of the copying collector | at the large-object threshold |
+| Slice | a base string, an offset and a length | `slice`, `trim` and `uncons` share the buffer instead of copying | slicing more than 128 code units |
+| Rope | left and right children, height, leaf count | repeated `++` on flat strings copies quadratically | `append`, `concat`, `join` above 128 Ki code units |
+| UTF-8 leaf | a header and inline ASCII bytes | half the memory of UTF-16, and already the bytes UTF-8 output needs | ASCII literals, number conversions, ASCII results, text read from files and the network |
+| UTF-8 view | a base, an offset and a byte length | reading a string out of `Bytes` with no copy | decoding long ASCII strings from `Bytes` |
 
-The large-object space that holds large payloads belongs to the collector, and [garbage-collector.md](/docs/garbage-collector) explains it. What matters here is that a slice or view over a large string points at its header, never at its payload, because the header is what keeps the payload alive.
+The UTF-8 forms hold only bytes below 0x80. For ASCII text, the index of a code unit equals its byte offset, so `length`, `slice` and character access stay constant-time with no index translation, byte order equals UTF-16 order so comparison can use `memcmp`, and the bytes are already valid UTF-8, so a string moves between `Bytes` and `String` without a copy in either direction. Text with anything outside ASCII stays UTF-16 and behaves exactly as it would without these forms.
 
-Two rules keep slices shallow. A slice's base is always a leaf or a large header, and a UTF-8 view's base is always a byte buffer, a large byte header or a UTF-8 leaf. Slicing a slice adds the offsets and points at the deeper base, so a chain of slices never forms and a short slice never keeps a whole chain of objects alive. Ropes may mix UTF-8 and UTF-16 children.
+Two rules keep slices shallow. A slice's base is always a leaf or a large header, never another slice, so slicing a slice adds the offsets and points at the deeper base. And a short slice is copied rather than shared, because a short slice that is kept would otherwise hold a large buffer alive.
 
-The UTF-8 forms hold only bytes below 0x80. For ASCII text the index of a code unit equals its byte offset, so `length`, `slice` and `charAt` stay constant-time with no index translation. Byte order then equals UTF-16 order, so comparison can use `memcmp`. No lone surrogate can arise, and the bytes are already valid UTF-8, so a string moves between Bytes and String without a copy in either direction. Text containing anything outside ASCII stays UTF-16 and behaves exactly as it would without the UTF-8 forms. Creating a UTF-8 form requires bytes known to be ASCII, and the scanner in `Utf8.hpp` that checks them validates exactly as the Bytes decoder does, so a UTF-8 string never holds content the decoder would reject.
+### How `append` and `slice` choose
 
-### When each form is built
+In outline (checked against the runtime's string operations):
 
-The thresholds choose only between sharing and copying, and the build rules for `append` and `slice` show where each form comes from. The pseudocode is checked against `append` in `StringOps.hpp` and `slice` in `StringOps.cpp`.
-
-```
+```text
 append(a, b):
-  if a or b is empty: return the other            # no new object
+  if a or b is empty: return the other                # no new object
   n = len(a) + len(b)
-  if n > string_flatten_limit: return makeRope(a, b)
-  if a and b are UTF-8: return ASCII result of bytes(a) ++ bytes(b)
-  data = units(a) ++ units(b)                      # C-heap buffer
-  if every unit < 0x80: return ASCII result(data)  # chain healing
-  return UTF-16 leaf(data)
+  if n > 128 Ki units: return a rope node (a, b)
+  if a and b are UTF-8: return an ASCII leaf of bytes(a) ++ bytes(b)
+  data = units(a) ++ units(b)
+  if every unit < 0x80: return an ASCII leaf(data)    # "chain healing"
+  return a UTF-16 leaf(data)
 
-slice(s, start, end):                              # after clamping
-  empty range -> Empty;  whole range -> s
-  if s is UTF-8: k <= tiny ? copy ASCII leaf : view over s's base
-  if k <= string_tiny_slice_limit: copy (ASCII content -> UTF-8 leaf)
-  leaf or large header: makeSlice(s, start, k)
-  slice:  makeSlice(s.base, s.offset + start, k)   # no slice chains
-  rope:   recurse into the child holding the range, or
-          makeRope(slice(left, start, |left|), slice(right, 0, end - |left|))
+slice(s, start, end):
+  empty range -> ""; whole range -> s
+  if k <= 128 units: copy (an ASCII leaf if the content is ASCII)
+  leaf or large header: a slice of s
+  slice: a slice of s.base at s.offset + start         # no slice chains
+  rope:  recurse into the child holding the range, or join two sub-slices
 ```
 
-Notice that a rope appears only above the flatten limit, which is 128 Ki code units by default. Below it, everyday strings stay on the flat path: `append`, `concat` and `join` copy into one leaf, and kernel loops, UTF-8 encoding and the parser get one contiguous buffer. Notice also that a slice of at most 128 code units is copied. Below that size a slice's own metadata is not worth having, and a short slice that is kept would otherwise hold a large buffer alive. The limit is low so that longer ranges, such as the substrings the parser takes, are shared rather than copied.
+Notice that ropes appear only above the flatten limit, so everyday strings stay flat and kernel loops, UTF-8 encoding and the parser get one contiguous buffer. Notice also the "chain healing" line: an ASCII result is narrowed back to UTF-8 even when an input was UTF-16. Without it, one UTF-16 operand in a chain of appends would widen every result after it.
 
-`concat` and `join` build a rope in one pass with a merge stack: each part is pushed, and the top two are merged while the top is no longer than the one below it. Folding left with `++` would give a rope that leans to one side, and walking that is quadratic, while the merge stack keeps the rope balanced in linear time. Ropes are not rebalanced afterward. The tests for rebalancing are evaluated in the one function that decides whether to flatten, but the branch that would act on them is empty, so a long chain of separate `++` calls can stay tall.
-
-`uncons` always returns a slice or view for the rest of the string and skips the copy of short ranges. A fold that calls `uncons` repeatedly then allocates in proportion to the string's length in total, instead of copying the rest at every step.
-
-The operations that make a new string out of an old one, such as `toUpper`, `reverse`, `repeat`, `pad`, `map`, `filter` and `cons`, allocate one flat result and fill it straight from the source's segments. When the source is ASCII the result is ASCII too, and it comes back as a UTF-8 string.
-
-ASCII results are kept in UTF-8 wherever an operation can see that they are ASCII, including results computed from UTF-16 inputs. Without that, one UTF-16 operand in a chain of appends would widen every result after it. The narrowing happens in the constructors that see the content: character conversion, `cons`, short slices and the flat result of mixed inputs (the "chain healing" in the pseudocode).
-
-### Reading a string
-
-Readers switch on the header's tag. `charAt` follows a rope down by comparing the index with the left child's length, in a loop rather than by recursion, so a tall rope cannot overflow the C stack. The segment walker, `forEachSegmentEx`, hands the caller every contiguous run of the string in order, as UTF-16 or as ASCII bytes, and keeps an explicit stack for ropes. Its UTF-16-only wrapper, `forEachSegment`, widens ASCII runs through a small stack buffer, so the pointer it passes is valid only inside the callback.
-
-Some callers need one contiguous UTF-16 array. They call `ensureFlat`, which goes through the single function that decides whether to flatten. Leaves and large headers pass through. UTF-8 forms are always widened, because these callers index UTF-16 code units. Slices and ropes up to the flatten limit are copied into a leaf, and larger ones are returned unchanged for the caller to walk. Because the widened copy cannot be cached on an immutable string, a caller that calls `ensureFlat` repeatedly on a UTF-8 string widens it every time. The parser would do that on every primitive, so it reads the bytes of a UTF-8 string directly instead.
-
-Equality and comparison never allocate and never flatten. Two UTF-16 leaves, two UTF-8 strings, or two strings that are each one contiguous run are compared with `memcmp`. Any other pair is compared by walking both sides' segments together, unit by unit, widening ASCII bytes as it goes. That avoids both a copy and a call to `charAt` per character.
+`concat` and `join` build a balanced rope in one pass with a merge stack. Folding left with `++` would build a rope that leans to one side, and walking that is quadratic.
 
 ### The empty string
 
-The empty string is the merged empty constant, the same word as `[]`, `Nothing`, `()`, `{}` and empty Bytes ([value-representation.md](/docs/value-representation) gives its encoding). Every constructor returns that constant for a length of zero, and a rope with one empty side returns the other side. A zero-length heap object would consist of its 8-byte header alone, and the collector needs every object to be at least 16 bytes. Keeping one empty value also lets equality treat the constant as the only empty string: equality compares words when either side is the constant, so a heap string of length zero would compare unequal to `""`, and ordering puts the constant below any heap string. The type checker ensures that a shared constant is compared only with values of its own type.
+`""` is not a heap object at all. It is the shared Empty word, the same word as `[]`, `Nothing`, `()` and `{}` ([Value representation](/docs/value-representation) gives the encoding). Every constructor returns that word for a length of zero, so no zero-length heap string exists and equality can treat the word as the only empty string.
 
 ## Lists
 
-`::` always allocates a 24-byte cons cell. Functions that build a whole list at once may instead produce a chain of chunk views, each over a dense array called a backing, and a list's spine may mix cells and views freely.
+`x :: rest` always allocates a 24-byte cons cell: a header, the head, and a pointer to the tail. Functions that build a whole list at once may instead produce a chain of *chunk views*, each over a dense array called a backing, and a list's spine can mix cells and views freely (from the runtime's heap definitions):
 
 ```cpp
 typedef struct {
@@ -102,74 +88,33 @@ typedef struct {
 } ListBacking;
 ```
 
-From `runtime/src/allocator/Heap.hpp`. Notice that a view's `len` is the length of the whole list from that view onward, not the length of its own run. `length` can therefore stop at the first view it meets, and each view in a chain must carry a length that shrinks by the run before it. Notice also that a backing has one element kind for all its slots. The collector can then scan a backing from its header alone: a backing of pointers is scanned over every slot, and a backing of unboxed Int, Float or Char is never scanned.
+Notice that a view's `len` is the length of the whole list from that view onward, not the length of its own run, so `List.length` can stop at the first view it meets. Notice also that a backing has one element kind for all its slots. The collector can scan a backing from its header alone, and a backing of raw `Int`s is never scanned at all.
 
-Cons stays a cell because chunking `::` would cost more than it saves. A view is larger than a cell, and every compiled `x :: rest` pattern match would have to allocate a view for the tail. The savings, fewer spine objects and less copying in the nursery, come from bulk builders, and measurement shows that almost all cons cells in real programs are built by compiled loops that fold `::` over a list. So chunks come from compiled code as well as from kernel builders. The compiler rewrites elm/core's `reverse`, `append`, `concat`, `take` and `drop` into kernel calls, and loops that accumulate with `::` into pushes onto a rooted scratch stack that one runtime call turns into a list. [global-optimization.md](/docs/global-optimization) explains why those elm/core functions are kept out of inlining, and [lowering-passes.md](/docs/lowering-passes) covers the loop rewrite.
+`::` stays a cell because chunking it would cost more than it saves: a view is larger than a cell, and every compiled `x :: rest` pattern would have to allocate a view for the tail. The savings come from bulk builders. The compiler rewrites elm/core's `reverse`, `append`, `concat`, `take` and `drop` into kernel calls, and loops that accumulate with `::` into pushes onto a scratch stack that one runtime call turns into a list. A batch becomes chunk views only when it has at least four elements of the same kind and fits comfortably in the nursery.
 
-A batch becomes a chain of views only when chunks are on for the program, it has at least four elements, every element has the same kind, and the whole chain fits in a quarter of the nursery. Otherwise it becomes cells. The builder `listChunkChain` splits a batch over as many backings as it needs, each below the large-object threshold, and links them from the tail forward. Every backing and view is created with the builder bit set. The caller then fills them through a chain writer with no allocation in between, and clears the bit with `finishChunkChain` before the list escapes.
+Building a chunk chain has to respect the collector. With no write barrier, a backing that was promoted to the old generation before it was filled would end up holding young pointers that nothing records. So every backing and view is created with a *builder* bit set, which keeps it young; the builder fills the chain with no allocation in between and clears the bit before the list escapes.
 
-The builder steps come from the absence of a write barrier. A minor collection in the middle of construction could age a backing, and a second could promote it, before it was filled, and filling it afterward would write nursery pointers into an old object that nothing records. The builder bit keeps the chain young until it is finished. Builders are never promoted, so a chain must fit in a fraction of the nursery, which is the quarter-of-the-nursery test. No reason is known for the cap that keeps each backing below the large-object threshold. The comment beside it says a larger backing would be born in the old generation, but the allocator places every large object that may hold pointers in young space ([garbage-collector.md](/docs/garbage-collector)).
-
-Chunk production is one switch for the whole program, because compiled code reads list cells inline. A kernel that returned a view to compiled code that knows only cons cells would be misread. The program's entry point turns chunks on only when the program was compiled for them, and in such a program compiled head and tail projections test for a cell and call the runtime for a view. Kernels therefore produce views exactly when compiled code can read them.
-
-Kernels walk lists through cursors in `HeapHelpers.hpp`: one for walks that do not allocate, one that roots the spine and re-reads it after every callback that may allocate, and one that collects spine nodes for `foldr`. `drop` skips a whole run per view and makes one view for a drop that stops inside a run. `reverse`, `append` and `concat` count their input first and fill one chain directly.
+Chunked lists are one switch for the whole program, because compiled code reads list cells inline. A kernel that returned a view to compiled code that only knew cons cells would be misread. In a program compiled for chunks, compiled head and tail projections test for a cell and call the runtime for a view.
 
 ## Bytes
 
-Bytes has three forms: a flat buffer whose header records the byte count, a slice with a base and an offset, and a large buffer split from its header like a large string. Empty Bytes is the shared empty constant. A slice of fewer than 32 bytes is copied, because below that size the slice header wastes more space than the copy, and a slice of a slice points at the deeper base. Readers resolve any form to a pointer and a length with `byteBufferView`, and the operations in `BytesOps` count first, allocate once and then fill.
-
-Strings and Bytes meet without copying in two places. Decoding a string from ASCII bytes returns a UTF-8 view over the source buffer. Encoding a UTF-8 string is a `memcpy`, and its encoded width is its length. Compiled encoders and decoders that write and read buffers directly belong to [bytes-fusion.md](/docs/bytes-fusion).
-
-Arrays have one form, and their layout is described in [value-representation.md](/docs/value-representation).
+`Bytes` has three forms: a flat buffer, a slice of one, and a large buffer split from its header like a large string. Empty `Bytes` is the shared Empty word. Strings and `Bytes` meet without copying in two places: decoding ASCII bytes as a string returns a UTF-8 view over the source buffer, and encoding a UTF-8 string is a `memcpy`. Compiled encoders and decoders that work on buffers directly are the subject of [Bytes fusion](/docs/bytes-fusion).
 
 ## Who may look inside
 
-Outside the runtime, strings are reached only through the `StringOps` interface: length, `charAt`, conversion to a C++ string, `ensureFlat`, and the test for UTF-8 with access to its bytes, which the parser uses. A kernel may read a flat leaf's code units directly only after `ensureFlat`. Compiled code reads the length from the header inline and calls `charAt` as a call that cannot collect, and every other string operation is a call into the kernel or the runtime. Lists are reached through the cursors and the list builders, and Bytes through `byteBufferView`.
+Outside the runtime, strings are reached only through a small interface: length, character access, conversion, a call that returns a flat UTF-16 buffer, and a test for UTF-8 with access to its bytes. Lists are reached through cursors and list builders, and `Bytes` through a call that returns a pointer and a length. Because kernels read strings only through these functions, a new string form changes kernels only where they create strings. Nothing checks this boundary mechanically; review and tests that run every operation on every form keep it.
 
-The boundary is what makes an added form cheap. Because kernels read strings only through these functions, an added string form changes kernels only where they create strings. Lists keep the same boundary through the cursors and builders, and a list form that bypassed it would have to be taught to every kernel list walker and to the compiled projections together. Nothing checks the boundary mechanically; it is kept by review and by tests that run every operation on every form and require the results to agree.
+## What chunked lists are worth
 
-The kernel decides what an operation means, and the runtime decides how the value is stored. [elm-kernel.md](/docs/elm-kernel) covers the kernels themselves.
+On the compiler compiling itself, chunked lists cut cons cells by roughly 50%, all objects by nearly 5% and list spine bytes by approximately 25%. Wall time is about the same with and without them, but minor-collection time and peak memory are lower with them, so they are on by default. This fits a general pattern: on this workload, cutting allocation does not move wall time, but cutting promotion into the old generation does.
 
-## Holding values across an allocation
+> **Designs we didn't use.** We tried *promotion-time* list chunking: when cons cells survive into the old generation, pack runs of them into dense chunks. The idea needs long runs to pay off, but the runs of cons cells that survive turned out to be very short, most of them a single cell, and the measured compile ran slower, so it was reverted.
 
-Every operation here is C++ that the stack maps cannot see, so it must not keep a raw pointer to a heap object across an allocation: the allocation may collect and move the object. The parent document gives the general rule ([runtime.md](/docs/runtime)). The code keeps it with five idioms, each of which prevents a kind of bug that this code has had.
+## Further reading
 
-1. Pass the live handles to the allocation call itself, in an array of roots. The allocator roots them only on its slow path, and the caller reads the moved values back from the array. The slice, rope and view constructors, `concat` and `join` do this.
-2. Wrap the raw pointer in a handle, root the handle with a stack guard for the allocation only, then resolve it again before reading. Every allocating string transform has this shape.
-3. Copy what is needed to the C stack or the C heap before allocating.
-4. Allocate everything first, then fill without allocating. The blank-string allocators and `listChunkChain` return raw write pointers that are valid only until the next allocation.
-5. Root a buffer of heap values with one record for the whole buffer, never one per element. One record per element overflows the shadow stack of 65,536 records on a large list, and a build check rejects root pushes inside loops.
-
-## References
-
-Parent: [runtime.md](/docs/runtime). Related: [garbage-collector.md](/docs/garbage-collector) (tracing, the large-object space, builders, rooting machinery), [value-representation.md](/docs/value-representation) (embedded constants, element kinds, array layout), [elm-kernel.md](/docs/elm-kernel) (kernel code, the JSON heap form), [bytes-fusion.md](/docs/bytes-fusion) (fused encoders and decoders), [lowering-passes.md](/docs/lowering-passes), [global-optimization.md](/docs/global-optimization), [mlir-generation.md](/docs/mlir-generation) (compiled list producers).
-
-Code (`runtime/src/allocator/` unless noted):
-
-- `StringOps.hpp`: the tag helpers, `forEachSegmentEx`, `charAt`, `toStdU16String`, `append`, the transforms, inline `equal` and `compare`.
-- `StringOps.cpp`: `makeSlice`, `makeRope`, `makeUtf8View`, `makeUtf8LeafFromBytes`, `allocAsciiOut`, `maybeFlattenOrRebalance`, `slice`, `buildBalancedRope`, `concat`, `join`, `uncons`, `equalSlow`, `compareSlow`.
-- `ListOps.hpp`, `ListOps.cpp`: `chunkEligible`, the chain fills of `reverse`, `append` and `concat`, `drop` over views.
-- `HeapHelpers.hpp`: the "GC Rooting Patterns" header, `listChunkChain`, `finishChunkChain`, the chain writers, `ListCursor`, `RootedListCursor`, `ListBackwardCursor`, `listFromUnboxables`, `makeByteBufferSlice`, `byteBufferView`, `flatStringView`.
-- `BytesOps.hpp`, `BytesOps.cpp`: Bytes operations and UTF-8 encoding and decoding.
-- `Utf8.hpp`: `scan`, `allAscii`, `widenAscii`.
-- `Heap.hpp`: the tags and every structure above. `AllocatorCommon.hpp`: threshold defaults (`string_flatten_limit`, `string_tiny_slice_limit`, `utf8_view_min_len`, `rope_max_height`, `rope_leaf_count_limit`, `rope_min_leaf_size`, `utf8_strings_enabled`), settable from `heap-config.json`.
-- `RuntimeExports.cpp`: `eco_enable_list_chunks`, `eco_scratch_finish`, `eco_list_head_hybrid`, `eco_list_tail_hybrid`. The compiler option `list.chunks` (`compiler/src/Compiler/Eco/Config.elm`) is on by default.
-- `runtime/src/codegen/Ops.td`: `eco.string.length` and `eco.string.code_unit_at`.
-- `elm-kernel-cpp/src/core/Utils.cpp`: the generic `compare`, which sends strings to `StringOps::compare`.
-- Tests: `test/allocator/StringOpsTest.cpp`, `Utf8StringTest.cpp`, `Utf8Test.cpp`, `ListOpsTest.cpp`, `ChunkedListTest.cpp`, `BytesOpsTest.cpp`. `check-root-bounded.py` rejects root pushes in loops.
-
-Documents:
-
-- `design_docs/utf8-string-encoding-investigation.md`: the UTF-8 choices and the alternatives rejected.
-- `plans/string-rope-slice-representation.md`, `plans/chunked-list-representation.md`, `plans/utf16-seed-elimination.md`: the design records.
-
-Invariants (`design_docs/invariants.csv`):
-
-- HEAP_025: the six string forms and string access through the runtime; equality and comparison never flatten. HEAP_032: the UTF-8 forms.
-- HEAP_010: the empty constant. HEAP_071: no zero-length objects, so Empty is the only empty string.
-- HEAP_037, HEAP_038, HEAP_039, CGEN_070: chunked lists, backing size, the program-wide switch and compiled projections.
-- HEAP_026, HEAP_081: large split payloads.
-- HEAP_019, REP_HEAP_002: element kinds.
-- HEAP_SNAPSHOT_001, HEAP_BUILDER_001 to HEAP_BUILDER_003, HEAP_040: immutability, builders and the list scratch stack.
-- CGEN_039, BFOPS_030 to BFOPS_032: compiled code's access to strings and Bytes.
-- FORBID_HEAP_005: no conclusion from differing pointer words.
+- [The garbage collector](/docs/garbage-collector) — builders, the large-object space and why published objects never change.
+- [Value representation](/docs/value-representation) — the Empty word and element kinds.
+- [Kernels](/docs/kernels) — the C++ functions that build these values.
+- [Bytes fusion](/docs/bytes-fusion) — encoders and decoders compiled straight to buffer reads and writes.
+- The full design document: [Runtime data structures theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/runtime/data-structures.md)
+- Source: [`runtime/src/allocator`](https://github.com/eco-lang/eco-compiler/tree/master/runtime/src/allocator)

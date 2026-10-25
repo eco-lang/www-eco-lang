@@ -1,152 +1,193 @@
 ---
-title: "Verification"
-description: "Eco knows it is correct by giving each class of bug the cheapest check that can catch it."
-section: "Theory"
-sectionOrder: 2
-order: 28
+title: "How we know it works"
+description: "How Eco is tested, from checkers that walk the compiler's intermediate forms to whole programs, hand-written MLIR fixtures, property tests on random heaps and weak-memory model checking, each layer aimed at the bugs the others cannot see."
+section: "Getting it right"
+sectionOrder: 5
+order: 1
 ---
 
-Eco knows it is correct by giving each class of bug the cheapest check that can catch it. The compiler's intermediate forms are checked structurally against the numbered invariants, without running any program. Whole Elm programs carry their expected output in their own source and run on the JIT and AOT paths, the system library's programs on JavaScript too, and the bootstrap compilers must agree with each other byte for byte. Hand-written MLIR files pin each lowering pass to expected text. The runtime has unit tests and property tests over generated heaps. The collector's concurrency is described in formal models that a model checker explores exhaustively, and a build step warns when the code a model describes changes. Every one of these layers serves the invariants catalog: a test exists to move an invariant from written down to tested or enforced.
+A compiler bug is cheapest to find with the check closest to where it was made. A phase that breaks its contract can still produce a program that prints the right answer, a wrong lowering of one operation can hide among the hundreds a real program uses, and a race between collector threads may show up once in a million runs. So Eco has no single test suite. Each class of bug gets the cheapest check that can catch it, and no layer tries to catch everything.
 
-## Each bug class meets its cheapest check
+> **Background**
+>
+> - [MLIR](/docs/glossary#mlir): the compiler framework whose textual form sits between Eco's Elm-written front end and its C++ back end.
+> - [SSA](/docs/glossary#ssa): the form in which every value is defined exactly once and referred to by name.
+> - [JIT and AOT](/docs/glossary#jit-and-aot): running compiled code straight from memory, or producing a native executable first.
+> - [Fixed point](/docs/glossary#fixed-point): a compiler that, rebuilt with itself, produces itself again byte for byte.
+> - [Model checking](/docs/glossary#model-checking): exploring every interleaving of a small concurrent system to see whether a property can fail.
 
-A bug is cheapest to find with the check closest to where it was made. A compiler phase that breaks its contract can still produce a program that prints the right answer, so a test that looks only at output never sees the break, while a test that walks the phase's output sees it at once. A wrong lowering of one operation hides among the hundreds of operations a real program uses, but a ten-line MLIR file shows it directly. A race between collector threads may show up once in millions of runs, and only a model checker that tries every interleaving at small sizes reliably reaches it. So each class of bug gets its own kind of check, with its own oracle (the thing that decides whether a result is right), and no layer tries to catch everything.
+## What each layer can see
 
-The layers share as much machinery as they can. One corpus of Elm programs feeds several runners. One parser reads the expected-output lines for every runner that uses them. One harness runs each case in its own child process. A fix to the shared machinery reaches every layer, and when two runners disagree on the same source, the disagreement is itself a bug report.
-
-## What each layer catches and misses
-
-When a developer decides where a test belongs, the question is what each layer can see. The table compares the six layers on that.
+The useful question about a test is what it can see and what it cannot. This table is how we decide where a new test belongs.
 
 | Layer | Catches | Misses |
 |---|---|---|
-| Compiler invariant tests | A broken intermediate form, at the phase that broke it | Anything about the running program; details of the MLIR text |
-| Whole-program tests | Wrong output, crashes, collector bugs under real code | Invariant violations that happen to give the right output; rare thread schedules |
-| Agreement between runners and stages | Divergence between back ends or bootstrap stages; nondeterminism | Bugs that every stage shares identically |
-| MLIR and lowering tests | A wrong lowering of one operation or pattern; gaps in the dialect's verifiers | Whether the compiler emits that MLIR for real programs |
-| Runtime unit and property tests | Allocator and kernel logic on generated heaps | Interleavings of concurrent threads |
-| Formal models and race tools | Protocol-level races at small sizes | Bugs outside the modeled code; drift in files the canary does not pin |
+| Checkers over the compiler's intermediate forms | A broken intermediate form, at the phase that broke it | Anything about the running program |
+| Whole programs with expected output | Wrong output, crashes, collector bugs under real code | Contract violations that happen to give the right output; rare thread schedules |
+| Agreement between back ends and bootstrap stages | Divergence between two compilers or two back ends; nondeterminism | Bugs that every stage shares identically |
+| Hand-written MLIR fixtures | A wrong lowering of one operation; inputs no Elm program can produce | Whether the compiler ever emits that MLIR |
+| Property tests on random heaps | Values lost, moved or corrupted by a collection | Races between threads |
+| ThreadSanitizer, GenMC and the formal models | Data races, wrong memory orders, protocol races at small sizes | Bugs outside the modelled code; code too large for the checker |
 
-Most of these tests are compiled by the compiler they check. A bug present in every stage of the compiler can therefore pass every other layer, which is why agreement between the bootstrap stages counts as a layer of its own.
+Most of these tests are compiled by the compiler they check, so a bug present in every stage of the compiler could pass all of them, which is why agreement between stages counts as a layer of its own.
 
-## The five suites
+## Checkers that walk the compiler's output
 
-Five suites hold the tests. They run from the compiler's own forms, out to whole programs, then down through the back end to the runtime and its threads. Each has its own document. Agreement between runners, the static scripts and the shared harness belong to no single suite.
+The compiler is written in Elm, and its tests are too. A shared corpus of small Elm programs, built as syntax trees rather than source text, is compiled through the same list of whole-program steps that `eco make` runs. Then one checker per rule walks the form a phase produced: the canonical syntax tree, the typed graph, the monomorphic graph, the globally optimized graph, or the Elm data structure the compiler builds just before printing MLIR. A checker never runs the program. It asks a question that must hold for every program, such as whether any SSA name is defined twice.
 
-### The compiler
+```elm
+expectSsaUniqueness : Src.Module -> Expectation
+expectSsaUniqueness srcModule =
+    case runToMlir srcModule of
+        Err err ->
+            Expect.fail ("Compilation failed: " ++ err)
 
-The Elm-written compiler is tested by running one shared corpus of small Elm source programs through a single pipeline driver, which compiles them the way `eco make` does, and applying one checker per invariant to the intermediate forms. The tests run under elm-test-rs, an Elm test runner, on the JavaScript build of the compiler, so they need no native toolchain. A small set of unit tests covers the encoders, parsers and data structures the pipeline relies on. See [compiler-tests.md](/docs/compiler-tests).
-
-The checkers walk the canonical syntax tree, the typed optimized graph, the monomorphic graph, the output of global optimization and the Elm-side MLIR syntax tree. They never run the program, because each phase has a contract and a violation can leave every program's output unchanged for a long time. Walking the form finds the violation in the phase that caused it.
-
-The driver reaches the compiler only through the same list of whole-program steps that the build uses. A test pipeline of its own can choose a different engine or skip passes, and then tests pass on a configuration no user runs. A static script fails `elm-tests` if the test harness calls the compiler any other way.
-
-The suite is kept small on purpose. Random primitive values reach no code that a single value does not, because the compiler treats `42` and `7` alike, so fuzzing covers only the structure of programs. Each invariant is checked over every module in one bulk test, since one test per case exhausts the runner's memory. Coverage reports show which shapes of syntax tree the corpus still misses, and those guide what to add.
-
-### Whole programs
-
-Whole Elm programs are checked by compiling each one to MLIR with the real compiler, running it in its own freshly spawned process, and matching its output (and for system programs its exit status) against expected-output lines written in the program's own source. The same corpus is reused by several runners that differ in what they prove: the JIT runner for behavior, the stress runner for long runs under the collector, the JavaScript and AOT runners for agreement between back ends, and the conformance scripts for compliance with third-party protocols. See [program-tests.md](/docs/program-tests).
-
-Printed output is the oracle because a whole program's correct behavior is a short, known list of lines. A test program prints values with `Debug.log` and states what it expects in comments that begin `-- CHECK:` or `-- CHECK-NOT:`. No reference implementation is needed, and the same file runs unchanged on every back end. Elm's own formatting of logged values is part of the oracle, so a change to that formatting changes what every test expects.
-
-### MLIR and lowering
-
-Codegen tests are small hand-written MLIR files, one property each, that feed eco-dialect or byte-fusion-dialect MLIR straight into the back end or the in-process JIT and assert on the output text with `CHECK` lines in the style of LLVM's FileCheck. The byte-fusion dialect is the one behind fused encoding and decoding of Elm's `Bytes`. These tests pin the lowering passes and the verifier rules, including the ones the Elm front end never exercises, such as limits, rejections and malformed input, without needing the Elm compiler. See [codegen-tests.md](/docs/codegen-tests).
-
-The files run through a C++ driver inside the test executable, not through a script. A standalone script that pipes MLIR through external tools cannot work here: its separate JIT cannot resolve the runtime's accessor functions, it scores expected failures and negative tests wrongly, and it needs tools from outside the build. Tests that must be rejected are marked in the file and scored by the driver. A file marked as an expected failure is skipped, because the driver has no mode in which a test runs and is expected to fail.
-
-### The runtime
-
-The runtime is tested in layers, each aimed at what the layer above cannot see. Property tests run the real heap on the production nursery. Standalone harnesses run the real allocator under ThreadSanitizer, which detects data races. GenMC, a model checker for C and C++ under weak memory ordering, checks the memory orders the code uses. Guard tests pin every known concurrency defect. The formal models are the specification these layers check the code against, and platform tests cover the process-wide services in spawned child processes. See [runtime-tests.md](/docs/runtime-tests).
-
-The runtime's unit tests are linked into the same executable as the codegen tests and the whole-program JIT tests, because the allocator is a single object per process. The unit tests and the JIT tests then run against the same allocator, and its statistics accumulate across both. A debug-only heap validator walks the heap during these runs to catch corruption close to its cause.
-
-### The collector's concurrency
-
-The formal models are the collector's concurrency rules in a form a model checker can run. Small TLA+ models cover each concurrent protocol. Some cover marking: snapshot marking, and work stealing with its termination. Some cover moving objects: forwarding, promotion with the mark bitmap, and concurrent tenuring. The rest cover threads and memory: the helper-pool lifecycle and fork, page work and lock order, and the block lifecycle. A model checker explores each one exhaustively at small sizes. Weak-memory drivers, checks of traces from real runs against the models, and a hash canary tie the models to the C++. The models do not prove the C++ correct. They find design bugs early, and the canary reports when the code they describe changes. See [concurrency-models.md](/docs/concurrency-models).
-
-Ordinary tests cannot reach the interleavings that cause collector races, because those are rare schedules that a test run almost never produces. A model explores all of them at small sizes. Each model comes with deliberately broken variants, called mutants, that the checker must reject, which shows the model is able to fail at all.
-
-The canary is a build step that compares hashes of the allocator source files against the pins recorded beside the models. A mismatch is a warning by default, and a build setting turns it into a build failure. Either way, a mismatch means the developer reads the model it names and brings model and code back into agreement before touching the hash.
-
-When a concurrency defect is found, it goes into a register and gets a guard that replays it. While the defect is open, the guard is an expected failure, and an expected failure that starts passing fails the run. Once the defect is fixed, the guard becomes a regression guard, so every known defect stays pinned after its fix.
-
-## Agreement between runners and stages
-
-Several executions of one corpus form a layer of their own, and their oracle is agreement. The JIT runner, the AOT runner, the JavaScript runner and the bootstrap compilers all consume the same Elm sources, so any difference between them is a bug, found without anyone writing down the right answer. The equivalence check compiles every whole-program test source twice, once with the JavaScript build of the compiler from the second bootstrap stage and once with the native build from the sixth, and compares the binary MLIR byte for byte. The bootstrap adds fixed points: a compiler that rebuilds itself must produce identical output, for both the JavaScript and the native compiler.
-
-Two gates put these checks early in the bootstrap. The JIT gate runs the whole-program tests right after the first stage is built. The AOT gate runs them after the JavaScript compiler reaches its fixed point, compiling each program to a native executable. Run in that documented order, a back-end regression is pinned to the stages before the gate that caught it and is reported before the slow self-compiles begin. The gates are separate targets, not dependencies of the chain: the aggregate bootstrap target does not run them, and continuous integration runs the AOT gate after the whole bootstrap.
-
-## Cheap scripts before the build
-
-A few scripts search the source for one structural rule each and run before anything is built. They check that code which pushes collector roots does so a bounded number of times, that large objects are reached only through accessor functions, and that kernel source files sit in the right libraries. A search cannot prove a rule, but it catches the common way of breaking one in seconds. The script that keeps the compiler tests on the production steps belongs to the same family and runs with `elm-tests`.
-
-## One harness for every runner
-
-Three pieces of test machinery are shared across layers, so a fix in one reaches every runner.
-
-The first is the parser for `CHECK` directives, used by the codegen tests, the byte-fusion tests and both the JIT and AOT whole-program runners. An unknown directive variant is a parse error. If the parser skipped unknown variants, a fixture with a misspelled directive would pass while asserting nothing, and a check that cannot fail is worse than none. For the same reason, a marker that restricts a test to Linux or keeps it off the AOT path must state its reason.
-
-The second is the isolated-child runner. Every case runs in its own child process, so a crash, a JIT failure or a corrupted heap fails one case instead of the whole run. The children are spawned, never forked, because a fork copies a live heap, the collector's threads and the runtime's global state into the child.
-
-The third is the build-tree shadow. Each package test directory gets a copy in the build tree, and both the JIT and AOT runners compile from it, so the compiler's caches stay out of the source tree.
-
-## When the checks run
-
-Two everyday targets run the static scripts and then the main test executable, `test/test`. The `check` target rebuilds incrementally and runs only the first two scripts. The `full` target cleans first, so it never tests stale `.mlir` files from an earlier compile, and it is the right choice after any change to Elm code or MLIR generation. `full` is also the bootstrap's JIT gate, and the order of its steps carries the design.
-
-```cmake
-add_custom_target(full
-    COMMAND python3 ${CMAKE_SOURCE_DIR}/test/scripts/check-root-bounded.py ${CMAKE_SOURCE_DIR}
-    ...
-    COMMAND sh ${CMAKE_SOURCE_DIR}/test/scripts/check-kernel-homes.sh ${CMAKE_SOURCE_DIR}
-    COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target clean
-    COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
-    COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target test eco-system-core-test eco-system-examples
-    COMMAND ${CMAKE_BINARY_DIR}/system-kernel-cpp/eco-system-core-test
-    COMMAND sh -c "${CMAKE_BINARY_DIR}/test/test $\${TEST_FILTER:+--filter \"$$TEST_FILTER\"}"
-    ...
-    ${_full_js_e2e}
+        Ok { mlirModule } ->
+            violationsToExpectation (checkSsaUniqueness mlirModule)
 ```
 
-Source: root `CMakeLists.txt`, target `full`, trimmed. The source searches come before any build, so a rule violation fails in seconds. The `clean` step is what keeps stale MLIR out. Every runner comes after the rebuild, so each one tests output of the same fresh compile, and a further runner belongs after the build steps too.
+From the compiler's test suite, the check that no generated function redefines a visible name. The check takes one program and knows nothing about the corpus, so registering a new case module extends every checker at once, and a program written to test one rule is checked against all of them. A program that fails to compile fails the check; it does not count as a pass with nothing to inspect.
 
-The stress tests are a separate executable. The AOT runner, the equivalence check, the model checks, the GenMC checks and the full defect-guard run are separate targets that a developer runs on purpose; only the unit defect guards run inside the main test executable. The JavaScript runner for the `eco/system` suite is a target of its own too, and `full` also runs it as its last step.
+The rule that makes this suite worth running is that it compiles exactly as production does. A harness that assembled its own pipeline could pick a different specialization engine or skip a pass, and then it would vouch for code no user runs. A small script fails the test run if the test harness calls any compiler pass directly instead of going through the shared steps. The suite runs on the JavaScript build of the compiler, so it needs only Elm and Node and can run before any native toolchain exists. Fuzzing varies only the structure of programs: the compiler treats the literal `42` and the literal `7` alike, so random leaf values reach no new code.
 
-Continuous integration covers the three platforms differently:
+## Whole programs that carry their own answer
 
-| Platform | What CI runs |
-|---|---|
-| Linux | `full`, `elm-tests` and the stress tests, then the bootstrap and the AOT runner |
-| macOS | `elm-tests`, the main test executable, then the bootstrap; no stress tests or AOT runner |
-| Windows | `elm-tests`, the main test executable, then the bootstrap; the whole-program and codegen suites in the executable report no tests, and the stress, AOT and equivalence runners are not built |
+The representation rules, such as which values a closure stores unboxed, are broken at the boundary between the generated code and the runtime, and that boundary is exercised only when a real program runs. A whole-program test is an ordinary Elm program that logs values with `Debug.log` and lists the lines it must print in comments:
 
-So the whole-program tests establish parity on Linux and macOS but not on Windows, and only Linux runs the stress tests and the AOT runner. Platform-specific cases carry a marker with a reason, never a silent skip.
+```elm
+module CaseTupleTest exposing (main)
 
-The model checks, the GenMC checks, the ThreadSanitizer builds, the full defect-guard run and the protocol conformance scripts stay out of continuous integration and are run by the owner. Model checks take hours, and the conformance scripts download their own tools, so neither suits a hosted runner.
+{-| Test case expression on tuples.
+-}
 
-## The invariants catalog as the definition of correct
+-- CHECK: pair1: "both zero"
+-- CHECK: pair2: "x is zero"
+-- CHECK: pair3: "y is zero"
+-- CHECK: pair4: "neither zero"
 
-Every layer cites the numbered rules of the invariants catalog by number instead of restating them; [invariants.md](/docs/invariants) describes the catalog, its statuses and how rows link to the checks that cite them.
+import Html exposing (text)
 
-The dialect's verifiers sit outside every test target. They run when the back end reads MLIR and reject a malformed single operation at the boundary between the Elm and C++ halves. They check only local facts, and checking between lowering passes is off in the production drivers, so facts that span operations, such as call signatures and layouts, are left to the tests above.
 
-## References
+describePair pair =
+    case pair of
+        (0, 0) -> "both zero"
+        (0, _) -> "x is zero"
+        (_, 0) -> "y is zero"
+        _ -> "neither zero"
 
-Parent: [eco.md](/docs/theory). Children: [compiler-tests.md](/docs/compiler-tests), [program-tests.md](/docs/program-tests), [codegen-tests.md](/docs/codegen-tests), [runtime-tests.md](/docs/runtime-tests), [concurrency-models.md](/docs/concurrency-models).
 
-Code and documents:
+main =
+    let
+        _ = Debug.log "pair1" (describePair (0, 0))
+        _ = Debug.log "pair2" (describePair (0, 5))
+        _ = Debug.log "pair3" (describePair (3, 0))
+        _ = Debug.log "pair4" (describePair (1, 2))
+    in
+    text "done"
+```
 
-- `docs/testing.md`: how to run the tests. It omits the AOT, equivalence and JavaScript runners, the static scripts, the model and GenMC checks, the defect guards and the conformance scripts.
-- `CMakeLists.txt` (targets `check`, `full`, `stress`, `tla-canary`, `register-guards`) and `test/CMakeLists.txt` (`ELM_TEST_PACKAGES`, the package shadow trees, `run-aot-e2e`, `run-mlir-equivalence`, `run-js-e2e`). The canary's strictness is set by `ECO_TLA_CANARY_STRICT`.
-- `test/CheckPatterns.hpp`: the shared `CHECK` directive parser, the `LINUX-ONLY:` and `SKIP-AOT:` markers. `CHECK-DAG` is an alias for `CHECK` there.
-- `test/ElmE2ETestBase.hpp`, `test/TestSuite.hpp`, `test/IsolatedTestRunner.hpp`, `test/SpawnedChildren.hpp`: the whole-program base and the isolated-child runner.
-- `test/main.cpp`, `test/aot_e2e_main.cpp`, `test/mlir_equivalence_main.cpp`: the JIT, AOT and equivalence runners.
-- `compiler/tests/TestLogic/`, `compiler/tests/SourceIR/`: the compiler invariant checkers and their corpus. `Compiler.Pipeline.Steps` is the only way in.
-- `test/scripts/`: the static check scripts, including `check-test-pipeline-production.sh`.
-- `test/tla/README.md`, `test/tla/manifest.txt`: the formal models and the canary's pins.
-- `design_docs/invariants.csv`, `design_docs/invariant-test-logic.md`: the catalog, and the inputs and oracle of tested invariants.
-- `docs/bootstrap.md`: the stages, the two gates and the fixed points.
-- `.github/workflows/`: continuous integration per platform (`linux-aot.yml`, `win-aot.yml` and the macOS workflow).
+A test from the language corpus. The file is the whole test: no C++ names it, and the runners find it by its directory. Because the expected output lives in the source, no reference implementation is needed and the same file runs unchanged on every back end. Programs that use Eco's system library can also state the exit status they must return and text to feed on standard input.
 
-Invariants: REP_*, CGEN_*, HEAP_*, MONO_*, GOPT_*, FORBID_* (the families the layers check). The canary rule (investigate the named model before touching a canary hash) lives in `test/tla/README.md` "The canary".
+Several runners share this corpus and differ in what a pass proves. The JIT runner checks behaviour. The AOT runner compiles each program to a native executable and must pass what the JIT passes. A JavaScript runner runs the system-library programs under Node, because that library promises the same Elm interface on both back ends. A stress runner scales programs up with start-up flags for size and duration, so the collector runs for a long time under real code. Conformance scripts point the third-party Autobahn WebSocket and h2spec HTTP/2 suites at an example server built for both back ends; for h2spec the bar is a recorded baseline of passing cases that must not fall, because mature servers fail some strict cases on purpose.
+
+Every program runs in its own freshly spawned child process, under a watchdog. A crash, a hang or a corrupted heap then fails one test and not the run. The children are spawned, never forked: a fork would copy the harness's live heap and collector threads, and the test could end up exercising a collector configuration no user runs.
+
+## MLIR fixtures for one operation at a time
+
+A fixture is a small hand-written MLIR file fed straight into the back end, with no Elm compiler involved. It names the stage at which the back end stops and the text the output must or must not contain, in the style of LLVM's FileCheck. Here is the heart of one:
+
+```mlir
+    %d = eco.int.div %min_int, %neg1 : i64
+    eco.dbg %d : i64
+
+    %r = eco.int.remainderby %neg1, %min_int : i64
+    eco.dbg %r : i64
+
+    %m = eco.int.modby %neg1, %min_int : i64
+    eco.dbg %m : i64
+
+    %zero = arith.constant 0 : i64
+    return %zero : i64
+  }
+}
+
+// CHECK: [eco.dbg] 4242{{$}}
+// CHECK-NEXT: [eco.dbg] -9223372036854775808{{$}}
+// CHECK-NEXT: [eco.dbg] 0{{$}}
+// CHECK-NEXT: [eco.dbg] 0{{$}}
+```
+
+From the fixture that divides the smallest 64-bit integer by −1 (trimmed: the constants and the marker print are omitted). In LLVM, signed division of `MIN_INT` by −1 is undefined behaviour, and on x86 it traps. We wrote this fixture when we noticed that the lowering guarded only against division by zero. An older fixture already computed `MIN_INT // -1` and printed garbage, yet it passed: its expected line was satisfied by an *earlier* output line, because plain `CHECK` lines match anywhere in the output. The new fixture chains its lines with `CHECK-NEXT` and anchors each one at the end of the line, so every result is checked where it is printed. The fix makes Eco's integer division total, with wrapping results; [The numbered invariants](/docs/invariants) follows that rule through the code.
+
+Fixtures reach what no Elm program can. The front end checks a program before it becomes MLIR, so no source can produce a record one field past the heap's limit, a closure with too many arguments, or a malformed operation the dialect's verifier must reject. Each limit has a fixture at the limit that must compile and a twin one past it that must be rejected. The cost is that a fixture says nothing about whether the compiler ever emits its MLIR, so a new lowering gets both a fixture and an Elm program that reaches it from source.
+
+The directive parser is deliberately strict. An unknown `CHECK-` variant is a hard error, because a parser that skipped it would leave a fixture with a misspelled directive green while it asserted nothing.
+
+## The runtime: random heaps, races and weak memory
+
+Most runtime unit tests are properties, checked with the RapidCheck library: generate a random graph of heap objects, root it, collect, and compare a snapshot of the reachable graph before and after.
+
+```cpp
+Testing::TestCase testMinorThenMajorGCSequence("Roots survive minor then major GC sequence", []() {
+    rc::check([](const HeapGraphDesc& graph) {
+        auto& alloc = initAllocator();
+        std::vector<void*> objects = allocateHeapGraph(graph.nodes);
+        RC_ASSERT(!objects.empty());
+        GraphRoots roots = setupRootsFromGraph(alloc, graph, objects);
+        RC_ASSERT(!roots.empty());
+
+        HeapSnapshot snapshot;
+        snapshot.capture(objects, roots.ptrs);
+
+        for (u32 i = 0; i <= PROMOTION_AGE; i++) {
+            alloc.minorGC();
+        }
+        alloc.majorGC();
+
+        bool valid = snapshot.verify(roots.ptrs);
+        RC_ASSERT(valid);
+    });
+});
+```
+
+From the allocator's property tests (trimmed: comments removed). Heap layout is a combinatorial space of object kinds, unboxed-field bitmaps and shapes, and hand-written cases cover little of it. The snapshot is the oracle, so no separate model of the heap is needed. The tests run on the same nursery that production uses, and a guard in every test child refuses to run on any other.
+
+Property tests almost never produce a rare thread schedule, so three more tools cover concurrency, each filling a gap in the one before:
+
+- **ThreadSanitizer** compiles the real allocator, with only stack unwinding stubbed out, and drives it with a synthetic program while background markers and helpers run. Some harnesses force one known interleaving using only relaxed atomic flags, so the tool sees no ordering except the runtime's own and the race shows on every run.
+- **The [formal models](/docs/concurrency-models)** explore every interleaving of each collector protocol at small sizes, but they assume every thread sees writes in one global order.
+- **GenMC** closes that gap. It explores every execution of a small program that the C11 memory model allows, which matters on ARM, where a relaxed atomic really can be seen out of order. Its drivers compile the real, unmodified allocator headers.
+
+GenMC's story is a useful calibration. When we first ran it, every driver written against the code as it stood passed: it found no new defect in Eco's code, and it confirmed two races that the models and code reading had already found. What it did find were four bugs or gaps in GenMC itself, among them an abort on a `memset` to a constant address and an error report that drops the text of the failed assertion. The drivers work around each one.
+
+Every concurrency defect any tool finds goes into a register and gets a guard that replays it. While the defect is open the guard is an expected failure, and an expected failure that starts passing fails the run, so a defect cannot vanish unnoticed either. Each fix is checked by reverting it and watching the guard fail again.
+
+## Agreement instead of answers
+
+Some checks need no expected output at all. An equivalence check compiles every whole-program test source with two builds of the compiler from different bootstrap stages, one running as JavaScript and one native, and compares the MLIR byte for byte. Any difference is a bug in one of them. The bootstrap adds two fixed points, one for the JavaScript-hosted compiler and one for the native one, described in [The compiler compiles itself](/docs/bootstrap). Two of the test suites run as gates at the earliest points in that chain where they can, so a back-end regression is reported before the slow native self-compiles start.
+
+## Every check must be able to fail
+
+A check that cannot fail is worse than none, because it reports success without evidence. The same rule appears in every layer:
+
+- Each formal model and each GenMC driver comes with mutants, deliberately broken variants that must be rejected with a named failure.
+- A replay guard that never reaches its scenario reports "not reached" rather than passing.
+- A compiler checker that turned out to inspect nothing, for example by looking for call names that never occur in real output, is rewritten, and making such a check able to fail tends to expose real compiler bugs.
+- A test that expects a rejection must match the actual error, not just any failure.
+
+## How much there is
+
+At the time of writing: about 1,345 whole-program tests (about 680 of them in the language corpus, 210 for the system library and 115 stress programs), 449 MLIR fixtures, about 133,000 lines of compiler tests in Elm, eight formal models of the collector and 62 GenMC driver rows. These are counts of files and lines, not of distinct behaviours, and a test program often checks several things at once.
+
+Continuous integration runs the everyday suites and the bootstrap on Linux, macOS and Windows, and the stress and AOT runners on Linux. The model checks, GenMC and the ThreadSanitizer builds take minutes to hours, so we run them by hand when a concurrent protocol changes; a cheap hash check in every build says when that is ([Model-checking the collector](/docs/concurrency-models)).
+
+> **Designs we didn't use.** We did not compare compiler output against golden copies. A correct change to one phase would break every later phase's tests, so the checkers test rules about the output instead.
+
+## Further reading
+
+- [Model-checking the collector](/docs/concurrency-models) — the TLA+ models, their mutants and the canary that ties them to the code.
+- [The numbered invariants](/docs/invariants) — the rules these checks enforce, with one traced from rule to test.
+- [The compiler compiles itself](/docs/bootstrap) — the bootstrap chain and its two fixed-point checks.
+- [The eco dialect](/docs/eco-dialect) — the operations the MLIR fixtures exercise and the verifiers that reject malformed ones.
+- The full design document: [Verification theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/verification/verification.md)
+- Source: [`test`](https://github.com/eco-lang/eco-compiler/tree/master/test) and [`compiler/tests`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/tests)

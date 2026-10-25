@@ -1,108 +1,78 @@
 ---
-title: "The Numbered Invariants"
-description: "The numbered invariants are 413 rules, one per line, in a single flat file."
-section: "Theory"
-sectionOrder: 2
-order: 26
+title: "The numbered invariants"
+description: "Why Eco keeps a catalogue of 417 numbered rules linking its Elm-written compiler to its C++ back end and runtime, and how one rule, that integer division is total, is traced from its catalogue row to the lowering, the kernel and the tests that enforce it."
+section: "Getting it right"
+sectionOrder: 5
+order: 3
 ---
 
-The numbered invariants are 413 rules, one per line, in a single flat file. Each line gives a rule's number, its phase, a category, a status, the rule itself and the sources behind it. A rule is tested wherever a check is cheapest to write: an operation verifier in the C++ dialect, an Elm checker that walks the compiler's own intermediate form, a C++ or end-to-end test, a guard script or a TLA+ model. That check quotes the rule's number. The number quoted in both places is the only link, because no tool reads the file. A row therefore stays accurate by being edited in the same commit as its code and its check.
+Eco is two programs that must agree on everything: a compiler written in Elm that emits MLIR, and a back end, runtime and kernels written in C++ that consume it. No type system spans that boundary. If the compiler and the runtime disagree about how a closure stores a `Bool`, both sides still compile and the program fails at run time. So we write the agreements down as numbered rules, 417 of them, and every check that enforces a rule quotes its number.
+
+> **Background**
+>
+> - [Lowering](/docs/glossary#lowering): rewriting high-level operations into lower-level ones, here from Eco's own MLIR dialect towards LLVM.
+> - [Kernel](/docs/glossary#kernel): a function with no Elm body, implemented in C++ by the runtime.
 
 ## One line per rule
 
-The file is laid out for grep and diff. People and agents read it: the agent instructions require reading it before any change to code generation, the runtime or a representation; the working guides for performance and kernel work tell their readers to respect it; and plans cite rows by number. One physical line per rule is the cheapest form for that use. A rule can be found by its number, a change to it shows as a one-line diff, and it can be added in the same commit as the code it governs.
+The catalogue is a single flat file with one rule per line: its number, the phase it belongs to, a category, a status, the rule itself, and the sources that implement or check it. A number is a family prefix and three digits. `CGEN_` rules constrain code generation, `HEAP_` rules the heap layout and collector, `MONO_` and `LSS_` rules the specialization passes, and so on. Code generation and the heap are the largest families, with about ninety rules each.
 
-The cost is that the file has no reliable field structure. The header names six columns separated by semicolons, but descriptions contain semicolons too, and only a little over half the rows split into exactly six fields. The reliable reading is: the first four fields, then the description, then the last semicolon, then the source column. The plans that edit the file say outright not to "fix" the field count, since nothing in the build parses it. Here are the header and one row, the rule that a case expression's alternatives end only in a yield:
+The status says what stands behind a rule: 294 are *enforced* by a check that runs, 42 are *tested*, 57 are *documented* but not yet checked, and the remaining 24 are implemented, implied, structural or retired. Numbers are never reused, because they are quoted in commit messages, code comments, test names and crash messages, and a reader holding an old number must land on the rule it meant. A retired rule keeps its row and says why it was retired.
+
+A rule's check lives wherever it is cheapest to write: an Elm checker over the compiler's intermediate forms, a verifier on an MLIR operation, an MLIR fixture, a runtime unit test, an end-to-end program or a TLA+ model. The quoted number is the only link between rule and check.
+
+## One rule, traced
+
+Here is how one rule runs through the system. Elm says integer division never crashes: `7 // 0` is `0`. In LLVM, signed division by zero, or of the smallest integer by −1, is undefined behaviour, and on x86 it traps. Rule `CGEN_084` closes that gap. Its row begins (trimmed):
 
 ```text
-id;phase;category;status;description;source
-...
-CGEN_028;MLIR_Codegen;ControlFlow;enforced;Every eco.case alternative region terminates with eco.yield and no alternative falls through past the end of a region; eco.return, eco.jump, and eco.crash are forbidden inside eco.case alternatives (except if nested under other non-eco.case regions that are never emitted directly by MLIR codegen);runtime/src/codegen/Ops.td and Compiler.Generate.MLIR.Expr
+CGEN_084;MLIR_Codegen;IntegerDivision;tested;Integer division and remainder are total
+on all of Int, with wrapping two's-complement results (2026-10-24): x // 0 = 0,
+x // -1 = 0 - x wrapping (MIN_INT // -1 = MIN_INT), remainderBy 0 x = remainderBy -1 x = 0,
+modBy -1 x = 0 and modBy 0 x = 0 in the inline lowering. ...
 ```
 
-From `design_docs/invariants.csv`. Notice the semicolon in the middle of the description, which a naive split would treat as a column break. The source column here is free text joined with "and"; most rows use a list separated by vertical bars instead, naming Elm modules, C++ files, related rule numbers and plans.
-
-The phase and category columns are free text. The same phase is spelled several ways, and most categories belong to a single row. They help a person reading one row, but they make poor search keys. Search by the number's prefix instead.
-
-## Families and numbers
-
-A rule number is a family prefix and a three-digit number. The prefix says what the rule constrains, and a longer prefix names a narrower contract inside a family. The representation family, for example, has sub-families for the calling convention, the intermediate code, heap storage, closures, aggregates, constants, the LLVM-level form and the boundaries between models. The largest families are code generation and heap layout, with over eighty rules each, then lambda set specialization and the byte-level operations.
-
-The banner blocks follow the pipeline, in the order the parent document gives, and after the last banner rows are appended in the order they were written, whatever their family. So reading a family's block does not show the whole family, and a grep for the prefix does.
-
-Numbers have gaps, and the gaps are deliberate. A deleted rule leaves its number unused. A number a plan reserved and then abandoned carries a comment saying it must not be reused. Some families were numbered first in a plan or design document, and only some of those numbers became rows. Numbers are never reused because they are quoted from plans, commit messages, code comments, test names and crash messages, and a reader holding an old number must land on the rule it meant. Renumbering even three rules means editing documents, tests and crash messages together, which is why the catalog avoids it.
-
-## From a rule to its check
-
-No table maps a rule to its test. Each check lives next to the code it constrains, and by convention it names the rule, so a failure leads back to the text. The checks take five forms, listed from the compiler side to the runtime side:
-
-1. Elm checkers run over the compiler's intermediate forms in the compiler's test suite.
-2. Validators built into the compiler run only when a debugging environment variable asks for them.
-3. Dialect verifiers reject a malformed operation in the C++ back end. They cover the rules Elm cannot see, such as LLVM address spaces, aggregate lowering and collector layout.
-4. C++ tests: FileCheck fixtures of hand-written MLIR, runtime and kernel unit tests, and Elm programs run end to end.
-5. Guard scripts and models: a script for a single rule whose violation no local check can see, and the TLA+ models of the concurrent collector.
-
-A dialect verifier shows how thin the link is. This is the check behind the row above:
+The source column then names the lowering, the kernel and four MLIR fixtures. The **lowering** of the division operation quotes the rule and explains how it keeps both bad divisors away from the hardware instruction:
 
 ```cpp
-LogicalResult CaseOp::verify() {
-  ...
-    Operation *terminator = block.getTerminator();
-    ...
-    // CGEN_028: Alternatives must terminate with eco.yield only.
-    // eco.return, eco.jump, eco.crash are forbidden inside eco.case alternatives.
-    if (!isa<YieldOp>(terminator)) {
-      return emitOpError("alternative ")
-             << altIndex << " must terminate with 'eco.yield', got '"
-             << terminator->getName() << "'";
-    }
+        // CGEN_084: x // 0 = 0 and x // -1 = 0 - x, wrapping (MIN_INT // -1 =
+        // MIN_INT). `sdiv` by 0 and MIN_INT by -1 are LLVM UB (SIGFPE on
+        // x86), so neither divisor reaches it: rhs in {-1, 0} (one unsigned
+        // compare: rhs + 1 <=u 1) divides by 1 and takes rhs * lhs instead,
+        // which is 0 or the wrapping negation.
 ```
 
-From `runtime/src/codegen/EcoOps.cpp`, `CaseOp::verify`. Notice that the rule's number appears only in a comment, and the error a user would see does not carry it. Many more verifiers enforce rules without naming them at all, so a grep for a number undercounts what the dialect enforces.
+From the integer-arithmetic lowering pass. One unsigned comparison catches both divisors, and a select then picks `rhs * lhs`: `0` for a zero divisor, the wrapping negation for −1.
 
-### The Elm checkers
+Division does not always go through the inline lowering. Where the compiler emits a call to the kernel function instead of the inline operation, the C++ **kernel** must give the same answers:
 
-The Elm checkers carry most of the code generation rules, and three choices shape them.
+```cpp
+long long idiv(long long a, long long b) {  // CGEN_084: x // 0 = 0, x // -1 = wrapping -x
+    return b == 0 ? 0 : b == -1 ? static_cast<long long>(0ULL - static_cast<unsigned long long>(a)) : a / b;
+}
+```
 
-They inspect the compiler's own intermediate form, not the program's output. Most code generation rules are about the structure of the emitted operations, and a failing end-to-end program does not say which phase broke which rule. The checkers walk the Elm data structure that the code generator builds before it prints MLIR, through shared helper functions, and never parse printed text. Checking printed MLIR would need a parser and would put the code generation and heap rules out of reach of Elm tests. Walking the syntax tree reaches most code generation rules without one. The price is that the Elm tree must keep mirroring the operations the compiler emits.
+From the core kernel's `Basics` module. The one deliberate difference is recorded in the rule: the kernel's `modBy 0` still throws, as elm/core's JavaScript does.
 
-Each checker is a pair of modules. A logic module exports an expectation function, and a test module, whose description string starts with the rule's number and a short title, runs it. Every checker runs over one shared corpus of standard test programs. A rule therefore gets coverage of every program in the corpus for the cost of writing one checker.
+Two tests pin the two paths. An **MLIR fixture** runs the three operations on `MIN_INT` and −1 in the JIT and checks each printed result on its own line; [How we know it works](/docs/verification) shows it and the test gap it closed. A **kernel unit test**, registered under the name "K14 kernel integer division is total (CGEN_084)", calls the exported kernel functions with operands the C++ compiler cannot fold away:
 
-The tests compile programs exactly as production does. The test pipeline calls the same list of pure steps that the build command runs, and a guard script fails if the test harness imports a compiler pass directly. A checker that runs a different middle end from the one users get proves nothing about their compiler, and a bug that only the production steps trigger would pass unseen.
+```cpp
+    volatile int64_t minInt = INT64_MIN, neg1 = -1, zero = 0, seven = 7;
+    TEST_ASSERT(Elm_Kernel_Basics_idiv(minInt, neg1) == INT64_MIN);
+    TEST_ASSERT(Elm_Kernel_Basics_idiv(seven, neg1) == -7);
+    TEST_ASSERT(Elm_Kernel_Basics_idiv(seven, zero) == 0);
+```
 
-A checker that cannot check its rule honestly is deleted rather than kept. The record projection checker, for instance, could not relate a field read to the construction it reads from without use-def chains, so it is gone and the test design records that rule as documented but not enforced. A checker that claims coverage it does not give is worse than none, because the row's status then promises a check that is not there.
+From the kernel export tests (trimmed). A failure in either test names the rule, and the rule names every place that must change together.
 
-### The test design document
+## What the catalogue does not do
 
-A separate design document gives the planned check for each rule: the rule, the phase, the intermediate form inspected, the checking logic, the inputs and the oracle. It covers fewer than half the rules, and fewer than half its entries name the tests that exist. It is part plan for how each rule could be checked, part record of the checks that exist. Treat the checker files as the authority on what is checked and the document as the design behind them.
+No tool reads the file. It stays accurate because a rule normally lands in one commit with the code it governs and the check that tests it. A status is the author's claim at the last edit; the checks are the authority on what is actually checked. A checker that turns out to inspect nothing is rewritten, and its row amended to say what is really checked, rather than left to promise coverage it does not give.
 
-## What a status claims
+## Further reading
 
-The parent document gives the seven status values. A status is the author's claim at the row's last edit, and the convention is to claim only what has shipped: a row becomes enforced when the checker that enforces it passes, and is not marked enforced while that checker is only proposed. A row marked enforced is not always cited by number. About a third of them, a whole block of byte-level operation rules among them, are not quoted by number in any source or test file, so their checks are found through the operation the rule constrains rather than by a search for the number.
-
-To find out what stands behind a rule, grep the compiler, the runtime and the tests for its number, then read what that check tests. Where the number is not quoted, look at the verifier or test for the operation the rule constrains.
-
-## Mechanical checks on the catalog
-
-Rows are kept in line with the code by the convention of editing them together. The project adds a mechanical check only where a silent mismatch between a rule and the code would itself be the danger, and each such check guards a single rule. The TLA+ canary pins the code each collector model describes and warns when it changes, failing only under a strict build setting; its rule is stated in `test/tla/README.md`, section "The canary", rather than in the catalog. The guard script for kernel claims fails the build when a C++ file cited as evidence changes without its hash being updated in the manifest, or when the manifest's pins and the cited files differ. The files it pins are those cited by the licensed rows of the lambda-set kernel table and by every row of the kernel type table; the table of purity and allocation facts that the optimizer reads cites C++ evidence in its rows but is not pinned, and neither is the runtime machinery that every kernel shares. The guard script for large heap objects checks that their bodies are read only through approved accessors. Elsewhere, when a checker turns out to be vacuous, the fix goes on the check side: the checker is rewritten and the row amended to say what is really checked.
-
-## Adding, amending and retiring a rule
-
-A rule normally lands in one commit with the code it governs, the checker that tests it and the plan that argues for it. Almost every commit that touches the catalog also changes compiler, runtime or kernel source, and most also change tests and a plan. The row names the plan in its source column, so the reasoning can be found from the rule.
-
-A row's text changes in place. When a mechanism changes, the number, phase, category and status stay, and the description is rewritten or extended to state the rule as it holds. When a mechanism is removed, the row stays with status retired, the reason, and its former text. Both follow from citation by number: a reader holding a number from any plan, commit or comment must be able to find what it meant. The exception is a row whose rule another row already states, or whose rule has a better home outside the catalog: such a row may be removed outright, in the same change that re-points every code, test and document citation of it, leaving only historical plans naming the number.
-
-## References
-
-Parent: [eco.md](/docs/theory).
-
-- `design_docs/invariants.csv`: the catalog. List the banners with `grep -n '^# [A-Z]'`. Banner order: REP, CANON, TYPE, NITPICK, POST, TOPT, ECOT, MONO, GOPT, CGEN, HEAP, BFUSE, BFOPS, XPHASE, FORBID, IO_ERR, KERNEL_TASK_IO, PORT, LSS; then append order (HEAP_036 onward, CGEN_070 onward, LIVE, SYS, VDOM).
-- Rows named above: REP_001 (independent models); CGEN_028 (case alternatives end in a yield, the excerpt); BFOPS_001 to BFOPS_031 (enforced, not cited by number); MONO_021, LSS_038 and CGEN_079 (checkers rewritten to check what the row states); LSS_022 and HEAP_081 (guard scripts; the TLA canary's rule is in `test/tla/README.md` "The canary"); LSS_012 (a number not to reuse); GOPT_001 to GOPT_003 (the one renumbering). Retired examples: CGEN_055, HEAP_047, HEAP_061, KERN_007.
-- `runtime/src/codegen/EcoOps.cpp` (`CaseOp::verify`, `PapExtendOp::verify`, `ToHeapOp::verify`, `FromHeapOp::verify`) and `runtime/src/codegen/Ops.td`: verifiers that enforce rows and name some of them.
-- `compiler/tests/TestLogic/`: the Elm checkers, one directory per phase. `TestLogic/Generate/CodeGen/Invariants.elm` holds the syntax tree helpers; `CaseTagsCount.elm` and `CaseTagsCountTest.elm` beside it show the checker pair. The corpus is `SourceIR.Suite.StandardTestSuites`.
-- `compiler/tests/TestLogic/TestPipeline.elm`, `compiler/src/Compiler/Pipeline/Steps.elm`, `test/scripts/check-test-pipeline-production.sh`: how tests compile like production.
-- In-compiler validators under `ECO_MONO_VALIDATE=1`: `Compiler.Monomorphize.ValidateLayout`, `Steps.checkClosureStaging`.
-- `test/codegen/`: FileCheck fixtures.
-- `test/scripts/check-tla-manifest.sh`, `test/scripts/check-kernel-license-manifest.sh`, `test/scripts/check-large-body-access.sh`: the guard scripts. `test/tla/README.md` ("The canary") and `test/tla/manifest.txt`: the canary that ties the collector models to the code.
-- `design_docs/invariant-test-logic.md`: the per-rule test design.
-- `plans/kernel-opt-07-kernel-facts-table.md`, `plans/kernel-opt-08-kernel-gcleaf-stamp.md`: the file's format rules and the shipped-status convention. `plans/cgen-invariant-tests.md`: checking code generation rules on the syntax tree.
+- [How we know it works](/docs/verification) — the test layers that carry these checks.
+- [The eco dialect](/docs/eco-dialect) — the operations many of the rules constrain, and their verifiers.
+- [Kernels](/docs/kernels) — why every kernel must agree with the inline lowering of the same function.
+- The full design document: [Invariants theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/invariants/invariants.md)
+- Source: [`design_docs`](https://github.com/eco-lang/eco-compiler/tree/master/design_docs), where the catalogue lives

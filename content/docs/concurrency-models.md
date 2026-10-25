@@ -1,172 +1,125 @@
 ---
-title: "Concurrency Models"
-description: "Formal models showing each concurrent protocol in the collector is safe, kept tied to the C++ implementation."
-section: "Theory"
-sectionOrder: 2
-order: 33
+title: "Model-checking the collector"
+description: "How Eco checks its concurrent garbage collector with small TLA+ models that a model checker explores exhaustively, deliberately broken mutants that prove each model can fail, and a hash canary that says when the code a model describes has changed."
+section: "Getting it right"
+sectionOrder: 5
+order: 2
 ---
 
-The formal models say that each concurrent protocol in the collector is safe on small heaps, and they stay tied to the C++ closely enough to report when that stops being known. Each protocol has its own small model in TLA+, a language that describes a system as a set of states and the atomic steps between them. A model checker explores every interleaving of those steps on small heaps and checks named properties in every state it reaches. One claim is proved rather than only explored: the fact that snapshot marking rests on, that during a mark cycle everything live was either reachable when the cycle started or allocated since, is shown to be inductive, but only for heaps of up to five objects. A mapping names the code behind every model step, and three ties check that the mapping holds: weak-memory drivers run the real headers under the C11 memory model, logs from real runs are matched against the models, and a hash canary reports when the code a model describes changes. The canary warns by default, and a build setting makes it fail the build instead. The result is strong evidence about the design, not a proof of the C++. The models find design bugs before the code is written, and they tell a developer which model to reread when the code moves.
+Eco's collector marks, copies and tenures objects on background threads while the program runs. Its worst bugs do not crash where the mistake is made: a lost mark bit frees a live object, and the damage shows up much later as a wrong result somewhere else. Ordinary tests rarely hit the schedule behind such a bug, so each concurrent protocol is also written as a small TLA+ model, a model checker tries every interleaving of it on a small heap, and a build step watches the code each model describes and says when the two may have drifted apart.
 
-## Many small models, joined by contracts
+> **Background**
+>
+> - [TLA+](/docs/glossary#tla): a language that describes a system as states and the atomic steps between them.
+> - [Model checking](/docs/glossary#model-checking): exploring every reachable state of a model and checking named properties in each.
+> - [Mutator](/docs/glossary#mutator): the thread that runs the Elm program and allocates; Eco has one per process.
+> - [Nursery and eden](/docs/glossary#nursery-and-eden), [tenuring](/docs/glossary#tenuring): where young objects live, and how long-lived ones move to the old generation.
 
-The collector is described by eight small models rather than one. A single model of the whole heap and every collector thread would have far too many states to explore, so each model covers one protocol. Models fit together through contracts. A contract is a named guarantee one model provides and another assumes, such as "a young object is copied at most once". A model checks the contracts it provides and takes the ones it consumes as given. If a provider's property changes, every consumer's assumption changes with it, so a contract change is a change to several models.
+## A bug in four lines
 
-Size is the force that keeps the models apart. The quick configuration of each model should finish in about two minutes, because developers run them while working. When a model grows past that, it is split along a contract instead of being given looser bounds.
-
-The eight models fall into three groups: marking, moving objects, and the threads and memory underneath both.
-
-| Model | Group | Protocol |
-|---|---|---|
-| M1 | Marking | The snapshot mark cycle of the old generation |
-| M2 | Marking | The marker loop: taking work, stealing it, and agreeing that marking has finished |
-| M3 | Moving | Forwarding in a minor collection: claim a young object, mark it busy while copying, publish the copy's address |
-| M4 | Moving | Promotion in chunks and the mark bitmap at byte and word granularity, with a data-race detector |
-| M5 | Moving | Concurrent tenuring, which moves long-lived young objects into the old generation while the program runs, and aging |
-| M6 | Threads and memory | The helper pool: starting threads, grouping them for a job, and staying correct across fork and exit |
-| M7 | Threads and memory | Page work: returning memory to the OS in the background, committing ahead of need, and lock order |
-| M8 | Threads and memory | The old generation's block lifecycle, which is serial and is modeled for the hazard of an address being reused |
-
-The mutator, the thread that runs the Elm program and allocates, is a single process in every model. The runtime allows one mutator per process: a second one aborts as it starts, unless a benchmark or test harness has explicitly allowed it. The models therefore never consider two, and that is also why the marker loop's termination needs no handshake across several program threads.
-
-## What the snapshot model says
-
-Snapshot marking is the clearest example of what a model claims. The collector marks the old generation while the program keeps running, without a write barrier. That is safe because Elm values never change once built: anything reachable when marking starts stays reachable through objects that existed then, and everything allocated afterward is treated as live until the next cycle. The collector's design states this as the snapshot-closure lemma. The model records, at the start of each cycle, the sets the lemma talks about, and states the lemma and the safety goals as named invariants over them.
+The simplest model in the repository shows the whole method. Two threads each set a different bit in one byte, the way two marker threads can mark two objects whose mark bits share a byte. The model is written in PlusCal, an algorithm-like language that translates into TLA+. A constant chooses between a plain read-modify-write, which takes two steps, and an atomic `fetch_or`, which takes one:
 
 ```tla
-    t0Reach  = {},                        \* IM1: old-gen cells reachable at t0
-    tSH      = {},                        \* S_H: everything reachable at t0
-    tNH      = {};                        \* N_H: allocated after t0
-
-define
-    ...
-    Held     == ({root[r] : r \in RootSlots} \cup {cell[c] : c \in CellSlots}) \ {Nil}
-    Live     == Reach(Held)
-    ...
-    Marked   == {o \in Obj : mark[o]}
-    ...
-    \* MODEL_M1_1: no reachable object is ever freed.
-    NoLostObject == Live \subseteq alloc
-    ...
-    SnapshotClosure == CycleOn => Live \subseteq (tSH \cup tNH)
-    ...
-\* IM1: every old-gen cell reachable at t0 is marked.
-IM1 == AtHandoff => t0Reach \subseteq Marked
+(* --algorithm LostBit
+variables byte = {};                  \* the set of bits that are 1
+process T \in {1, 2}
+variables tmp = {};
+begin
+  Load:
+    if Plain then
+        tmp := byte;                  \* uint8_t v = b;
+      Store:
+        byte := tmp \cup {self};      \* b = v | mask;
+    else
+        byte := byte \cup {self};     \* fetch_or(mask): one atomic step
+    end if;
+end process;
+end algorithm; *)
 ```
 
-From `test/tla/M1-snapshot-mark/SnapshotMark.tla`, trimmed. The three sets at the top are ghost variables: the code has nothing like them, and they exist only so the properties can be stated. `SnapshotClosure` is the lemma itself: during a cycle, everything live was either reachable at the start or allocated since. `IM1` is checked only at the handoff, the moment before the sweep frees anything, because that is the only point where an unmarked reachable object does harm.
+From the toy model that the model-checking setup is tested with. The property is one line: once both threads are done, both bits are set.
 
-The model checker TLC checks these properties in every reachable state of small heaps. Apalache, a second checker that reasons symbolically, also proves `SnapshotClosure` inductive: whenever it holds before a step, it holds after. That proof covers heaps of up to five objects. At six objects only some steps finish and at eight the proof is out of reach, so for larger heaps the lemma rests on the argument in the collector's design document, not on a proof.
+```tla
+BothBitsSet == (\A t \in {1, 2} : pc[t] = "Done") => byte = {1, 2}
+```
+
+With `fetch_or` the checker TLC visits every state and reports success. With the plain version it finds the schedule at once: both threads load the empty byte, thread 1 stores its bit, thread 2 stores *its* bit over the top, and bit 1 is gone. In a collector that is a live object left unmarked, which the sweep then frees.
+
+The real marker does exactly what the model says it must. From the old generation's mark routine (trimmed):
+
+```cpp
+        std::atomic_ref<uint8_t> b(mark_.slot(id)[byte_index]);
+        // Test before set: an already-marked object costs a plain load, not
+        // a locked RMW on a line other markers may be writing.
+        if (b.load(std::memory_order_relaxed) & mask) return true;
+        return (b.fetch_or(mask, std::memory_order_relaxed) & mask) != 0;
+```
+
+The toy also shows the second half of the method. The plain variant is kept as a *mutant*, a deliberately broken configuration, and the registry records the exact failure it must produce: a violation of `BothBitsSet`. If a later change to the model made the mutant pass, the model would have lost the ability to see the bug, and the run fails.
+
+## Eight models, one per protocol
+
+A single model of the whole heap and every collector thread would have far too many states to explore, so the collector is described by eight small models. They fit together through contracts: named guarantees that one model checks and another assumes, such as "a young object is copied at most once". When a model grows too slow to explore in a few minutes, it is split along a contract rather than given looser bounds.
+
+| Model | Protocol |
+|---|---|
+| M1 | The snapshot mark cycle of the old generation |
+| M2 | The marker loop: taking work, stealing it, agreeing that marking has finished |
+| M3 | Forwarding in a minor collection: claim a young object, copy it, publish the copy's address |
+| M4 | Promotion in chunks, and the mark bitmap at byte and word granularity |
+| M5 | Concurrent tenuring of long-lived young objects, and ageing |
+| M6 | The helper-thread pool: starting, grouping and stopping threads, across fork and exit |
+| M7 | Returning memory to the operating system in the background, and lock order |
+| M8 | The old generation's block lifecycle, for the hazard of an address being reused |
+
+The mutator is a single process in every model, because the runtime allows one mutator per process.
+
+Snapshot marking is the clearest example of what a model claims. The collector marks the old generation while the program runs, with no write barrier. That is safe because Elm values never change once built: everything live during a cycle was either reachable when the cycle started or allocated since. The M1 model states this as a property over sets that exist only in the model, recorded at the start of each cycle, and TLC checks it in every reachable state. A second, symbolic checker, Apalache, goes further and proves it inductive (if it holds before any step, it holds after), but only for heaps of up to five objects. For larger heaps the claim rests on the argument in the collector's design.
+
+Accuracy rules keep a model from passing while the code fails. One model step is one atomic step of the code, so a load and the store that depends on it are two steps, exactly as in `LostBit`. Shared memory is modelled at the unit the hardware shares: mark bits live in bytes that cover eight objects, so a model with one independent bit per object could never see a lost update. And every property has a mutant that must break it.
 
 ## Holding a model to the code
 
-A model is only worth what its link to the code is worth. Each model has a mapping that lists every shared memory location and every atomic step in the code, and names the model variable or step that stands for it. A footprint table goes with it: one row per shared location, each with a search over the source that finds the location again, so a reader can check that the list is complete. The mapping cites code and never the plan behind it, because the two diverge. A model of the plan document would describe detached helper threads, while the code joins them, and that model would check a program that does not exist.
+A model is only worth what its link to the code is worth. Each model has a mapping that names, for every shared memory location and every atomic step in the C++, the model variable or step that stands for it. Three further ties check that the mapping holds.
 
-Three ties check that the mapping holds, each covering something the model checker cannot see.
+**Weak memory.** TLC assumes every thread sees all writes in one global order, but the code uses relaxed and acquire-release atomics, which allow more behaviours. GenMC, a model checker for C and C++, runs small drivers built from the real allocator headers under the C11 memory model, each with mutants that weaken one memory order ([How we know it works](/docs/verification) has more on it).
 
-```
-                   mapping: which code is which step
-     model  <------------------------------------------>  C++ collector
-       ^                                                    |   |   |
-       | "does some model behavior match this whole log?"   |   |   |
-       +------------ event logs from real runs -------------+   |   |
-                                                                |   |
-     GenMC drivers  <---- real headers, weak memory orders -----+   |
-                                                                    |
-     canary  <---- hashes of the pinned code -----------------------+
-       |
-       +----> names the models whose code changed
-```
+**Traces from real runs.** A model can pass while describing a different program, for instance if a loop in the model cannot stop where the code's loop can. Special builds of the allocator log events from every thread, and TLC is asked whether some behaviour of the model matches the whole log. A rejected log is a finding: real logs once showed that a loop in the snapshot model could not stop where the code's could.
 
-Weak-memory drivers exist because TLC assumes sequential consistency, in which every thread sees all writes in one global order. The code uses relaxed and acquire-release orders, which allow more behaviors. GenMC, a model checker for C and C++ under weak memory, runs the real collector headers under the C11 model, and each driver has mutants that weaken one order to show the driver can fail ([runtime-tests.md](/docs/runtime-tests) describes the drivers). Every place a model relies on an order weaker than sequential consistency is listed in its mapping with the driver that covers it.
-
-Trace validation exists because a model can pass while describing a different program. If a loop in the model cannot stop where the code's loop can, the model has fewer behaviors than the code, and checking the model alone never notices. So trace builds turn on hooks in the allocator that record events, merge each thread's events into one interleaving, and ask TLC whether some behavior of the model matches the whole log. A log the model rejects is a finding. The snapshot model's assist step is the example: real logs it rejected showed a model loop that could not stop where the code's loop can. The hooks are compiled out of normal builds. Trace builds are kept apart from ThreadSanitizer builds, because the global sequence counter that orders the log adds happens-before edges between threads and would hide the races ThreadSanitizer exists to find.
-
-The canary is the third tie, and the one a developer meets in every build.
-
-## Expected outcomes and the defect register
-
-Every check has a recorded expected outcome, and the runner demands exactly that outcome. A registry lists each model configuration with its tier (quick, or deep for the slow runs), its tool (TLC or Apalache) and what must happen: a pass, the violation of one named invariant, a deadlock, or a witness that some state is reachable. The runner parses each model, confirms that its TLA+ is a fresh translation of its PlusCal source (PlusCal is an algorithm-like language that translates into TLA+), runs the checker and compares. A mutant that passes, or that fails by violating some other invariant, fails the run. So does a check that hits its time limit, because a run that did not finish has shown nothing.
+**The canary.** A model that passes says nothing once the code it describes has changed, so a hash check runs in every build. It takes about a second. A manifest pins the code each model covers, and each pin names the models that must be reread if its hash changes:
 
 ```text
-# model  directory  module  config  tier  tool  expected
-...
-M1  M1-snapshot-mark  MC  MC_quick.cfg                        quick  tlc  pass
-...
-M1  M1-snapshot-mark  MC  MC_quick_region.cfg                 quick  tlc  pass                       # CR-017 fixed (HEAP_074)
-M1  M1-snapshot-mark  MC  mutants/no_cr017_fix.cfg           quick  tlc  violates:MarkerFootprint   # CR-017 pre-fix code: regression mutant of HEAP_074
-M1  M1-snapshot-mark  MC  mutants/p1_violation.cfg            quick  tlc  violates:IM1
-...
-M1  M1-snapshot-mark  MC  mutants/hidden_root.cfg             quick  tlc  violates:SnapshotClosure
+#   <kind>  <sha256>  <path or ->  <id or ->  <models, comma-separated>
+#
+# kinds: file (a whole file), region (the code between // TLA-REGION(<id>) begin and end,
+# comments stripped, whitespace collapsed), census (a file's concurrency lines), grep (a
+# footprint row of footprint-greps.txt), nocode (a model with no code to pin).
 ```
 
-From `test/tla/models.txt`, trimmed. Each mutant names the one invariant it must break, which is why properties are named invariants and never assertions inside the algorithm: the runner can match a name but not an anonymous assertion failure. The pair of rows for one register defect shows the life of a fix. The fixed configuration must pass, and the code's behavior before the fix lives on as a mutant that must violate a named invariant, so the defect cannot return without a model failing.
+From the head of the canary manifest. The mark routine above is one such region, pinned for M1, M4 and a GenMC driver. Pins are narrow on purpose. Hashing a whole allocator file of several thousand lines would fire on every edit and teach people to accept changes without looking, while a census pin still catches a new atomic or lock added anywhere in a covered file. The checker also checks coverage: every region marker in the source must be pinned, and every allocator file with a concurrency line must have a census pin.
 
-Defects found by any of the tools go into one register. Each entry moves through a fixed sequence of statuses: suspected, confirmed, reproduced, guarded, fixed and closed, and each move needs named evidence. A configuration that reproduces a defect is expected to violate its invariant until the fix lands. The change that fixes the code flips that row to a pass and keeps the broken behavior as a mutant, as the rows above show.
+Accepting a changed hash is a separate, audited step. The update command refuses until the audit log of every model the pin names quotes the new hash's first twelve hex digits. The verdict, even "no model change needed", is written down before the code is accepted. By default a firing canary prints a warning banner and the build continues; a build setting turns it into a build failure.
 
-## The canary
+## What the models found
 
-The canary is what keeps the other ties meaningful, because a model that passes says nothing once the code it describes has changed. It is a hash check that takes about a second, so it runs in every default build. A manifest pins the code each model covers, and each pin names the models (and GenMC drivers) that must be reread if its hash changes. Pins come in four kinds, from the widest to the most targeted:
+Every defect found by any tool, from code reading to a TLC counterexample or a ThreadSanitizer report, goes into one defect register, with a guard that replays it. The register holds 39 entries. Ten were classed as unsound, meaning a live object freed, lost or corrupted; three of those turned out to be ordinary serial bugs found while doing the concurrency work. Every entry is now fixed except one won't-fix: races that need a second mutator in the same process, which the runtime now refuses to start outside test harnesses. Three stories give the flavour.
 
-- a whole file, for small protocol headers;
-- a region of a file, the text between a begin marker and an end marker in the source, with comments stripped and whitespace collapsed;
-- a census of a file, which is every line matching a pattern for concurrency: atomics, memory orders, mutexes, fences, fork handlers and thread creation;
-- a footprint search, the same search a footprint row uses, for plain shared fields that the census cannot recognize.
+- **Address reuse after a full collection.** A full collection freed a large young object, and a new object was later allocated at the same address. The next minor collection checked membership by address alone, took the new object for the old one, and left its pointers unhealed, so a live object ended up pointing into a recycled part of the nursery. The fix stamps each entry with the collection that recorded it. The tenuring model reproduces the bug three ways, and the pre-fix behaviour is kept as mutants.
+- **A sweep that finished in the wrong place.** The lazy sweep could complete on a second code path that skipped the check for "a parallel minor collection is running", and so shrink the old generation while other threads were still promoting into it. We found it by reading the code while writing the promotion model; TLC then produced a 25-state counterexample.
+- **A snapshot that reached freed memory.** An adversarial review of the snapshot model's plan suspected that the start-of-cycle walk over young objects could follow a dead object into a cell a full collection had already freed. TLC confirmed it with a 17-state counterexample.
 
-Pins are narrow on purpose. Hashing a whole allocator file of several thousand lines would fire on every edit and teach people to accept the change without looking. Regions pin just the code a model describes, and the census catches an atomic added anywhere in a covered file. Census and footprint pins keep the text they matched, so a failure prints the lines added and removed.
+## The numbers
 
-Hashes alone would let unguarded code arrive beside guarded code, so the checker also checks coverage. Every region marker must be pinned, every model must have a pin, every footprint row must appear in some mapping, and every allocator file with a concurrency line must have a census pin. The kernel license manifest is built the same way, for the same reason.
+At the time of writing: 8 collector models with 374 registered checks, of which 180 must fail by violating a named property (mostly mutants), 79 are in the slow "deep" tier and 18 are run by Apalache; and a canary manifest of 237 pins. The quick tier of a model is meant to finish in about two minutes so developers run it while working. None of the model checks run in continuous integration: the deep runs take hours, and we run them by hand when a model or its code changes, with the canary in every build saying when that is.
 
-Accepting a changed hash is a separate, audited step. The update command refuses until the audit log of every model the pin names quotes the first twelve hex digits of the changed hash. The verdict is therefore written before the code is accepted, even when the verdict is that no model change is needed.
+The models are evidence about the design and its mapping to the code, not a proof of the C++. They check small heaps, the one inductive proof stops at five objects, and anything a mapping abstracts is argued in the mapping rather than checked. Collector policy (when to collect, how fast to mark) is measured, not modelled.
 
-By default a canary failure prints a warning banner and the build continues, checking again on every build. A build setting turns the failure into a build error, and the script run by hand fails unless it is told to warn. Nothing in continuous integration notices a warning, so the banner is the only signal. Whichever form it takes, it means one thing: read the models it names and their mappings, decide whether they still describe the code, and only then accept the hash.
+> **Designs we didn't use.** We considered one large model of the whole collector, but it has far too many states to explore. Small models, each of one protocol and checked against the code it describes, are what TLC can actually finish.
 
-## Why the modeling rules are strict
+## Further reading
 
-The collector's concurrency bugs corrupt the heap without crashing where the mistake happened. A lost mark frees a live object, and a double copy leaves two versions of one value. Either shows up much later as a wrong result or a crash elsewhere. Stress tests rarely reach the fork and emergency-collection paths, while exhaustive exploration of a small heap reaches every interleaving there. Concurrent tenuring sharpens this, because it copies objects while the program runs, where a missed interleaving is hardest to see in testing. Its model is built from the merged code rather than from its design.
-
-A model that differs from the code in the wrong way can pass while the code fails, so the models follow accuracy rules.
-
-- One model step is one atomic step of the code. A plain load and a write that depends on it are two steps, and a loop that checks several locations for work is split into one step per location. Merging them erases exactly the interleavings that break termination protocols.
-- Shared memory is modeled at the unit the hardware shares. Mark bits live in bytes that cover eight slots, and promotion chunks own whole 64-bit words, so a model with one bit per object cannot see a lost update. The snapshot model is the exception: it keeps one true-or-false mark per object and leaves byte sharing to the bitmap model and its weak-memory driver, and its mapping states why that split is sound.
-- Every invariant has a mutant that must break it. A model that cannot fail proves nothing, and a mutant that passes shows that a configuration's target is unreachable within its bounds.
-- Model properties are named after the rows of the invariant catalog, so one id links the catalog row, the model and the runtime check.
-- A counter that is only compared for equality becomes a per-observer flag meaning "changed since I last read it", and a counter that wraps is given a tiny width so the wrap is reachable. Bounding the counter with a state constraint does not work, because TLC neither explores nor checks states outside a constraint, and liveness checking under a constraint is unreliable.
-
-## Where and when the checks run
-
-Only the canary runs in every build. The quick and deep TLC runs, the Apalache proofs and the GenMC drivers are far too heavy for hosted runners, and running them in continuous integration is declined on cost. They run in the development container when a model is finished and before a concurrent phase is switched on by default. The container image can be built without the model toolchain, and the CI image is.
-
-The toolchain is pinned for reasons a developer upgrading it would need to know. The models run on TLC 1.8.0 rather than the stable 1.7.4, because the community modules that trace validation needs fail on 1.7.4. The TLC jar is kept in the repository, because upstream re-uploads 1.8.0 in place and a download pinned by hash would stop matching. GenMC is built with the compiler version it supports rather than the project's own LLVM. Spin loops are straightened out in the drivers, because GenMC cannot run pause, yield or sleep calls.
-
-## What the models leave out
-
-The models are evidence about the design and its mapping to the code, and their limits are part of what they say.
-
-There is no proof of the C++. That would need a verified semantics of C++ of the kind research frameworks such as Iris or VST provide, which is out of proportion for this project. The models check small heaps, the one inductive proof covers heaps of up to five objects, and anything a mapping abstracts is argued in the mapping rather than checked. Two examples are the snapshot model's single mark bit per object and the allocation buffers' filler objects, which the forwarding model leaves out on the argument that only their owner touches them before the threads join.
-
-Collector policy is not modeled: when to collect, how fast to mark, the shape of allocation buffers and the size classes. Policy is measured rather than verified, and the rule that collection is deterministic is enforced by a validator instead.
-
-Only the collector as built is modeled: one mutator in the process, with either the region nursery or the legacy semi-space nursery. A single heap shared by several mutators is declined, so it is absent from the models. Concurrent clearing of the mark bitmap and concurrent evacuation of the old generation are not built, and each would need its own model first. One heap per thread, exchanging messages, is the planned direction for multi-threaded Elm and is not built either. Its design notes plan models of their own and bring them under the same canary rule.
-
-GenMC is the weak-memory tool because it runs the real headers. C11Tester tests randomly, so a pass from it is weaker evidence. herd7 needs hand-written litmus tests, which drift from the code they stand for.
-
-## References
-
-Parent: [verification.md](/docs/verification).
-
-- `test/tla/README.md`: how to run the models, the layout, trace validation and the canary protocol. Start here.
-- `test/tla/models.txt`, `test/tla/manifest.txt`: the registries of expected outcomes and of pins; `test/tla/census/` holds the matched text of census and footprint pins.
-- `test/tla/M1-snapshot-mark/` to `test/tla/M8-*/`: one directory per model, each with its PlusCal source and translation, `MC.tla`, quick and deep configurations, `mutants/`, trace specifications, `MAPPING.md` and `AUDIT.md`. M1's `SnapshotMark.tla`, `MAPPING.md` and `AUDIT.md` are the worked example.
-- `test/tla/run_models.py`, `test/tla/run_traces.py`, `test/tla/trace/`, `test/tla/common/`: the runner and trace machinery.
-- `test/scripts/check-tla-manifest.sh` (`--update` is the audited acceptance step) and the `tla-canary` block of the top-level `CMakeLists.txt`. `ECO_TLA_CANARY_STRICT=ON` makes a failure stop the build; it is OFF by default and no preset sets it. A hand run is strict unless `ECO_TLA_CANARY=warn`.
-- `runtime/src/allocator/TlaTrace.hpp`: the trace hooks, compiled in by `ECO_TLA_TRACE`; region markers are `// TLA-REGION(<id>) begin` and `end`.
-- `test/genmc/` with `drivers.txt` and `AUDIT.md`: the weak-memory drivers.
-- `test/gc-heap-tsan/`: the race-detector and fork harnesses that produce traces.
-- `plans/threaded-gc-tla-verification.md`: accuracy rules A1 to A9, the contracts (Drain, CopyOnce, LaunchJoin, PoolJob, SnapshotCycle, TenureDisjoint, BitFaithful, ReleaseContract), the canary design and the traps. `plans/threaded-gc-tla-primer.md` is a reader's guide; `plans/threaded-gc-tla-W-weak-memory.md` covers the choice of weak-memory tool.
-- `plans/threaded-gc-concurrency-register.md`: every defect the models and tools have found, with its status.
-- `design_docs/parallel-gc.md` section 2.1: the immutability premise and the snapshot-closure lemma.
-- `design_docs/multi-threaded-eco/06-invariants-and-open-questions.md`: the models planned for one heap per thread.
-- `docker/vendor/README.md`, `docker/vendor/tla2tools.jar` (TLC 1.8.0), `docker/eco-dev.Dockerfile`: the toolchain.
-
-Invariants: HEAP_007 (one mutator per process), HEAP_SNAPSHOT_001 and HEAP_SNAPSHOT_002 (relied on by M1), HEAP_074 (the CR-017 fix), GC_DET_001 (deterministic collection, enforced by a validator). The canary rule (investigate the named models, never just repair the hash) is in `test/tla/README.md` "The canary", not in the catalog.
+- [The garbage collector](/docs/garbage-collector) — the collector these models describe, and why immutability lets it run without a write barrier.
+- [How we know it works](/docs/verification) — the other test layers, including ThreadSanitizer and GenMC on the real allocator.
+- [The runtime](/docs/runtime) — the threads that share the heap.
+- The full design document: [Concurrency models theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/verification/concurrency-models.md)
+- Source: [`test/tla`](https://github.com/eco-lang/eco-compiler/tree/master/test/tla) and [`runtime/src/allocator`](https://github.com/eco-lang/eco-compiler/tree/master/runtime/src/allocator)

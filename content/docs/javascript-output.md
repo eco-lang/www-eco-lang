@@ -1,101 +1,64 @@
 ---
 title: "JavaScript output"
-description: "Eco keeps the stock Elm compiler's JavaScript and HTML generator for two reasons."
-section: "Theory"
+description: "Why Eco keeps the stock Elm compiler's JavaScript and HTML generator, unchanged and fed from the untyped program, alongside its native back end."
+section: "The compiler"
 sectionOrder: 2
-order: 11
+order: 9
 ---
 
-Eco keeps the stock Elm compiler's JavaScript and HTML generator for two reasons. The compiler is an Elm program, so before any native binary of it exists it has to run as JavaScript. And JavaScript output is the established behavior of Elm programs, against which the native path is checked. A build that asks for a `.js` or `.html` file, or names no output at all, takes the erased path: the front end, then Elm's own optimizer, which drops types, then this generator. The generator walks the optimized program from its entry points and writes every reachable definition once, inside a single JavaScript function, together with the kernel JavaScript of the libraries the program uses. It sits behind a small interface and reads only the erased program, so the typed, specialized program that feeds MLIR never reaches it.
-
-## Same driver, different program
-
-The JavaScript generator and the MLIR generator are two back ends of one build driver. They share project loading, caching, the discovery of entry points and error reporting. They do not share the program they read. The MLIR generator reads the monomorphic graph that the whole-program steps produce. The JavaScript generator reads the erased graph: one record of every global definition, as stock Elm's optimizer builds it. Nothing typed crosses to the JavaScript side, and nothing about heap layouts, calling conventions or boxing belongs there.
-
-The interface makes that split a matter of types rather than convention. It has two kinds of back end, and the only real difference between them is the graph they accept:
-
-```elm
-type alias CodeGen =
-    { -- Generate a complete program from the optimized global graph
-      generate :
-        { sourceMaps : SourceMaps
-        , leadingLines : Int
-        , mode : Mode.Mode
-        , graph : Opt.GlobalGraph
-        , mains : Mains
-        }
-        -> Output
-    ...
-    }
-
-type alias MonoCodeGenConfig =
-    { sourceMaps : SourceMaps
-    , leadingLines : Int
-    , mode : Mode.Mode
-    , graph : Mono.MonoGraph
-    }
-```
-
-From `compiler/src/Compiler/Generate/CodeGen.elm`. The first kind takes the erased `Opt` graph and the list of entry points; the second takes the monomorphic graph, and only the MLIR generator implements it. The cut part of `CodeGen` holds two entry points for the interactive loop, which only the erased kind offers. Because the graph's type is fixed in the record, a JavaScript back end cannot be handed typed data by accident. Its result is text. The MLIR generator writes its bytecode through its own streaming writer, outside this interface, so the interface has no use for a binary result.
-
-The adapter that puts the stock generator behind the first interface is a few lines long. The build driver wraps it in three drivers, one per mode, that load the cached erased objects, assemble the graph and the entry points, and read module sources when source maps are wanted. The interface exists so that both targets share one driver instead of each carrying a fork of it.
+Eco still writes JavaScript, with the same generator stock Elm uses. That is not nostalgia. The compiler is itself an Elm program, so before any native binary of it exists it has to run as JavaScript. And Elm's JavaScript output is the established behaviour of Elm programs, the reference the native path is checked against.
 
 ## Choosing JavaScript
 
-The file name decides the back end, once for the whole build. A name ending in `.js` or `.html` selects this generator. A name ending in `.mlir` selects MLIR, and any other name selects a native output whose kind the extension decides. With no output name, the build writes `index.html` when the project has one entry point and `elm.js` when it has several, which is what `elm make` does.
+The output file name picks the back end, once for the whole build. A name ending in `.js` or `.html` selects this generator, `.mlir` selects MLIR, and any other name selects a native output whose kind the extension decides. With no output name, the build writes `index.html` for a project with one entry point and `elm.js` for several, as `elm make` does.
 
-The generator runs in one of three modes, and the options for debugging, for production optimization and for source maps choose them. These options have no meaning on the native side and affect only this generator, because they are inherited Elm behavior. Development mode writes readable code. Debug mode is development mode carrying the program's type information, which the Elm debugger needs to display values. Production mode counts how often each record field name occurs in the whole graph and gives the most frequent fields the shortest names, which shrinks the output.
+The `--debug`, `--optimize` and `--sourcemaps` options mean what they mean in Elm and affect only this generator. Development mode writes readable code; debug mode adds the type information the Elm debugger needs; production mode gives the most frequent record fields the shortest names.
 
-## From erased graph to file
+## Same driver, different program
 
-The generator turns the graph into a file in four steps, in the order they run.
+The JavaScript and MLIR generators are two back ends of one [build driver](/docs/build-driver). They share project loading, caching and error reporting, but not the program they read. A JavaScript build takes the erased path: the front end, then Elm's own optimizer, which drops types, then this generator. The typed, specialized program that feeds MLIR never reaches it, and a JavaScript build writes none of the typed artifacts. The generator's interface takes the erased graph in its type, so a JavaScript back end cannot be handed typed data by accident.
 
-1. It walks the graph from each entry point and emits every reachable definition once, dependencies before the definitions that use them, in a fixed sorted order, inside one immediately invoked function. Code that no entry point reaches is never written.
-2. It lowers each definition, expression by expression, into a small syntax tree for JavaScript. Decision trees from pattern matching become chains of `if` and `switch`, tail calls become loops, and a reference to a kernel function (one of the library functions written directly in JavaScript) becomes a plain global name of the form `_Module_function`.
-3. It prints the tree as text. The printer records the source position of each piece, so a version 3 source map can be built when one is asked for.
-4. It assembles the file. The file opens with the helpers that make curried calls of two to nine arguments cheap, then the kernel JavaScript of the libraries the program uses, then the exported entry points. It closes with a small block inherited from Guida that represents tuples of more than three elements and teaches the terminal debug printer to show them. Eco's front end rejects such tuples, so no program Eco accepts needs that block.
+The generator walks the program from its entry points and writes every reachable definition once, dependencies first, inside a single JavaScript function. Decision trees become chains of `if` and `switch`, tail calls become loops, and the file opens with the helpers that make curried calls of two to nine arguments cheap, followed by the kernel JavaScript of the libraries the program uses. All of that is the stock design, left alone so that Eco's output stays interchangeable with Elm's.
 
-Identifiers are chosen to be legal JavaScript and free of collisions, and production mode uses short generated names.
+Here is the `area` function from [the tour](/docs/tour), built with `eco make src/Main.elm --output=main.js`:
 
-Kernel names are flat on purpose. A kernel module from Elm's libraries and one from Eco's libraries with the same module name map to the same JavaScript name. The compiler's own source imports Eco kernel modules, and when it runs as JavaScript, those imports reach the JavaScript functions that the kernel files define under the flat names. Separate names for the two families would leave the JavaScript-hosted compiler calling functions that no kernel file defines. The MLIR side has to keep the two families apart; the JavaScript side does not.
+```javascript
+var $author$project$Main$area = function (shape) {
+	switch (shape.$) {
+		case 'Circle':
+			var r = shape.a;
+			return (3.14 * r) * r;
+		case 'Rect':
+			var w = shape.a;
+			var h = shape.b;
+			return w * h;
+		default:
+			var s = shape.a;
+			return s * s;
+	}
+};
+```
 
-For HTML output the JavaScript is placed in a page that starts the program on one element and shows an initialization error if startup fails. The page tells the source map that two lines precede the JavaScript, but it writes more than two, so line numbers in source maps for HTML output are likely off by the difference.
+This is character for character what stock Elm writes. The constructor is a string tag on a JavaScript object and every number is a JavaScript double. Compare the native version in the tour, where the same `case` reads an integer tag from a heap header and multiplies raw `f64` values. The two outputs share nothing below the decision tree.
 
-## Why Eco keeps the stock generator
+One thing Eco did have to change is kernel names. Eco's own kernel package shares module names with Elm's libraries (`File`, `Http`, `Process`), and both `File` kernels define `_File_size`. With stock Elm's flat names, one kernel silently replaced the other and the program failed at load. So Elm kernels keep their stock `_Module_name`, which leaves output for ordinary Elm programs unchanged, and Eco kernels are named `_Eco_Module_name`.
 
-Three needs keep it, and a fourth reason keeps it on the erased program.
+## Why Eco keeps it
 
-The self-compilation chain needs it. The first stage uses stock Elm to build the compiler as JavaScript. The next stages use that JavaScript compiler, through this generator, to build the compiler again, until the JavaScript output stops changing. Only after that does a stage emit the MLIR that becomes the first native compiler. Without this generator there is no path from stock Elm to a native Eco. The fixed point also puts a requirement on the native compiler: when it generates JavaScript, the text it prints for a number, such as a float literal, has to match what the JavaScript-hosted compiler prints, or the output is not identical.
+**The bootstrap needs it.** Stock Elm builds the compiler as JavaScript. That JavaScript compiler then rebuilds itself through this generator until the output stops changing, and only then emits the MLIR that becomes the first native compiler. Without this generator there is no path from stock Elm to a native Eco ([The compiler compiles itself](/docs/bootstrap)). The fixed point also constrains the native compiler: when it writes JavaScript, the text it prints for a float literal must match what the JavaScript-hosted compiler prints, or the outputs differ.
 
-Browser projects need it. The default page, the single JavaScript file and the debug, production and source map options are stock Elm behavior, so Eco can replace `elm make` for a browser project. The curried-call helpers, the single wrapping function and the shortening of field names are the stock design too, left unchanged so that Eco's output stays interchangeable with Elm's.
+**Browser projects need it.** Because the generator and its options are stock Elm, Eco can replace `elm make` for a browser project.
 
-The native path needs a reference. The native runtime's rules for effects and ports are stated as parity with the JavaScript runtime: the native side matches JavaScript, not the other way round. The MLIR equivalence check compiles every whole-program test with the JavaScript-hosted compiler and with the native compiler and compares the MLIR, and the benchmarks compare Eco's JavaScript output with its native output.
+**The native path needs a reference.** The native runtime's rules for effects and ports are stated as parity with the JavaScript runtime: native matches JavaScript, not the other way round. Our benchmarks compare Eco's JavaScript output with its native output.
 
-The generator reads the erased program because that is stock Elm's design. Stock Elm drops types after type checking because JavaScript does not need them, and the typed optimizer exists only for the native path. A JavaScript build runs only the erased path and writes none of the typed artifacts, as [compiler.md](/docs/compiler) explains. Leaving the generator on the erased program frees the typed representation to be shaped entirely for native code.
+The generator reads the erased program because that is stock Elm's design: JavaScript does not need types, so Elm drops them after type checking. Leaving the generator there frees the typed representation to be shaped entirely for native code.
 
-Two other designs come up and are turned down. Dropping JavaScript output for native code alone would break the self-compilation chain and browser use together. Feeding the generator from the typed or specialized program would tie it to data that exists to serve native code, and the two interface kinds keep it off that data.
+> **Designs we didn't use.** Feeding the generator from the typed or specialized program, to improve its output, would tie it to data whose shape is chosen for native code and changes for native reasons. An improvement both back ends would benefit from belongs in the optimizer that builds the erased program.
 
-## References
+## Further reading
 
-Parent: [compiler.md](/docs/compiler).
-
-Code:
-
-- `compiler/src/Compiler/Generate/CodeGen.elm`: the two interface kinds (`CodeGen`, `MonoCodeGen`) and the text `Output`.
-- `compiler/src/Compiler/Generate/CodeGen/JavaScript.elm`: the adapter to the stock generator.
-- `compiler/src/Compiler/Generate/JavaScript.elm`: the graph walk, the helpers, kernel chunks, the closing `EXTRA GUIDA CORE` block (`_Utils_TupleN` and its `_Debug_toAnsiString` wrapper), REPL output and source maps.
-- `compiler/src/Compiler/Generate/JavaScript/Expression.elm`: lowering of each expression.
-- `compiler/src/Compiler/Generate/JavaScript/Name.elm`: identifier choice, including `fromKernel`, which gives Elm and Eco kernel modules the same name.
-- `compiler/src/Compiler/Generate/JavaScript/Builder.elm`, `SourceMap.elm`, `Functions.elm`: printing, source maps, and the `F2`..`F9` and `A2`..`A9` helpers.
-- `compiler/src/Compiler/Generate/Mode.elm`: `Dev (Maybe Types)` and `Prod ShortFieldNames`.
-- `compiler/src/Compiler/Generate/Html.elm`: the HTML page (`sandwich`) and its `leadingLines` mismatch.
-- `compiler/src/Builder/Generate.elm`: `javascriptBackend` and the `debug`, `dev` and `prod` drivers.
-- `compiler/src/Terminal/Make.elm`: output selection (`parseOutput`, `handleArtifacts`) and the `--output`, `--debug`, `--optimize` and `--sourcemaps` options. `compiler/src/API/Make.elm`: the HTML path for the JSON entry point.
-- `compiler/review/src/EnforceBoundaries.elm`: the layer rule that keeps generation downstream of earlier phases.
-
-Documents:
-
-- `docs/bootstrap.md`, `docs/options.md`, `design_docs/distribution.md`: the self-compilation chain and the output kinds.
-- The header of `CodeGen.elm` describes a third interface kind, `TypedCodeGen`, and a binary `Output`; neither exists in the code.
-
-Invariants (`design_docs/invariants.csv`): PORT_005 and PORT_007 (port and effect parity with the JavaScript runtime), LIVE_001.
+- [The compiler](/docs/compiler) — the typed and erased paths, and where they split.
+- [The build driver](/docs/build-driver) — the shared driver that hands each back end its program.
+- [The compiler compiles itself](/docs/bootstrap) — the bootstrap chain that runs through this generator.
+- The full design document: [JavaScript output theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/compiler/javascript-output.md)
+- Source: [`compiler/src/Compiler/Generate`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/Generate)

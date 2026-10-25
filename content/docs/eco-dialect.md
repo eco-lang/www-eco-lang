@@ -1,80 +1,112 @@
 ---
 title: "The eco dialect"
-description: "The typed operations in which the Elm-written compiler hands a fully specialized program to the C++ backend."
-section: "Theory"
-sectionOrder: 2
-order: 14
+description: "The eco dialect is the set of typed MLIR operations in which Eco's Elm-written compiler hands a program to its C++ backend, and its verifier is the check made on that hand-over."
+section: "The backend"
+sectionOrder: 3
+order: 2
 ---
 
-The eco dialect is the set of typed operations in which the Elm-written compiler hands a fully specialized program to the C++ backend, and its verifier is the check made on that program each time it is read. About 140 operations describe the program as case expressions, constructions and projections of heap objects, closures and calls, primitive arithmetic and typed replacements for common kernel functions. Values have one opaque boxed type, plain machine types for unboxed Int, Float, Char and Bool, and six aggregate types that exist only in the intermediate code. The verifier guarantees only facts that one operation shows and that are cheap to test: a case expression is well formed, each stored field's declared kind equals its operand's type, no single-bit Bool goes into a heap or closure slot, objects fit the sizes the heap header can encode, no constructor is built as a heap object with zero fields, every referenced symbol exists, and, in one bounded case, the arguments added to a closure match its function's parameters. It does not check that a direct call matches its callee's signature, and it does not check the tuple and list layout attributes that the lowering reads.
+Eco is written in two languages: the compiler in Elm, the backend and runtime in C++. No type system spans the gap between them. The eco dialect is the contract that does: a set of typed operations in which the compiler describes the program, and a verifier the backend runs every time it reads one. The compiler describes values; only the backend decides how they sit in memory.
 
-## The compiler describes values, the lowering decides memory
+> **Background**
+>
+> - [MLIR](/docs/glossary#mlir) — a compiler framework in which a program is a list of typed operations, grouped into [dialects](/docs/glossary#dialect).
+> - [SSA](/docs/glossary#ssa) — each value is defined once and named, like `%k` or `%shape` below.
+> - [Boxed and unboxed](/docs/glossary#boxed-and-unboxed) — a boxed value is one word that points at the heap or holds a small constant; an unboxed value is a plain machine number.
+> - [Lowering](/docs/glossary#lowering) — rewriting operations into simpler ones closer to the machine.
 
-The dialect keeps the functional structure of the program until the backend chooses how memory is laid out. Data types, closures and pattern matches stay as operations instead of becoming loads, stores and branches, so the lowering, which knows the collector, decides each layout. The operations that allocate raw memory exist in the dialect, but only the lowering introduces them. The compiler never writes one, which means it never describes memory, only values.
+## A small function
 
-The verifier follows from the same division of work. Whatever it proves, the lowering may assume. Whatever it does not prove, the lowering takes on trust from the compiler. The verifier runs on every operation each time a module is parsed, so it is kept to checks that look at one operation, or at most at one symbol found through MLIR's cached symbol table. A check that needs the whole module belongs in a pass.
+Here is an Elm function that scales a shape:
+
+```elm
+type Shape
+    = Circle Float
+    | Rect Float Float
+
+scale : Float -> Shape -> Shape
+scale k shape =
+    case shape of
+        Circle r ->
+            Circle (k * r)
+
+        Rect w h ->
+            Rect (k * w) (k * h)
+```
+
+Compiled with `eco make --text-mlir`, its body comes out as follows (trimmed: the `_operand_types` attributes and the function wrapper are removed):
+
+```mlir
+^bb0(%k: f64, %shape: !eco.value):
+  %2 = "eco.get_tag"(%shape) : (!eco.value) -> i32
+  %3 = "arith.constant"() {value = 0 : i32} : () -> i32
+  %4 = "arith.cmpi"(%2, %3) {predicate = 0 : i64} : (i32, i32) -> i1
+  %16 = "eco.case"(%4) ({
+        %6 = "eco.project.custom"(%shape) {field_index = 0} : (!eco.value) -> f64
+        %7 = "eco.float.mul"(%k, %6) : (f64, f64) -> f64
+        %8 = "eco.construct.custom"(%7) {constructor = "Circle", size = 1,
+               slot_kinds = array<i8: 2>, tag = 0} : (f64) -> !eco.value
+        "eco.yield"(%8) : (!eco.value) -> ()
+  }, {
+        %10 = "eco.project.custom"(%shape) {field_index = 0} : (!eco.value) -> f64
+        %12 = "eco.project.custom"(%shape) {field_index = 1} : (!eco.value) -> f64
+        %13 = "eco.float.mul"(%k, %10) : (f64, f64) -> f64
+        %14 = "eco.float.mul"(%k, %12) : (f64, f64) -> f64
+        %15 = "eco.construct.custom"(%13, %14) {constructor = "Rect", size = 2,
+               slot_kinds = array<i8: 2, 2>, tag = 1} : (f64, f64) -> !eco.value
+        "eco.yield"(%15) : (!eco.value) -> ()
+  }) {case_kind = "bool", tags = array<i64: 1, 0>} : (i1) -> !eco.value
+  "eco.return"(%16) : (!eco.value) -> ()
+```
+
+Most of the dialect is visible here. The scale factor `k` is a plain `f64`, because monomorphization has fixed it as a Float. The shape is `!eco.value`, one opaque word. With only two constructors, the compiler tests the tag against 0 and switches on the resulting `i1`; a type with more constructors, like the `area` function in [the tour](/docs/tour), gets a constructor case instead. Each branch reads the Float fields straight out of the object with `eco.project.custom`, multiplies them unboxed, and builds a new object with `eco.construct.custom`, whose `slot_kinds` say that every field is a Float (kind 2). Each branch ends in `eco.yield`, which hands its value back as the result of the case.
+
+Nothing in the listing says how big a `Rect` is or how a Float is stored. Those are the backend's decisions.
+
+## The compiler describes values, the backend decides memory
+
+The dialect keeps the program's functional structure until the backend chooses a memory layout. Data types, closures and pattern matches stay as operations instead of becoming loads, stores and branches, so the part that knows the collector decides each layout. Raw allocation operations exist in the dialect, but only the lowering creates them. The compiler never writes one, so it never describes memory, only values.
+
+The verifier follows from the same split. Whatever it proves, the lowering may assume; whatever it does not prove, the lowering takes on trust. Because it runs on every operation each time a module is read, it is kept to checks that look at one operation, or at most at one symbol found through MLIR's cached symbol table. A check that needs the whole module belongs in a pass.
 
 ## Types
 
-The types make a value's form in the intermediate code explicit and keep it separate from its layout in the heap. There are three kinds.
+There are three kinds of type.
 
-The boxed type, written `!eco.value`, is one machine word. It holds either the address of a heap object or an embedded constant, told apart by a bit in the word. True, False, the empty list and every constructor with no fields are embedded constants. How the word is encoded, and what each Elm type becomes in each representation, is described in [value-representation.md](/docs/value-representation).
+- **The boxed value**, `!eco.value`, is one machine word: either the address of a heap object or an embedded constant, told apart by a bit. True, False, the empty list and every constructor with no fields are embedded constants. [Value representation](/docs/value-representation) describes the encoding.
+- **Primitives** are plain MLIR types: Int is `i64`, Float `f64`, Char `i16`, and Bool a single bit, `i1`. The single-bit Bool exists only in the intermediate code. In heap fields, in closures and at call boundaries a Bool is always boxed, as one of its two constants.
+- **Six aggregate types** hold a small group of values outside the heap: a pair, a triple, a record, a custom-type value, a list cell and a closure environment. They lower to LLVM struct values held in registers, never to heap pointers.
 
-Elm's primitives are plain MLIR types: Int is a 64-bit integer, Float a 64-bit float, Char a 16-bit integer and Bool a single bit (`i1`). The single-bit Bool exists only in the intermediate code. In heap fields, closures and at call boundaries a Bool is always boxed, as one of the two embedded constants.
-
-Six aggregate types hold a small group of values outside the heap: a pair, a triple, a record, a custom-type value, a list cell and a closure environment. They lower to LLVM struct values and never to heap pointers.
-
-None of these types carries heap layout. A constructor's tag, for example, is an attribute of the operation that builds or boxes the value, not part of any type. That lets one aggregate type describe a value whether it ends up in registers or in a heap object.
+None of these types carries a heap layout. A constructor's tag is an attribute of the operation that builds the value, as `tag = 1` is above, not part of a type. That lets one aggregate type describe a value whether it ends up in registers or in a heap object.
 
 ## Operations
 
-The operations group by what they describe, from control flow inward to memory. Each group's shape follows from one decision about who knows what.
+There are about 140 operations, and they group by what they describe.
 
 | Group | What it holds | Why it has this shape |
 |-------|---------------|------------------------|
-| Control | A case expression that produces a value, its yield, join points (labeled blocks a function can jump to with arguments) and jumps to them, return, crash, and a debug print | Elm's case is an expression, and a value-producing case lowers directly to structured if and switch |
-| Heap objects | One construction and one projection per runtime layout (list cell, pair, triple, record, custom type, closure), tag extraction, embedded constants, boxing and unboxing, module-level globals | Each allocation and projection commits to one runtime layout, whose header tag matches the runtime's type |
-| Closures and calls | Creating a partial application (a closure holding some but not all of its arguments), creating a group of mutually recursive closures, extending a partial application, and calls that are direct by name or indirect through a closure | A call states whether its target is a named function or a closure and how many arguments remain, so the lowering works out neither |
-| Primitive arithmetic | About 75 operations on Int, Float, Char and Bool | Elm defines results the machine does not, such as integer division by zero giving 0, so each operation names the Elm meaning |
-| Typed intrinsics | String operations, list append and map, array operations, structural equality, comparisons returning an Elm `Order` | Each replaces a call to a generic kernel function with an operation the lowering specializes by type |
-| Aggregates | Building each aggregate type, moving a value between aggregate and heap form, building a closure | The compiler keeps short-lived values out of the heap and states where they must be boxed |
-| Never written by the compiler | Raw allocation of objects, strings and closures; six reference-counting placeholders | Allocation belongs to the lowering; the placeholders keep a design option open and never reach code generation |
+| Control | Value-producing case, its yield, join points and jumps to them, return, crash | Elm's case is an expression, and a value-producing case lowers directly to structured if and switch |
+| Heap objects | One construction and one projection per runtime layout (list cell, pair, triple, record, custom type), tag reads, embedded constants, boxing and unboxing, globals | Each one commits to a single runtime layout |
+| Closures and calls | Partial applications, groups of mutually recursive closures, extending a partial application, direct and indirect calls | A call states whether its target is a named function or a closure, and how many arguments remain, so the lowering works out neither |
+| Arithmetic | About 75 operations on Int, Float, Char and Bool | Elm defines results the machine does not, such as integer division by zero giving 0, so each operation names the Elm meaning |
+| Typed intrinsics | String operations, list append and map, array operations, structural equality, comparisons returning an `Order` | Each replaces a call to a generic kernel function with one the lowering can specialize by type |
+| Aggregates | Building aggregates, moving values between aggregate and heap form, building a closure | The compiler keeps short-lived values out of the heap and says where they must be boxed |
 
-Join points exist because a value-producing case cannot jump out of one of its branches. Tail recursion is therefore written as a jump to a join point, which lowers to a loop.
-
-Every operation is declared in one TableGen file, and MLIR generates the C++ classes from it. All hand-written logic lives in one C++ file: the verifiers, the symbol checks, the folds, the effect declarations for calls, and the custom printing of case expressions and join points. The C++ files that register the dialect and its types contain no logic of their own.
-
-The declaration of the custom-type construction shows several of the dialect's rules in one place. Record and closure operations follow the same pattern.
-
-```tablegen
-def Eco_CustomConstructOp : Eco_Op<"construct.custom", [Pure,
-    DeclareOpInterfaceMethods<Eco_GCRootCarrierOpInterface>
-]> {
-  ...
-  let arguments = (ins
-    Variadic<Eco_AnyValueOrAggregate>:$fields,
-    I64Attr:$tag,
-    I64Attr:$size,
-    OptionalAttr<StrAttr>:$constructor,
-    // One kind (0 boxed, 1 Int, 2 Float, 3 Char) per field (HEAP_019).
-    DenseI8ArrayAttr:$slot_kinds
-  );
-  let results = (outs Eco_Value:$result);
-
-  let hasVerifier = 1;
-  ...
-}
-```
-
-From `runtime/src/codegen/Ops.td` (`Eco_CustomConstructOp`).
-
-Notice three things. The operation is marked pure although it allocates; the section on effects explains what keeps that safe. The fields are one variable-length operand list, and `size` says where the real fields end, because the list can also carry extra operands described under root operands below. The tag is an attribute of the operation, not part of a type.
+Join points exist because a value-producing case cannot jump out of one of its branches. Tail recursion is written as a jump to a join point, labelled code the function can jump back to with new arguments, and that becomes a loop.
 
 ## What the verifier checks
 
-### Each field's kind agrees with its operand's type
+The verifier guarantees a short list of facts, each visible on one operation and cheap to test:
 
-Records, custom types, closures and the conversion of an aggregate to heap form carry one small number per field, saying what the field holds: 0 for a boxed value, 1 for Int, 2 for Float and 3 for Char. The verifier works out the kind from each operand's MLIR type and requires the attribute to equal it.
+- **Each field's kind matches its operand's type.** Constructions carry one small number per field: 0 for boxed, 1 for Int, 2 for Float, 3 for Char. The verifier works the kind out from each operand's type and requires the attribute to equal it.
+- **No single-bit Bool goes into a heap or closure slot.** The collector reads every kind-0 slot as a boxed word, and a bare 0 or 1 is not one.
+- **A case is well formed**: one tag per alternative, a scrutinee whose type fits the case kind, and every alternative a single block ending in a yield of the right types.
+- **Objects fit the header**: at most 2040 fields for a custom type, 2047 for a record, 2047 parameters for a closure. The verifier reads these limits from the runtime's own heap header definitions, so the two cannot disagree.
+- **A constructor with no fields is never built as a heap object.** It is always an embedded constant.
+- **Calls and closures agree with themselves**, for example an indirect call's remaining arity equals the number of arguments it passes.
+- **Every referenced symbol exists.**
+
+Here is the field-kind check, from the verifier (trimmed):
 
 ```cpp
 static uint8_t fieldKind(Type t) {
@@ -86,13 +118,10 @@ static uint8_t fieldKind(Type t) {
 ...
   for (unsigned i = 0; i < slots.size(); ++i) {
     Type t = slots[i];
-    // B14: Bool is boxed in heap fields (REP_CLOSURE_001 / FORBID_CLOSURE_001).
     if (t.isInteger(1))
       return op->emitOpError(what) << " " << i
              << " has i1 type: Bool must be boxed to !eco.value before construction";
     const uint8_t k = fieldKind(t);
-    ...
-    const int8_t want = kinds[i];
     ...
     if (uint8_t(want) != k)
       return op->emitOpError("slot_kinds[") << i << "] = " << int(want)
@@ -100,120 +129,53 @@ static uint8_t fieldKind(Type t) {
   }
 ```
 
-From `runtime/src/codegen/EcoOps.cpp` (`fieldKind`, `verifySlotKinds`).
+The type decides the kind and the attribute is only compared with it. The lowering never reads `slot_kinds`: it derives every layout from operand types, so the attribute is a cross-check on the compiler, never a second source of truth. It stays because it is the only check in a production build that the compiler's idea of a layout agrees with the values it passes.
 
-The type decides the kind, and the attribute is only compared with it. That is why the lowering never reads `slot_kinds`: it derives every layout from the operand types, so the attribute is a cross-check on the compiler and never a second source of truth. It is kept because it is the only check in a production build that the compiler's idea of a layout agrees with the values it passes in.
+Some reasons behind the rules are worth spelling out.
 
-A single-bit operand is rejected outright rather than given a kind. The collector reads every kind-0 slot as a boxed word, and a bare 0 or 1 stored there is not one. For closures the same ban sits on the operations that create and extend partial applications, since those are the operations that store values into a closure.
+The kinds are a list of small integers rather than one packed word because the compiler is written in Elm, whose Int is exact only up to 2^53. Two bits per field are needed, not one: a single "unboxed" bit assumes every unboxed field is an Int, and corrupts Floats and Chars when they are boxed again. Old packed-bitmap attributes are rejected rather than ignored, because MLIR would otherwise carry them along as unknown attributes and a stale cached module would go wrong silently.
 
-The kinds are a list of small integers, one per field, because the compiler is written in Elm, whose Int is exact only up to 2^53, so it cannot emit a packed 64-bit word of kinds. Two bits per field are needed, not one: a single "unboxed" bit assumes every unboxed field is an Int, and corrupts Float and Char values when they are boxed again. Packed bitmap attributes on these operations are rejected by the verifier, not ignored. MLIR would otherwise carry them as unknown attributes and drop them silently, and a stale cached module must fail loudly instead.
+The yield rule is strict because a value-producing case lowers to structured control flow, which has no way to leave a branch early. A return inside a branch would have nowhere to go.
 
-### A case expression is well formed
+The size limits come from the header. A custom-type object records the kinds of 24 fields in its header and a record those of 32; either can add up to 63 extra words of kinds, a bound set by a 6-bit header field and by keeping objects below the large-object threshold. That gives 2040 fields. A record could reach 2048 but is capped at 2047, because a record's constructor is also a function taking one argument per field, and a closure's arity field has 11 bits. With the cap, every constructor can be used as a function value.
 
-A case expression matches one value, the scrutinee, against a list of tags, one per alternative. The verifier requires one tag per alternative region, a case kind of constructor, integer, character, string or Bool, a scrutinee type that agrees with that kind, Bool tags of 0 or 1, and, for a string case, one string pattern fewer than alternatives. The case has at least one result. Every alternative is a single block that ends in a yield whose types equal the results.
-
-The yield rule is strict on purpose: any other terminator in an alternative is an error. A value-producing case lowers to structured control flow, which has no way to leave a branch early, so a return inside a branch would have nowhere to go. A Bool scrutinee may be a single bit, so that matching on a Bool does not box it.
-
-### Objects fit the header
-
-The size limits come from how the heap header records field kinds. A custom-type object keeps the kinds of 24 fields in its header and a record those of 32. Either can add up to 63 extra words of kinds, 32 fields each, a bound set by a 6-bit header field and by the rule that objects stay below the large-object threshold. That gives a custom type at most 2040 fields.
-
-A record could reach 2048 fields, but it is capped at 2047. A record type's constructor function takes one argument per field, and a closure's arity is an 11-bit field whose largest value is 2047. With the cap, every record constructor is usable as a function value, and so is every custom-type constructor. Keeping a closure arity of 63 with an error past it would leave large constructors unusable as function values, and staging them through curried wrappers is rejected too, so the limits are wide instead.
-
-A closure has at most 2047 parameters and fewer captured values than parameters, so at most 2046 captures. The verifier reads all of these limits from the runtime's heap header definitions, so the verifier and the collector cannot disagree about them.
-
-### A constructor with no fields has one representation
-
-A constructor with no fields is always an embedded constant, and building one as a heap object with zero fields is a verifier error. The reason is equality. The equality paths answer "not equal" as soon as the two words differ and either side is embedded, so a heap copy of a nullary constructor would make equal values compare unequal. The embedded constant's tag is also checked against the range the word can encode.
-
-### Calls and closures agree with themselves
-
-A call is either direct, naming its callee, or indirect, through a boxed closure with the number of arguments it supplies stated as the remaining arity. A direct call may not also carry a remaining arity, and an indirect call's remaining arity must equal the number of arguments it passes. Extending a partial application in the generic way must produce a boxed value or a primitive. A group of mutually recursive closures must have consistent counts per member, references between members within bounds, and boxed slots for the members it captures. List map checks its element kinds and that a callee's parameters match its captures.
-
-### Referenced symbols exist
-
-Callees, globals, global initializers and fast evaluators must exist, and a kernel function used inside a closure must have a declaration. These checks run in a separate symbol-checking hook that MLIR gives every operation that refers to a named function or global. That hook uses MLIR's cached symbol table, so each check is one lookup, not a scan of the module.
-
-One symbol check reaches across operations. When a typed extension of a partial application traces back, through other unsaturated typed extensions, to the creation of the closure, and the creation names a function with the right number of inputs, the verifier compares the extra arguments with that function's parameter types. In every other case it gives up silently. The check exists because a mismatch at that point otherwise reaches LLVM and aborts there with "Calling a function with a bad signature!", which says nothing about where the mismatch came from. It gives up rather than guess, so it never reports a false error.
-
-### When the verifier runs
-
-Parsing a module always runs the verifier. The developer tool `ecoc` also verifies after every pass. The production drivers skip verification between passes unless the build enables lowering validation, so a pass that writes invalid eco operations is caught only in test or validation builds. That follows from the parent's point that compile time decides the shape of the pipeline.
+A constructor with no fields has one representation because of equality. The equality fast path answers "not equal" as soon as two words differ and either is an embedded constant, so a heap copy of `Nothing` would compare unequal to `Nothing`.
 
 ## What the verifier leaves to the compiler
 
-Three facts the lowering depends on have no verifier behind them, and a change on either side of the dialect must keep them in mind.
+Three facts the lowering relies on have no verifier behind them.
 
-A direct call's arguments are not compared with the callee's signature. Comparing every call and closure with its function's full signature would catch type mismatches early, but it needs module-wide symbol scans, and those scans dominate lowering time. In a normal build no check compares the two, and a mismatch surfaces in LLVM.
+A direct call's arguments are not compared with the callee's signature. That check would need a module-wide symbol lookup per call, and those lookups dominated lowering time. A mismatch surfaces in LLVM instead. One bounded case is checked: when the arguments added to a closure can be traced, through a short chain of operations, back to the closure's creation, the verifier compares them with the function's parameters, and gives up silently otherwise. It exists because LLVM's own message for that mismatch, "Calling a function with a bad signature!", says nothing about where it came from.
 
-The two-bit mask that marks which fields of a pair or triple are unboxed, and the kind of a list cell's head, are attributes that the lowering reads directly. Only tests of the Elm compiler check them.
+The masks that mark which fields of a pair or triple are unboxed, and the kind of a list cell's head, are read by the lowering directly. Only the compiler's own tests check them.
 
-The remaining arity on indirect calls and the case kinds are checked only for consistency with the operation itself. Whether they match what the program means is the compiler's responsibility.
+The remaining arity on indirect calls and the case kinds are checked only for consistency with the operation itself. Whether they match what the program means is the compiler's job.
+
+The verifier always runs when a module is read; the production compiler skips it between passes, since compile time shapes the whole backend.
 
 ## Effects and folds
 
-### Which operations may be merged or erased
+Purity in the dialect is narrow on purpose. Most constructions, projections and arithmetic operations are marked pure, and the fixed-size constructions are pure even though they allocate, so MLIR may delete one whose result is unused. But merging two identical constructions would be wrong. Two objects that each hold a NaN are separate, and the equality fast path compares identity first, so merging them changes the answer of `==`. The pipeline therefore does not run MLIR's common subexpression elimination; that, not the purity mark, keeps allocations apart. Variable-size allocations such as list append carry no traits at all, so MLIR neither merges nor deletes them.
 
-Purity in the dialect is narrow, and a broad grant of it would be unsound. Most constructions, projections and arithmetic operations are marked pure. The fixed-size constructions and closure creation are pure even though they allocate, which lets MLIR erase one whose result is unused. Merging two of them would be wrong: two constructions that each hold a NaN are separate objects, and the equality fast path compares identity first, so merging them changes the answer of an equality test. The pipeline does not run MLIR's common subexpression elimination, for that reason and because it keeps memory alive longer, as [lowering-passes.md](/docs/lowering-passes) describes. That, not the trait, is what keeps allocations apart.
+A call declares its memory effects explicitly. A direct call may carry a marker, `eco.cse_safe`, that lets it be merged or deleted, but never moved ahead of the condition that guards it. The pass that prepares for garbage collection strips the marker, so no later pass can act on it.
 
-The variable-size allocating operations (list and string append, list map, the array allocators) and the extension of a partial application carry no traits at all. MLIR then assumes they have unknown effects and neither merges nor erases them.
+Folds rely on immutability. A projection from a construction earlier in the same function folds to the operand that was stored, and a tag read folds to the constant tag. Eco heap objects are written once, so the field read back is always the one written. Reads such as string length and structural equality are marked pure for the same reason.
 
-A call declares its memory effects explicitly. Declaring them at all removes MLIR's default of unknown effects, so a call that is not marked must claim to read and write memory, or every call would become erasable. A direct call can carry a marker that lets it be merged or erased (`eco.cse_safe`). It never lets the call be moved ahead of the condition that guards it, since the call does not declare itself speculatable. The marker is a discardable attribute, one that MLIR lets any pass drop. The verifier allows it only on a direct call with no root operands, and the garbage-collection preparation pass strips it, so the marker never meets the operands that pass attaches.
+There are no root operands. No operation lists the boxed values live across it; LLVM finds the collector's roots from liveness, as [the backend](/docs/backend) explains. Roots could not be computed in the lowering anyway: by then boxed values have become plain integers, and liveness cannot tell pointers from numbers.
 
-Reads of heap values, such as string length, string comparison and structural equality, are marked pure. That is sound only because Eco heap values are never written after they are published.
+## Aggregates and the byte-sequence dialect
 
-### Folds rely on immutability
+The compiler emits pairs, triples and custom-type values as aggregates by default and boxes them where a value escapes; the dialect supplies only the mechanism. LLVM promotes the aggregates to registers before statepoints are placed, because statepoint rewriting cannot handle a struct holding a heap pointer across a call.
 
-A projection from a construction that dominates it folds to the constructed field's operand, and a tag read of a custom-type construction folds to its tag. Heap objects are written once, so the field read back is always the operand written. The fold also requires the operand's type to equal the projection's result type exactly, which excludes operands that the lowering boxes on the way into the object.
+Fused encoding and decoding of byte sequences uses a separate dialect, `bf`, described in [Bytes fusion](/docs/bytes-fusion). Keeping it apart lets byte fusion be switched on and off without touching the eco operations.
 
-The same folds for list head and tail exist but are off unless an environment switch enables them. Combined with common subexpression elimination, they break the lowering's rewrite of list traversals, so they stay off to keep that combination from being reached.
+> **Designs we didn't use.** Checking every call against its callee's full signature in the verifier would catch type mismatches early, but the module-wide lookups it needs dominated lowering time, so only the bounded closure check remains.
 
-## Root operands
+## Further reading
 
-Every operation that can allocate where the collector might run implements an interface (`GCRootCarrier`) that lets a preparation pass attach the boxed values live at that point as extra operands. The pass puts them in one of three places. Some operations have a separate list for them. Record and custom-type constructions take them after the declared fields, which avoids changing the operand layout that compiler-written bytecode relies on. Calls and closure operations take them after their own operands, with an attribute counting them.
-
-These operands change no emitted code. The lowering splits them off and discards them, and LLVM's statepoint rewriting finds the real roots from liveness, as the parent explains. The compiler attaches none. Roots cannot be computed inside the lowering either: by then the type conversion has turned boxed values into plain integers, so liveness there cannot tell pointers from numbers. LLVM can, because boxed values reach it as pointers in their own address space.
-
-What matters for the dialect is a counting rule: every verifier and fold that counts operands works from the declared count (the size, the field count or the number of captures), or subtracts the root count. A check that counted all operands would break as soon as roots were attached.
-
-## Aggregates and closure building
-
-The compiler emits pairs, triples and custom-type values as aggregates by default, and converts them to heap form where a value escapes. The dialect supplies the mechanism: the six types, the operations that build them and move values between aggregate and heap form, and their verifiers, which require each element type to equal the corresponding parameter of the result type. Escape analysis over the lowered code is the wrong place for this decision: there it allocates more, not less. So the compiler decides, and the backend only carries the decision out.
-
-Before statepoint rewriting, LLVM promotes the aggregates to registers and folds field extraction. Statepoint rewriting cannot handle an aggregate value that holds a garbage-collected pointer across a call, so this order is required.
-
-Building a closure has its own operation. It is the only aggregate operation that allocates, returns a boxed value and names a function, so the general conversion to heap form rejects a closure environment and the closure operation does that job. It keeps the closure limits and the single-bit ban of the partial-application operations.
-
-## The byte-sequence dialect
-
-Fused encoding and decoding of byte sequences uses a separate dialect, `bf`, described in [bytes-fusion.md](/docs/bytes-fusion). It is kept apart so that the eco operations stay stable and byte fusion can be switched on or off without touching them.
-
-## Reference-counting placeholders
-
-Six operations for reference counting do nothing in a design whose collector traces. They are kept for possible experiments with reusing memory. Nothing emits them, and the first pass of the lowering reports an error for any that appears, so none reaches code generation.
-
-## References
-
-Parent: [backend.md](/docs/backend). This node has no children. The consumers of the verified module are described in [lowering-passes.md](/docs/lowering-passes), and its producer in [mlir-generation.md](/docs/mlir-generation). The byte-sequence dialect is described in [bytes-fusion.md](/docs/bytes-fusion).
-
-Code:
-
-- `runtime/src/codegen/Ops.td`: the dialect, its seven types, the type constraints, the `GCRootCarrier` interface and every operation. Read the descriptions of `eco.case`, `eco.call`, `eco.papExtend`, `eco.list.map`, `eco.value.eq` and the value-aggregate section.
-- `runtime/src/codegen/EcoOps.cpp`: `verifySlotKinds`, `verifyClosureKinds`, `rejectStaleBitmapAttr`, `CaseOp::verify`, `RecordConstructOp::verify`, `CustomConstructOp::verify`, `PapExtendOp::verifySymbolUses`, `CallOp::getEffects`, `foldConstructedField`, `ListHeadOp::fold`.
-- `runtime/src/codegen/EcoOps.h` (`kCseSafeAttrName`), `runtime/src/codegen/EcoDialect.cpp`, `runtime/src/codegen/EcoTypes.cpp`.
-- `runtime/src/allocator/Heap.hpp`: `CUSTOM_MAX_FIELDS`, `RECORD_MAX_FIELDS`, `CLOSURE_MAX_ARITY`, `NULL_CONS_MAX`.
-- `runtime/src/codegen/Passes/EcoGCPrepare.cpp`, `runtime/src/codegen/Passes/RCElimination.cpp`, `runtime/src/codegen/Passes/CheckEcoClosureCaptures.cpp`, `runtime/src/codegen/EcoPipeline.cpp`: root operands and the purity marker, the placeholder check, the validation-only capture check, and when verification runs (`ECO_LOWERING_VALIDATION`, off by default).
-- `runtime/src/codegen/Passes/EcoPtrIntVerify.cpp`: the aggregate promotion before statepoint rewriting.
-- `compiler/src/Compiler/Eco/Config.elm` (`aggPromote`, `ctorInline`): the compiler's default aggregate output.
-- `test/codegen/*_rejected.mlir`, `test/codegen/invalid_*.mlir`, `test/codegen/call_purity_attr_*.mlir`, `test/codegen/value_*.mlir`: what the verifier accepts and rejects.
-- `compiler/tests/TestLogic/Generate/CodeGen/`: the tests that check tuple masks and list head kinds.
-
-Invariants (`design_docs/invariants.csv`):
-
-- REP_SSA_001, REP_BOUNDARY_002, REP_BOUNDARY_003, REP_CLOSURE_001, REP_CLOSURE_002, REP_AGG_001, FORBID_CLOSURE_001: representation of values, Bool boxing, aggregates.
-- CGEN_003, CGEN_010, CGEN_020, CGEN_026, CGEN_028, CGEN_029, CGEN_037, CGEN_039, CGEN_053, CGEN_057, CGEN_061, CGEN_062, CGEN_063, CGEN_079: the dialect contract.
-- HEAP_015, HEAP_019, HEAP_044, HEAP_078: layout tags, field kinds, embedded constants, size limits.
-
-Design documents:
-
-- `design_docs/globalopt/borrow-inference-design.md`: why aggregate production moved to the compiler.
+- [The backend](/docs/backend) — what happens to the module after it is verified.
+- [Lowering passes](/docs/lowering-passes) — how these operations become LLVM code.
+- [MLIR generation](/docs/mlir-generation) — how the compiler produces these operations.
+- [Value representation](/docs/value-representation) — the encoding behind `!eco.value`.
+- The full design document: [The eco dialect theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/backend/eco-dialect.md)
+- Source: [`runtime/src/codegen`](https://github.com/eco-lang/eco-compiler/tree/master/runtime/src/codegen)

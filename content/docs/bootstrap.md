@@ -1,113 +1,100 @@
 ---
-title: "Bootstrap"
-description: "The Eco compiler is an Elm program, and before the chain runs the only thing that can compile Elm is the stock Elm compiler, which emits JavaScript."
-section: "Theory"
-sectionOrder: 2
-order: 36
+title: "The compiler compiles itself"
+description: "How Eco's Elm-written compiler is carried from the stock Elm compiler, through JavaScript builds of itself, to a single native eco binary, with two fixed-point checks that the compiler rebuilds itself byte for byte."
+section: "Getting it right"
+sectionOrder: 5
+order: 4
 ---
 
-The Eco compiler is an Elm program, and before the chain runs the only thing that can compile Elm is the stock Elm compiler, which emits JavaScript. The bootstrap is a chain of nine CMake stages that carries the compiler from that stock binary, its only trusted ancestor, to one self-contained native `eco` binary. The first generations run as JavaScript on Node and swap in Eco's own input and output layer. A JavaScript generation then emits the compiler as MLIR, the C++ back end lowers that MLIR into the first native compiler, and the native compiler rebuilds itself with the compiler's default, heavier specialization. Each stage either moves the compiler to a different host or checks that it reproduces itself exactly, once on JavaScript and once natively. Only after both checks pass does the last stage fuse the native front end with the back end into `eco`.
+The Eco compiler is an Elm program, and before Eco exists the only thing that can compile Elm is the stock Elm compiler, which produces JavaScript. So every native `eco` binary descends from a JavaScript one. The bootstrap is the chain of nine stages that makes that journey, and twice along the way it asks the compiler to rebuild itself and checks that the result is identical, byte for byte.
 
-## Why the chain starts from JavaScript
+> **Background**
+>
+> - [Fixed point](/docs/glossary#fixed-point): a compiler that, compiled with itself, produces itself again unchanged.
+> - [MLIR](/docs/glossary#mlir): the intermediate form Eco's front end emits and its C++ back end lowers to machine code.
+> - [Kernel](/docs/glossary#kernel): code in JavaScript or C++ that implements what Elm itself cannot express, such as reading a file.
+> - [Monomorphization](/docs/glossary#monomorphization): making a separate copy of each polymorphic function for every type it is used at.
 
-Nothing but stock Elm can compile the compiler's source before the chain runs, and stock Elm produces only JavaScript. Every part of Eco that emits MLIR is itself Elm source, so the first MLIR the compiler ever produces has to come from a compiler running as JavaScript on Node. That MLIR is what the C++ back end turns into the first native compiler. From stage 6 on, the chain needs neither Node nor stock Elm, and a native compiler builds every later generation.
+## The chain
 
-Starting from stock Elm also fixes what the chain has to trust. The stock binary is downloaded at a pinned version and checked against a recorded hash, and every later compiler is built from source by the one before it. No prebuilt Eco compiler is checked in and fed back into the chain.
+![The bootstrap chain from the stock Elm compiler to one native eco binary, with the JavaScript fixed-point check at stage 4 and the native one at stage 8](/images/docs/bootstrap-chain.svg)
 
-## Stages, files and ordering
+| Stage | Built by | Produces |
+|---|---|---|
+| 1 | Stock Elm 0.19.1 | The compiler as JavaScript, with input and output done over HTTP to a small Node server |
+| 2 | Stage 1 | The compiler as JavaScript, now with input and output through kernels |
+| 3 | Stage 2 | The compiler as JavaScript again |
+| 4 | Stage 3 | The compiler as JavaScript again, **which must equal stage 3's output** |
+| 5 | Stage 3's compiler, after stage 4 passes | The compiler as MLIR, using a lighter specialization engine |
+| 6 | The native back end | The first native compiler, lowered from stage 5's MLIR |
+| 7 | Stage 6 | The compiler as MLIR with the default engine, and a native compiler lowered from it |
+| 8 | Stage 7 | The same again, **which must equal stage 7's compiler** |
+| 9 | The native back end, after stage 8 passes | One `eco` binary: stage 7's MLIR linked with the back end |
 
-Each stage is a CMake custom command with declared inputs and outputs, and each check writes a stamp file that the next stage depends on. Building any stage therefore builds every stage before it, and a stage reruns only when its inputs change. The inputs include globs over the compiler's Elm sources and kernel sources, so adding a file reruns the chain with no CMake edit. The chain works in shadow project roots under the build directory, assembled from templates in the source tree, and never writes to the source tree.
+Each stage declares its inputs and outputs, and each check writes a stamp file that the next stage depends on. Building any stage builds everything before it, and editing any compiler or kernel source reruns the chain from the first stage that reads it. The chain trusts exactly one prebuilt binary: the stock Elm compiler, downloaded at a pinned version and checked against a recorded hash. No prebuilt Eco compiler is ever fed back in.
 
-The order in which files are produced, and which file feeds which stage, carries most of the design:
+## Stages 1 and 2: escaping stock Elm
 
-```text
-1   guida.js                  = stock elm make  (HTTP-based IO, unoptimized)
-2   eco-boot.js               = guida.js builds the compiler  (kernel IO, optimized)
-3   eco-boot-2.js             = eco-boot.js builds the compiler
-4a  eco-boot-3.js             = eco-boot-2.js builds the compiler
-4b  require eco-boot-2.js == eco-boot-3.js                  # JavaScript fixed point
-5   eco-compiler.mlir         = eco-boot-2.js emits the compiler, light engine   (waits for 4b)
-6   eco-compiler              = native back end lowers eco-compiler.mlir
-7a  eco-compiler-boot.mlir    = eco-compiler emits the compiler, default engine
-7b  eco-compiler-boot         = native back end lowers eco-compiler-boot.mlir
-8a  eco-compiler-boot-2.mlir  = eco-compiler-boot emits the compiler
-8b  eco-compiler-boot-2       = native back end lowers eco-compiler-boot-2.mlir
-8c  Linux:          require eco-compiler-boot == eco-compiler-boot-2
-    macOS, Windows: require eco-compiler-boot.mlir == eco-compiler-boot-2.mlir
-9a  eco-stage9.o              = native back end compiles eco-compiler-boot.mlir   (waits for 8c)
-9b  eco = link eco-stage9.o with the back end;  eco builds the compiler once
+The compiler reads files and writes to the console through a handful of its own modules. Two source trees supply those modules under the same names. Stock Elm will link kernel code only from the Elm project's own packages, so a compiler built by stock Elm cannot touch the file system. The first tree works around that in plain Elm, sending every file operation as an HTTP request that a small Node server answers. The second tree implements the same modules as kernels: JavaScript in the JavaScript stages and C++ in the native ones.
+
+Stage 1 builds the compiler with the HTTP tree. Stage 2 has that compiler build the compiler again with the kernel tree, and from then on nothing needs the server. Two compiler features exist mainly for this hop: compiling a package whose kernel code belongs to an author other than the Elm project, and taking a package from a directory on disk instead of the package registry.
+
+Stage 1 is the only stage built without optimization. The HTTP tree's crash function uses Elm's placeholder for unfinished code, `Debug.todo`, which optimized builds forbid. Dropping optimization in one throwaway stage was cheaper than maintaining a workaround.
+
+## The JavaScript fixed point
+
+Stages 3 and 4 each have the newest compiler build itself once more, and stage 4 compares the two results:
+
+```cmake
+# -- Stage 4b: JS fixed-point check (eco-boot-2.js == eco-boot-3.js)
+set(ECO_BOOT_VERIFY_STAMP "${CMAKE_CURRENT_BINARY_DIR}/eco-boot-verify.stamp")
+
+add_custom_command(
+    OUTPUT ${ECO_BOOT_VERIFY_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E compare_files ${ECO_BOOT_2_OUTPUT} ${ECO_BOOT_3_OUTPUT}
+    COMMAND ${CMAKE_COMMAND} -E touch ${ECO_BOOT_VERIFY_STAMP}
+    DEPENDS ${ECO_BOOT_2_OUTPUT} ${ECO_BOOT_3_OUTPUT}
+    COMMENT "Stage 4b: JS fixed-point check (eco-boot-2.js == eco-boot-3.js)"
+)
 ```
 
-Checked against `compiler/CMakeLists.txt`. Every comparison is byte for byte. Notice that stages 5 and 7a compile the same source on different hosts with different specialization engines, and that the stage-7a MLIR, not the stage-5 MLIR, feeds both the native fixed point and the shipped `eco`. The two "waits for" edges are explicit dependencies on check stamps. Without them, Ninja could start the next phase while a check is still running or after it has failed.
+From the compiler's build file. If two generations are identical, the compiler's output no longer depends on which compiler built it. This check covers everything written in Elm: parsing, type checking, optimization and JavaScript generation. Stage 5 depends on the stamp, so no MLIR is produced by a JavaScript compiler that has not reproduced itself. Without that explicit edge the build tool would be free to start stage 5 as soon as stage 3's output existed, racing past the check.
 
-## Two input and output layers: stages 1 and 2
+## Stage 5: staying inside Node's heap
 
-The compiler reads files, writes to the console and reports crashes through a small set of Eco modules, such as the file, console and crash modules. Two source trees supply those modules under the same names, and the difference between them is why stages 1 and 2 are separate.
+Every part of Eco that emits MLIR is Elm source, so the first MLIR the compiler ever produces has to come from the compiler running as JavaScript under Node. That self-compile is the heaviest step of the Node half of the chain, and it runs close to the largest heap V8 allows, 16 GB.
 
-Kernel code is the JavaScript or C++ that implements functions Elm itself cannot express, such as reading a file. Stock Elm links kernel code only from the Elm project's own packages, so a compiler built by stock Elm cannot touch the file system through kernels. The first tree works around that by expressing all input and output in plain Elm, as HTTP requests that a small Node server answers. The second tree implements the same modules as kernel functions: JavaScript kernels in the JavaScript stages and C++ kernels in the native stages.
+Running out of heap does not crash the compile. As it nears the limit, V8 spends more and more of its time collecting garbage to stay under it, and the compile slows until it never finishes. Several times, an optimisation that made the native compiler better has pushed this stage to that edge.
 
-Stage 1 builds the compiler with the HTTP-based tree. Stage 2 has that compiler build the compiler again with the kernel tree, and from then on no stage needs the Node server. Two compiler features exist for this hop: building a program whose kernel code belongs to an author other than the Elm project, and resolving a package from a directory on disk instead of the package registry.
+So the chain takes precautions. Every Node-hosted stage sets V8's heap to its 16 GB maximum. Stage 5 uses the lighter of the compiler's two specialization engines, which fits comfortably, because its only job is to produce a *correct* first native compiler; its MLIR is less optimized, but nothing that ships is built from it. And for as long as Eco can be bootstrapped from stock Elm through Node, which we intend to keep, any new optimisation has to leave this stage inside 16 GB, even if that means switching the optimisation off here.
 
-Stage 1 is the only stage built without optimization. The HTTP-based crash function is Elm's placeholder for unfinished code, and Elm's optimizing mode forbids that placeholder. The kernel crash function has no such restriction, so stage 2 turns optimization on. A crash function written as an endless self-call would compile under optimization, but its generated JavaScript would need patching to behave, and dropping optimization in one throwaway stage costs less than maintaining a patch.
+Stage 5 also deletes the cached typed module files that specialization reads, because the JavaScript stages neither write nor invalidate them, and a stale one crashes specialization.
 
-Every generated JavaScript file passes through exactly one post-processing script. It replaces the generated code that builds a string while reading bytes, because that code uses too much of V8's memory during a self-compile.
+## The native fixed point
 
-## The two fixed points
+Stage 6 lowers stage 5's MLIR into the first native compiler. Stage 7 has it emit the compiler again, now on the native host where Node's heap limit no longer applies, so it uses the default, heavier engine, and lowers that MLIR into a second native compiler. Stage 8 repeats the step and compares.
 
-A fixed-point check has a compiler build its own source and compares the result with the compiler that did the building. If the two are identical, the compiler's output no longer depends on which compiler produced it. The chain makes the check once per host because each host exposes a different family of failures.
+The native rounds see what the JavaScript ones cannot: the MLIR generator, the lowering passes, the runtime, the garbage collector and the C++ kernels all take part in a native self-compile. The bootstrap's failure log records bugs found there that no JavaScript stage could reach, such as stale nursery pointers after a change to the pass that rewrites calls so the collector can find roots, and heap corruption while encoding bytes.
 
-The JavaScript fixed point, at stage 4, covers the front end: parsing, type checking, optimization and code generation, as written in Elm. It compares the outputs of stages 3 and 4. Stage 5 starts only after it passes, so no MLIR is produced by a JavaScript compiler that has not reproduced itself.
-
-The native fixed point, at stage 8, covers what the JavaScript check cannot see: the MLIR generator, the lowering passes, the runtime, the garbage collector and the C++ kernels. The bootstrap's own failure log shows this check catching bugs the JavaScript one cannot, such as stale pointers left by the lowering that rewrites calls so the collector can find roots, and heap corruption in byte encoding. On Linux the stage compares the two executables. On macOS and Windows the linkers embed timestamps or content-derived identifiers, so the stage compares the two MLIR bytecode files instead, which states the same fact without depending on the linker.
-
-Both checks require every step to be deterministic: the compiler, its MLIR output and, on Linux, the linker must produce the same bytes from the same input. The MLIR compared is bytecode, the compiler's default output format, so the check covers the format that production builds use. Text output exists only as a debugging option.
-
-## Which engine runs where
-
-Specialization turns each polymorphic function into separate copies for the concrete types it is used at. The default engine, a solver with lambda-set specialization, produces the best code but is heavy: a Node-hosted self-compile with it needs about the whole V8 heap and may not finish. Stage 5's only job is a correct first native compiler, so it uses a lighter engine that fits in Node. Its MLIR builds stage 6 and nothing else.
-
-Stage 5 also deletes the cached typed module files that specialization reads. The JavaScript stages neither write nor invalidate those caches, and a stale one crashes specialization.
-
-Stage 7 runs on the native host, where Node's heap limit does not apply, so it emits the compiler again with the default engine. That MLIR is the one that ships. Stage 9 builds `eco` from it, and not from the stage-5 MLIR, because the compiler lowered from it is the one that stage 8 shows to reproduce itself.
+On Linux stage 8 compares the two executables. On macOS and Windows the linkers embed timestamps or build identifiers, so the stage compares the two compilers' MLIR output instead, which states the same fact without depending on the linker. Either way the check needs every step to be deterministic: the compiler, its MLIR output and, on Linux, the linker must produce the same bytes from the same input.
 
 ## Stage 9: one binary, checked by use
 
-Before stage 9, compiling a program takes two tools: the native compiler, which emits MLIR, and a separate native back end, which lowers MLIR to an executable. Stage 9 fuses them into one `eco` binary so a user installs one tool, and it starts only after stage 8 has passed.
+Until stage 9, compiling a program takes two tools: the native compiler, which emits MLIR, and the back end, which lowers MLIR to an executable. Stage 9 lowers stage 7's MLIR, the version whose compiler passed stage 8, and links it with the back end into one `eco` binary, so a user installs one tool. It starts only after stage 8 has passed.
 
-Stage 9 then has `eco` compile the compiler once, and it succeeds if that compile works. It does not compare `eco` with the result. Only `eco` embeds the LLVM and MLIR back end, so `eco` and any binary it produces differ by construction, and a byte comparison could never pass. The native fixed point is checked at stage 8 instead, on compilers that do not embed the back end. On a glibc build the chain's executables are linked with the GNU linker, because lld refuses the stack-map relocations in a position-independent executable.
+`eco` then compiles the compiler once, and the stage succeeds if that works. It does not compare the result with `eco` itself. Only `eco` embeds the LLVM and MLIR back end, so it and any compiler it produces differ by construction, and a byte comparison could never pass. The real native fixed point is stage 8's, on compilers that do not embed the back end.
 
-A quick relink target rebuilds `eco` from the stage-7 MLIR already on disk when only C++ has changed. The C++ code lowers and runs that MLIR but does not decide its contents, so the MLIR is still valid. The relink skips the stage-8 gate, so it serves local development and needs a full bootstrap to have run first.
+## Tests inside the chain
 
-## Test gates inside the chain
+Two end-to-end test suites run at the earliest stage that can run them. The JIT suite needs only the stage 1 compiler. The AOT suite needs the stage 3 compiler and the native back end, so it can run right after the JavaScript fixed point. A native self-compile takes tens of minutes, so run in this order a back-end regression is reported before the expensive native rounds start, and is pinned to the few stages before the gate that caught it. A separate check compiles every test program with the stage 2 JavaScript compiler and the stage 6 native compiler and compares the MLIR byte for byte; any difference is a bug in one of them.
 
-Two end-to-end test gates sit at the earliest stages that can run them. The gate after stage 1 runs the just-in-time suite, which needs only the first JavaScript compiler. The gate after stages 3 and 4 runs the ahead-of-time suite, which needs only the stage-3 compiler and the native back end. Each self-compile takes tens of minutes, so when the stages are run in the documented order, a back-end regression is reported before the expensive native rounds start, and is pinned to a few stages. The gates are separate targets rather than stamp dependencies: the aggregate `bootstrap` target does not run them, and continuous integration runs the ahead-of-time gate after the whole chain.
+> **Designs we didn't use.** We did not check a prebuilt Eco compiler into the repository to start from: the chain would then trust a binary nobody can rebuild from source.
 
-The full chain and the `eco` target are opt-in. Default and end-to-end builds stop at stage 1 or 2, and the final target is left out of the default build because its dependencies are the whole chain.
+## Further reading
 
-## What the chain relies on
-
-The chain needs five things from outside itself, listed from the toolchain inward.
-
-- A pinned stock Elm 0.19.1 binary, and a Node whose heap is large enough for a self-compile. Every Node-hosted stage sets a 16 GB heap itself, because a self-compile on Node needs nearly that much.
-- Determinism of the compiler, its MLIR bytecode and, on Linux, the linker, as the fixed-point checks require.
-- The kernel contract: each kernel function exists twice, in JavaScript and in C++, with the same behavior, because the JavaScript and native stages differ only in host.
-- The parts it exercises: the native back end, the runtime and its collector, and the compiler's MLIR generation. A bootstrap failure is most often in one of these, not in the chain.
-- The heap settings the self-compiling stages run with. They bound the memory those stages need and come from measured collector tuning.
-
-A configuration that builds only stages 1 to 5 lets a platform without a working LLVM build bootstrap its front end.
-
-## References
-
-Parent: [eco.md](/docs/theory).
-
-- `compiler/CMakeLists.txt`: every stage as a custom command, with its comments, the `compare_files` checks in stages 4b and 8c, the stamp dependencies (`ECO_BOOT_VERIFY_STAMP`, `BOOTSTRAP_STAMP`), the source globs (`ELM_SOURCES`, `KERNEL_SOURCES`), and the `bootstrap`, `eco`, `eco-verify` and `eco-quick` targets. It labels stages 1 to 3 as steps. Treat it as the truth where documents disagree.
-- `compiler/cmake/bootstrap/`: the `build-xhr` and `build-kernel` shadow roots, and `build-kernel/heap-config.json`.
-- `compiler/cmake/toolchain.cmake`: the pinned stock `elm` binary.
-- `compiler/src-xhr/Eco/` and `eco-kernel-cpp/src/Eco/`: the HTTP-based and kernel-based layers. `eco-kernel-cpp/src/Eco/Kernel/*.js` and `eco-kernel-cpp/src/eco-kernel/*.cpp`: the paired kernels.
-- `compiler/bin/index.js`, `compiler/bin/eco-io-handler.js`: the Node server for stage 1.
-- `compiler/scripts/replacements.js`: post-processing of generated JavaScript (`_Bytes_read_string`).
-- `compiler/scripts/build-self.sh`, `compiler/scripts/build-verify.sh`: stand-alone scripts that CMake does not use.
-- `compiler/lib/`, `compiler/scripts/build.sh`: committed bundles of the npm interface inherited from Guida, the compiler Eco's front end is forked from. They are not part of the chain.
-- `runtime/src/codegen/`: the native back end (`eco-boot-native`) used from stage 6.
-- `ECO_FRONTEND_ONLY`: the stages 1 to 5 configuration. `ECO_MONO_ENGINE=subst`: the light engine in stage 5. `--kernel-package`, `--local-package`: the stage 2 compiler options. `--text-mlir`: text MLIR output.
-- `docs/bootstrap.md`: stage narrative and test gates. `guides/bootstrap.md`, `guides/bootstrap-fix-loop.md`, `guides/bootstrap-fails.md`: running the chain, the repair loop and recorded failures.
+- [The build driver](/docs/build-driver) — what `eco make` does at each of these stages.
+- [The backend](/docs/backend) — the native back end that lowers MLIR from stage 6 on.
+- [Kernels](/docs/kernels) — the paired JavaScript and C++ kernels that let the same compiler run on both hosts.
+- [How we know it works](/docs/verification) — the other test layers, and how the fixed points fit among them.
+- The full design document: [Bootstrap theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/workflow/bootstrap.md)
+- Source: [`compiler`](https://github.com/eco-lang/eco-compiler/tree/master/compiler)

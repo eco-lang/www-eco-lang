@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="64 -0 490 530" width="490" height="530" role="img" aria-labelledby="t">
+<title id="t">The path of one module through the backend</title>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#646464"/></marker></defs>
+<style>text{font-family:Inter,system-ui,sans-serif}.n{font-size:13px;fill:#242424}.l{font-size:11.5px;fill:#646464}</style>
+<line x1="300.0" y1="48.5" x2="300.0" y2="108.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="308.0" y="74.8" text-anchor="start">eco-dialect bytecode</text>
+<text class="l" x="308.0" y="89.8" text-anchor="start">in a temporary file</text>
+<line x1="300.0" y1="162.0" x2="300.0" y2="231.5" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="308.0" y="200.8" text-anchor="start">verified module</text>
+<line x1="300.0" y1="268.5" x2="300.0" y2="346.5" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="308.0" y="304.0" text-anchor="start">LLVM dialect, whole-program</text>
+<text class="l" x="308.0" y="319.0" text-anchor="start">facts stamped as attributes</text>
+<line x1="279.3" y1="383.5" x2="190.2" y2="463.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<rect x="160.4" y="406.8" width="148.8" height="33" fill="#FFFFFF" fill-opacity="0.92"/>
+<text class="l" x="234.8" y="419.8" text-anchor="middle">objects per partition,</text>
+<text class="l" x="234.8" y="434.8" text-anchor="middle">then link</text>
+<line x1="326.6" y1="383.5" x2="441.1" y2="463.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<rect x="335.1" y="414.2" width="97.6" height="18" fill="#FFFFFF" fill-opacity="0.92"/>
+<text class="l" x="383.9" y="427.2" text-anchor="middle">code in memory</text>
+<rect x="256.4" y="11.5" width="87.2" height="37.0" rx="6" fill="#F8F8F8" stroke="#BDBDBD" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text class="n" x="300.0" y="34.5" text-anchor="middle">compiler</text>
+<rect x="241.6" y="108.0" width="116.8" height="54.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="300.0" y="131.0" text-anchor="middle">eco dialect</text>
+<text class="n" x="300.0" y="148.0" text-anchor="middle">and verifier</text>
+<rect x="230.5" y="231.5" width="139.0" height="37.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="300.0" y="254.5" text-anchor="middle">lowering passes</text>
+<rect x="234.2" y="346.5" width="131.6" height="37.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="300.0" y="369.5" text-anchor="middle">native drivers</text>
+<rect x="75.7" y="463.0" width="168.6" height="54.0" rx="6" fill="#F8F8F8" stroke="#BDBDBD" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text class="n" x="160.0" y="486.0" text-anchor="middle">executable, library</text>
+<text class="n" x="160.0" y="503.0" text-anchor="middle">or Node addon</text>
+<rect x="417.9" y="463.0" width="124.2" height="54.0" rx="6" fill="#F8F8F8" stroke="#BDBDBD" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text class="n" x="480.0" y="486.0" text-anchor="middle">JIT for tests</text>
+<text class="n" x="480.0" y="503.0" text-anchor="middle">and tools</text>
+</svg>

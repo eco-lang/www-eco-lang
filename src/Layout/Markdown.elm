@@ -36,6 +36,9 @@ language lang =
         Just "python" ->
             SyntaxHighlight.python
 
+        Just "javascript" ->
+            SyntaxHighlight.javascript
+
         _ ->
             SyntaxHighlight.noLang
 
@@ -187,6 +190,14 @@ docsRenderer =
                     [ Attrs.class "eco-doc-td"
                     ]
                     children
+        , image =
+            \image ->
+                Html.img
+                    [ Attrs.src image.src
+                    , Attrs.alt image.alt
+                    , Attrs.class "eco-doc-figure"
+                    ]
+                    []
         , thematicBreak =
             Html.hr
                 [ Attrs.class "eco-doc-hr"

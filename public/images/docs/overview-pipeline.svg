@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="9 -0 738 520" width="738" height="520" role="img" aria-labelledby="t">
+<title id="t">How Eco turns Elm source into a native program</title>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#646464"/></marker></defs>
+<style>text{font-family:Inter,system-ui,sans-serif}.n{font-size:13px;fill:#242424}.l{font-size:11.5px;fill:#646464}</style>
+<line x1="380.0" y1="48.5" x2="380.0" y2="98.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<line x1="445.8" y1="125.0" x2="589.0" y2="125.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<rect x="481.4" y="94.5" width="72.0" height="33" fill="#FFFFFF" fill-opacity="0.92"/>
+<text class="l" x="517.4" y="107.5" text-anchor="middle">JavaScript</text>
+<text class="l" x="517.4" y="122.5" text-anchor="middle">or HTML</text>
+<line x1="380.0" y1="152.0" x2="380.0" y2="223.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="388.0" y="184.0" text-anchor="start">eco-dialect bytecode</text>
+<text class="l" x="388.0" y="199.0" text-anchor="start">in a temporary file</text>
+<line x1="380.0" y1="277.0" x2="380.0" y2="356.5" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="388.0" y="320.8" text-anchor="start">object files</text>
+<line x1="219.1" y1="375.0" x2="351.2" y2="375.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<rect x="255.5" y="342.5" width="59.2" height="33" fill="#FFFFFF" fill-opacity="0.92"/>
+<text class="l" x="285.1" y="355.5" text-anchor="middle">prebuilt</text>
+<text class="l" x="285.1" y="370.5" text-anchor="middle">archive</text>
+<line x1="544.6" y1="375.0" x2="408.8" y2="375.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<rect x="447.1" y="342.5" width="59.2" height="33" fill="#FFFFFF" fill-opacity="0.92"/>
+<text class="l" x="476.7" y="355.5" text-anchor="middle">prebuilt</text>
+<text class="l" x="476.7" y="370.5" text-anchor="middle">archives</text>
+<line x1="380.0" y1="393.5" x2="380.0" y2="453.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<rect x="329.0" y="11.5" width="102.0" height="37.0" rx="6" fill="#F8F8F8" stroke="#BDBDBD" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text class="n" x="380.0" y="34.5" text-anchor="middle">Elm source</text>
+<rect x="314.2" y="98.0" width="131.6" height="54.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="380.0" y="121.0" text-anchor="middle">compiler</text>
+<text class="n" x="380.0" y="138.0" text-anchor="middle">written in Elm</text>
+<rect x="589.0" y="106.5" width="102.0" height="37.0" rx="6" fill="#F8F8F8" stroke="#BDBDBD" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text class="n" x="640.0" y="129.5" text-anchor="middle">web output</text>
+<rect x="314.2" y="223.0" width="131.6" height="54.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="380.0" y="246.0" text-anchor="middle">backend</text>
+<text class="n" x="380.0" y="263.0" text-anchor="middle">written in C++</text>
+<rect x="20.9" y="348.0" width="198.2" height="54.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="120.0" y="371.0" text-anchor="middle">runtime:</text>
+<text class="n" x="120.0" y="388.0" text-anchor="middle">collector and scheduler</text>
+<rect x="351.2" y="356.5" width="57.6" height="37.0" rx="6" fill="#FFFFFF" stroke="#BDBDBD" stroke-width="1.4"/>
+<text class="n" x="380.0" y="379.5" text-anchor="middle">link</text>
+<rect x="544.6" y="348.0" width="190.8" height="54.0" rx="6" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="640.0" y="371.0" text-anchor="middle">kernels:</text>
+<text class="n" x="640.0" y="388.0" text-anchor="middle">C++ built-in functions</text>
+<rect x="295.7" y="453.0" width="168.6" height="54.0" rx="6" fill="#F8F8F8" stroke="#BDBDBD" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text class="n" x="380.0" y="476.0" text-anchor="middle">executable, library</text>
+<text class="n" x="380.0" y="493.0" text-anchor="middle">or Node addon</text>
+</svg>

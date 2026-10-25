@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 790 512" width="790" height="512" role="img">
+<title>Sequence of a Process.sleep call across the eco thread and the timer thread</title>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#646464"/></marker></defs>
+<style>text{font-family:Inter,system-ui,sans-serif}.n{font-size:13px;fill:#242424}.l{font-size:11.5px;fill:#646464}.m{font-family:"Roboto Mono",monospace;font-size:12px;fill:#242424}.h{font-size:13px;font-weight:600;fill:#242424}</style>
+<text class="h" x="20.0" y="24.0" text-anchor="start">Process.sleep: only the eco thread touches the Elm heap</text>
+<rect x="25.0" y="52.0" width="170.0" height="30.0" rx="4" fill="#FFFFFF" stroke="#BDBDBD" stroke-width="1.4"/>
+<text class="n" x="110.0" y="72.0" text-anchor="middle">Elm code</text>
+<line x1="110" y1="82" x2="110" y2="502" stroke="#BDBDBD" stroke-width="1.2" stroke-dasharray="4 4"/>
+<rect x="245.0" y="52.0" width="170.0" height="30.0" rx="4" fill="#F1F8F1" stroke="#4CAF50" stroke-width="1.4"/>
+<text class="n" x="330.0" y="72.0" text-anchor="middle">scheduler (eco thread)</text>
+<line x1="330" y1="82" x2="330" y2="502" stroke="#BDBDBD" stroke-width="1.2" stroke-dasharray="4 4"/>
+<rect x="475.0" y="52.0" width="170.0" height="30.0" rx="4" fill="#FFFFFF" stroke="#BDBDBD" stroke-width="1.4"/>
+<text class="n" x="560.0" y="72.0" text-anchor="middle">timer thread</text>
+<line x1="560" y1="82" x2="560" y2="502" stroke="#BDBDBD" stroke-width="1.2" stroke-dasharray="4 4"/>
+<line x1="110.0" y1="123.0" x2="330.0" y2="123.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="220.0" y="98.0" text-anchor="middle">Process.sleep 500 returns a Task</text>
+<text class="l" x="220.0" y="113.0" text-anchor="middle">(a description: no timer yet)</text>
+<path d="M330,160 h26 v18 h-24" fill="none" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="364.0" y="164.0" text-anchor="start">steps the task: makes a resume closure,</text>
+<text class="l" x="364.0" y="179.0" text-anchor="start">parks it, gets a 64-bit token</text>
+<line x1="330.0" y1="242.0" x2="560.0" y2="242.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="445.0" y="232.0" text-anchor="middle">schedule(500 ms, token)</text>
+<path d="M560,279 h26 v18 h-24" fill="none" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="594.0" y="283.0" text-anchor="start">waits; the heap is never touched</text>
+<line x1="560.0" y1="346.0" x2="330.0" y2="346.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="445.0" y="336.0" text-anchor="middle">token is ready</text>
+<path d="M330,383 h26 v18 h-24" fill="none" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="364.0" y="387.0" text-anchor="start">event loop pops the token, takes the</text>
+<text class="l" x="364.0" y="402.0" text-anchor="start">resume closure, calls it with Task.succeed ()</text>
+<line x1="330.0" y1="465.0" x2="110.0" y2="465.0" stroke="#646464" stroke-width="1.4" marker-end="url(#a)"/>
+<text class="l" x="220.0" y="455.0" text-anchor="middle">the Elm program continues</text>
+</svg>

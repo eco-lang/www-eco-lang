@@ -1,159 +1,138 @@
 ---
 title: "Closures and calls"
-description: "How every Elm function value is a heap closure whose header says everything needed to apply it."
-section: "Theory"
-sectionOrder: 2
-order: 24
+description: "How Eco represents every Elm function value as a heap closure whose header says how to apply it, so that one generic runtime routine is always correct and the compiler adds faster paths only where it can prove they are safe."
+section: "The runtime"
+sectionOrder: 4
+order: 3
 ---
 
-Every Elm function value is a closure on the heap, and the closure's header says everything needed to apply it: how many arguments its current stage takes, how many it already holds, how each slot is stored, how its result comes back, and where to find a static descriptor with one uniform entry point. The runtime can therefore apply any closure to any number of arguments without knowing where the closure came from, and this generic apply is the default for every call through a function value. The compiler groups each closure's parameters into stages and records on every call what it could prove about the callee. Where it proved the callee is one specific closure, the back end calls the closure's body directly. Where it proved how many arguments the closure still needs, the back end calls a runtime entry for that exact case. Where it proved nothing, the call goes to generic apply, often through a fast edge that checks the header first and falls back when the check fails. Every faster path is one the compiler may decline, because generic apply is always correct.
+Every Elm function value in Eco is a closure on the heap, and its header says everything needed to call it: how many arguments it takes, how many it already holds, and how each one is stored. So one runtime routine can apply *any* closure to *any* number of arguments, with no help from the call site. Because that generic path is always correct, every faster path the compiler adds is optional, and the compiler takes one only where it can prove, or cheaply check, that it is safe.
 
-## Generic apply is always correct
+> **Background**
+>
+> - A [closure](/docs/glossary#closure) is a function value together with the values it captured from its surroundings.
+> - A [partial application](/docs/glossary#partial-application) (PAP) is a closure that has received some of its arguments but not all.
+> - [Staging and arity](/docs/glossary#staging-and-arity): a stage is the group of parameters a closure takes in one application, and its arity is how many there are.
 
-Elm functions are curried, and Eco applies a closure one stage at a time. A stage is the group of parameters a closure takes in one application: `\x y -> x + y` has one stage of two parameters, while a function of one parameter that returns another lambda has two stages of one. Staging changes how many intermediate closures are built on the way to a result, never the result itself. [global-optimization.md](/docs/global-optimization) chooses the stages.
+## One small example
 
-That fact makes one rule possible. Whatever a call site knows about its callee, the closure carries enough to be applied correctly. Generic apply reads the closure's header, computes how many arguments the current stage still needs, and handles too few, exactly enough and too many from that alone. Too many means saturating this stage and then applying whatever closure the stage returns to the remaining arguments, so the call site never needs to know how the callee is staged.
+The shapes program from [A tour through the compiler](/docs/tour) contains `twice (add 1) 10`, where `add a b = a + b` and `twice f x = f (f x)`. Eco's compiler emits this for it (trimmed: operand types removed):
 
-Because generic apply is always correct, every faster path is an addition, never a requirement. Global optimization can leave a call through a join, a function parameter or an unknown callee generic, and the cost is only speed. The faster paths come in two sorts, and the difference between them matters more than anything else here when changing this code:
+```mlir
+%4 = "eco.papCreate"() {_result_kind = 1 : i8, arity = 2, function = @Main_add_$_1, num_captured = 0} : () -> !eco.value
+%5 = "arith.constant"() {value = 1 : i64} : () -> i64
+%2 = "eco.papExtend"(%4, %5) {_call_kind = "direct_known_segmentation", remaining_arity = 2, slot_kinds = array<i8: 1>} : (!eco.value, i64) -> !eco.value
+%3 = "arith.constant"() {value = 10 : i64} : () -> i64
+%8 = "eco.papExtend"(%2, %3) {_call_kind = "singleton_fast", _capture_abi = [i64], _fast_evaluator = @Main_add_$_1, remaining_arity = 1, slot_kinds = array<i8: 1>} : (!eco.value, i64) -> i64
+%9 = "eco.papExtend"(%2, %8) {_call_kind = "singleton_fast", _capture_abi = [i64], _fast_evaluator = @Main_add_$_1, remaining_arity = 1, slot_kinds = array<i8: 1>} : (!eco.value, i64) -> i64
+```
 
-- A proven path trusts a fact the compiler recorded and checks nothing at run time. A wrong fact is a silent miscompile.
-- A guarded path reads the closure's header, compares it with what the call site knows, and takes generic apply on any mismatch. It cannot miscompile when its precondition fails.
-
-A fact the compiler cannot prove belongs on a guarded path, or nowhere.
+`%4` is the closure for `add`: no captures, a stage of two parameters, an `Int` result (`_result_kind = 1`). `%2` applies it to one argument and gets back a partial application holding the raw `Int` 1. The two calls inside `twice` then apply `%2` to one more argument each. The compiler has proved that `%2` can only ever be this one closure, so it marks those calls `singleton_fast` and names `Main_add_$_1` as the function to call directly, with the captured `1` loaded at type `i64`. No header is read on that path. How the compiler proves it is the subject of [Lambda-set specialization](/docs/lambda-set-specialization).
 
 ## The closure object
 
-A closure is a heap object whose fixed part answers every question generic apply asks. After the ordinary heap header comes one packed word. It holds the number of arguments already applied to this stage, the stage's arity, the kind of the stage's result, and a two-bit kind for each of the first 20 slots, saying whether the slot holds a boxed value or a raw Int, Float or Char. The next word points to the evaluator descriptor. Captured and applied values follow, one 8-byte slot each. Kinds for slots beyond the first 20 live in extension words at the end of the object, so a stage can take up to 2047 parameters while the common case reads only the packed word.
+![Closure layout: an 8-byte header, a packed word of applied arity, stage arity, result kind and slot kinds, a pointer to a static evaluator descriptor, then one 8-byte slot per captured value](/images/docs/closure-layout.svg)
 
-The descriptor is static data. It holds the address of a generic entry that takes its arguments as an array, the stage arity, the result kind, and a table of further entries indexed by argument count. Both structs, trimmed, from `runtime/src/allocator/Heap.hpp`:
+After the usual 8-byte heap header comes one packed word, then a pointer to a static descriptor, then the captured values, one 8-byte slot each (from the runtime's heap definitions, trimmed, with comments shortened):
 
 ```cpp
 struct EvaluatorDesc {
-    EvalFunction   generic;      // +0   the __closure_wrapper_* address
+    EvalFunction   generic;      // +0   generic entry taking an argument array
     ...
-    unsigned char  result_kind;  // +17  ParamKind of the wrapper's compiled return
-    unsigned short stage_arity;  // +18  P (<= CLOSURE_MAX_ARITY)
+    unsigned char  result_kind;  // +17  kind of the compiled return value
+    unsigned short stage_arity;  // +18
     ...
-    void*          sat[];        // +24  sat[0..stage_arity] if stage_arity <= SAT_MAX_ARITY, else empty; sat[0] unused
+    void*          sat[];        // +24  fast entries indexed by argument count
 };
-...
+
 typedef struct {
-    Header header;           // header.size = allocated value slots + K
-    u64 n_values   : 11;     // Applied arity: args already captured for this stage (0..2047).
-    u64 max_values : 11;     // Stage arity: total args this evaluator expects (0..2047).
-    u64 result_kind: 2;      // ParamKind: real C-ABI return kind of `evaluator`
-    ...
-    u64 unboxed    : 40;     // inline 2-bit kinds for params 0..19
-    const EvaluatorDesc* evaluator;   // static descriptor, NOT a heap pointer
-    Unboxable values[];      // [0 .. header.size - K) values, then K ext kind words
+    Header header;
+    u64 n_values   : 11;     // arguments already applied to this stage
+    u64 max_values : 11;     // stage arity
+    u64 result_kind: 2;      // boxed, Int, Float or Char
+    u64 unboxed    : 40;     // 2-bit kinds for parameters 0..19
+    const EvaluatorDesc* evaluator;   // static data, not a heap pointer
+    Unboxable values[];
 } Closure;
 ```
 
-Notice that the remaining arity is `max_values - n_values`, read from the header alone. `evaluator` points to static data, never to code and never into the heap, so the collector never traces it. The slot kinds and the result kind are written once, when the closure is allocated, and they describe every parameter of the stage, whether it is already captured or still to come.
+Notice that the remaining arity is `max_values - n_values`, read from the header alone. The descriptor is static data emitted next to the compiled code, so the collector never traces it. The slot kinds cover every parameter of the stage, captured or still to come, so the runtime can convert each incoming argument to the form the body expects. A C++ kernel passing boxed values and compiled code passing a raw `Int` both end up producing exactly the encoding the body was compiled for. Parameters past the twentieth keep their kinds in extra words at the end of the object, so a stage can take up to 2047 parameters while the common case reads only the packed word.
 
-Slot kinds cover every parameter so that the runtime can convert at the boundary. When a closure is extended or saturated, the runtime converts each added argument from the caller's kind to the slot's declared kind. A caller that knows nothing about the callee's representation, such as a C++ kernel passing boxed values or a generic site passing a raw Int, still produces exactly the encoding the body expects. The alternative, merging the caller's kinds into the closure's kinds, lets a boxed argument land in a slot declared raw, and that slot then holds a pointer the collector cannot see.
+The result kind lives on the closure rather than at the call site because a call site often cannot know it. For a staged closure, the static type at the call site describes an inner function, not the real return; a kernel calling a closure has no static type at all. Only `Int`, `Float` and `Char` are ever stored raw; `Bool` is boxed in every slot (see [Value representation](/docs/value-representation)).
 
-The result kind lives on the header, not at the call site, because a call site often cannot know it. A site derives a result kind from its static type, and for a staged closure that type describes the inner function rather than the real return. Kernel callers have no static type at all. Reading the result kind from the header lets every entry point call the evaluator with the right return type, and lets kernels apply closures that return raw Ints or Floats with no change on their side.
+## Generic apply is always correct
 
-How boxed values and the pointer word look in general is the subject of [value-representation.md](/docs/value-representation). For closures, the rule to keep is that Bool is boxed in every slot and at every closure boundary. Only Int, Float and Char are stored raw.
+The runtime's generic apply looks at the closure header and splits into three cases: too few arguments, exactly enough, or too many. In outline:
 
-## What the compiler emits
-
-Global optimization regroups every closure's type so that its first stage is exactly the closure's own parameters, then records on every call through a function value one of three call kinds. With known segmentation, the callee's remaining arity and the arities of its later stages are known. With segmentation unknown, the callee's parameter representations are known but not its staging. With generic apply, nothing about the callee is trusted. Where lambda-set analysis proves the callee value is one specific closure instance, global optimization also stamps the call with that instance's fast entry and the layout of its captures, and for closure values a stamp takes precedence over the call kind. [global-optimization.md](/docs/global-optimization) explains how these facts are proved, and [lambda-set-specialization.md](/docs/lambda-set-specialization) how Eco knows which functions can reach a call.
-
-For each closure with captures, MLIR generation emits two functions. The body goes in `name$cap`, whose parameters are the captures followed by the stage's parameters, all typed. Captures become ordinary typed parameters so that a proven call is a plain typed call that LLVM can inline. The second function, `name$clo`, takes the closure itself and the parameters, projects each capture out of the closure, and calls `$cap`. A closure with no captures produces a single function that plays the role of `$cap`. The compiler emits `$clo` for every capturing closure, and closure creation names it as its function, but nothing in the default lowering calls it.
-
-The descriptor's generic entry is a wrapper the back end generates, `__closure_wrapper_typed_<$cap>`. It loads each slot of an argument array at its declared kind and calls `$cap`. Every closure's evaluator wraps `$cap`, with one wrapper per target and result kind, and these wrappers do all the dispatch between differently typed closures. Lambdas are typed end to end, so captured and applied Ints, Floats and Chars flow raw and there are no wrapper functions in MLIR. A uniform boxed calling convention with a generated partial-application wrapper per closure is the rejected alternative. The back-end wrapper remains only because the runtime's uniform entry takes an array.
-
-Three dialect operations carry closures. `eco.papCreate` creates one: it names the target, the stage arity, the captures and their kinds, and the `$cap` when there are captures. `eco.papCreateGroup` creates a set of mutually recursive closures together. Every application of a function value is an `eco.papExtend`, and the front end never emits an indirect call. An application takes one of two forms:
-
-- A typed application carries the remaining arity the compiler proved for the closure it applies. If the arguments it passes equal that number the call saturates the stage, and otherwise it builds a partial application. A stamped call also carries the fast entry and the capture layout.
-- A generic application carries no arity, only its call kind. The two generic kinds differ only in the front end. A segmentation-unknown call boxes its arguments to the callee's known parameter representations. A generic-apply call passes Int, Float and Char raw and converts only Bool to its boxed constant, which allocates nothing.
-
-A call with known stages is emitted as a sequence of applications, one batch of arguments per stage. Only the last batch carries the call's result kind, because every earlier stage returns a closure, and that closure is always boxed.
-
-## Lowering a call
-
-The lowering of `eco.papExtend` in `EcoToLLVMClosures.cpp` turns each kind of fact into a different call, and what it checks at run time follows from how much the compiler proved.
-
-| What the compiler proved | What the call becomes | What is checked at run time |
-|---|---|---|
-| The callee is one instance, and the call saturates it (stamped) | Load the captures at the stamped types and call `$cap` directly | Nothing |
-| The remaining arity, and the call saturates the stage | An argument array with a per-argument layout, passed to `eco_closure_call_saturated` (or its `_eval` form for a raw result), behind a fast edge | The fast edge's guards; the arity only in debug builds |
-| The remaining arity, and the call does not saturate | `eco_pap_extend_l` | Only that the arguments do not overflow the stage |
-| Only the parameter representations, or nothing | One typed 64-bit argument buffer and a layout, passed to `eco_apply_closure_eval` with the desired result kind, behind a fast edge | Everything, from the header |
-
-The two generic kinds lower identically. The buffer's pointer slots are registered as a root range for the call for two reasons. Converting an argument to a slot's kind inside the runtime can box it, and boxing can collect. And on an over-saturated call the trailing arguments wait in the buffer while the first stage's evaluator runs, and that evaluator can allocate anything. The lowering adds no boxing: it passes raw values with a layout, and the runtime is the one place that boxes them. That keeps the IR free of allocations that exist only to box arguments, and a codegen test pins it.
-
-Calls to `$cap`, from stamped sites, fast-edge entries and wrappers, get a second improvement in the back end. A prepass inlines small `$cap` bodies into their callers, and its timing is what correctness depends on. It runs before statepoint rewriting and then removes its inlining marks, because the pipelines after statepoint rewriting would otherwise inline bodies that by then hold statepoints, and that breaks how moved pointers are relocated. Inlining a body that can call the collector is sound only while the conversions between pointers and integers are kept from being folded until statepoint rewriting. With those barriers switched off, the prepass inlines only bodies that never call the collector.
-
-The fast edge is the guarded path for calls the compiler could not stamp. A generic site knows how many arguments it passes but not how many captures the callee holds, so it cannot call `$cap`. It can call an entry whose signature depends only on what the site knows: the argument count N, the argument kinds and the result kind. Those are the `sat[]` entries in the descriptor, `__closure_sat_<target>_n<N>`, each of which loads the captures in place and calls the typed target with the arguments in registers. The lowering brackets each saturated or generic sequence with markers, and `expandSatMarkers` in `EcoBackend.cpp` turns each bracket into a branch. It reads the packed word and checks that the closure needs exactly N more arguments, that its stage arity is at most 20 so the packed word describes every slot, that its result kind matches the site's, and that the kinds of its remaining slots equal the site's argument kinds. It then checks that `sat[N]` is not null. If every check passes, the call goes to the entry with raw arguments in registers, and skips the argument array, its root range and the runtime's argument splicing. Any failure takes the unchanged generic sequence. The kinds check is what makes passing raw arguments sound.
-
-The fast edge is safe whichever way it goes wrong. Entries are generated only for the signatures some site presents and that the closure's smallest capture count can reach. A missing entry leaves `sat[N]` null and the site takes the generic sequence, and a spare entry only wastes space. Keying entries on N alone generates about four times as many entries as the guards can ever reach. The branch is built at LLVM-IR level because an application can sit inside a single-block region of structured control flow, and closure lowering runs before that control flow becomes branches. Entries stop at stage arity 16, which avoids an LLVM code-selection failure on wide statepoint signatures. An entry whose return type is not the canonical type for its result kind is declined, because the branch's merge would receive a value of the wrong type.
-
-Creating a closure is lowered in two ways. A closure with no captures and a stage arity of at most 20 is interned as one permanent object per wrapper, since a closure that is never mutated can be shared by every execution instead of allocated by each. Any other closure is allocated, by an inline nursery bump or by `eco_alloc_closure_k`. The lowering stores the packed word as one constant, the descriptor address, the captures and the extension words, then fills in captures of the closure itself.
-
-Mutually recursive closures are allocated as one group, because each sibling needs the others' addresses as captures before they exist. The group is allocated in one region, and the captures between siblings are written once every address is known. This needs no write barrier, because the siblings are in the same generation and none of them is visible to the program yet.
-
-## Applying a closure at run time
-
-The runtime's generic apply, `eco_apply_closure_eval` in `RuntimeExports.cpp`, decides everything from the closure's own header. In pseudocode, leaving out rooting, statistics and the null case:
-
-```
-apply(closure, args[0..n), argKinds, desiredKind):
+```text
+apply(closure, args[0..n)):
     remaining = closure.max_values - closure.n_values
-    if n == 0:          return closure
-    if n < remaining:   return pap_extend_l(closure, args, argKinds)   -- copies, converts to slot kinds
-    if n == remaining:
-        buf = closure.values[0..n_values) ++ convert(args, argKinds -> closure slot kinds)
-        r   = closure.evaluator.generic(buf) cast by closure.result_kind
-        return convert(r, closure.result_kind -> desiredKind)
-    -- over-application
-    next = closure_call_saturated(closure, args[0..remaining))        -- boxed result: a closure
-    return apply(next, args[remaining..n), argKinds[remaining..n), desiredKind)
+    if n <  remaining: return a new, bigger partial application
+    if n == remaining: call the evaluator with captures ++ args
+    if n >  remaining: next = call with the first `remaining` args
+                       return apply(next, the rest of args)
 ```
 
-Notice that the over-application branch needs nothing from the caller about how `next` is staged. The saturated branch converts in both directions: the arguments into the slots' declared kinds, and the result from the closure's real kind into the kind the caller asked for.
+Here is the real routine, trimmed to its skeleton (from the runtime's closure-apply routine; rooting, validation and statistics removed):
 
-Extension, `eco_pap_extend_l`, never mutates a closure. It allocates a fresh closure with room for the applied slots only, copies the existing captures and extension words, converts each added argument to its slot's kind, and shares the descriptor. Conversion can box, and boxing can collect, so it happens before the fresh closure is allocated, while only the old closure and the arguments need rooting. Because extension copies, a closure is never written after it is built: a zero-capture closure can be an interned singleton, and every closure stays valid as a published object, the rule the collector rests on.
+```cpp
+Closure* closure = static_cast<Closure*>(closure_ptr);
+uint32_t remaining = closure->max_values - closure->n_values;
+uint8_t K = closure->result_kind;
 
-An extended closure holds only the slots applied so far, because a partial application needs nothing more, and the collector traces exactly the first `n_values` slots of a closure, by their kinds. Scanning by count rather than by object size is also why the nursery's to-space needs no zeroing. How closures are traced is part of [garbage-collector.md](/docs/garbage-collector).
+if (num_args < remaining) {
+    HPtr extended = eco_pap_extend_l(HPtr::fromBits(closure_bits),
+                                     reinterpret_cast<uint64_t*>(typed_args),
+                                     num_args, args_layout);
+    *static_cast<HPtr*>(result_slot) = extended;
+    return;
+}
+if (num_args == remaining) {
+    invokeSaturatedTyped(closure_bits, typed_args, num_args, args_layout,
+                         K, desired_kind, result_slot);
+    return;
+}
+// Over-saturated: saturate this stage, then apply the rest to its result.
+HPtr intermediate = eco_closure_call_saturated(
+    HPtr::fromBits(closure_bits),
+    reinterpret_cast<uint64_t*>(typed_args), remaining, args_layout);
+uint32_t trailing = num_args - remaining;
+// ... build a layout for the trailing arguments ...
+eco_apply_closure_eval(intermediate, typed_args + remaining,
+                       trailing, sub, result_slot, desired_kind);
+```
 
-The other entries are thin layers over generic apply. Two shims serve callers that want a boxed result or pass only boxed arguments, `eco_apply_closure_typed` and `eco_apply_closure`. `eco_closure_call_saturated` and its `_eval` form are the saturated-only entries that typed lowering uses. For allocation, `eco_alloc_closure_fn` builds a closure around a raw C++ function by interning a descriptor for it, and `eco_alloc_closure_group_l` allocates a mutually recursive group. C++ kernels call closures through these entries, mostly `eco_apply_closure`, and never read the closure layout themselves ([elm-kernel.md](/docs/elm-kernel)). Keeping closure application in one runtime routine means the list, string and array kernels cannot drift apart in how they read kinds and build arguments.
+The over-saturated case asks nothing of the caller about how the callee is staged: it saturates this stage, takes the closure that stage returns, and applies it to whatever is left. That is why a call site can always fall back to this routine, whatever it does or does not know.
 
-## What the design relies on
+Extending a partial application never changes the closure in place. It allocates a new closure, copies the captures, converts each new argument to its slot's kind, and shares the descriptor. Because closures are never written after they are built, a closure with no captures can be a single shared object, and every closure obeys the rule the collector rests on (see [The garbage collector](/docs/garbage-collector)).
 
-These are the facts the parts above assume of each other, and nothing at run time checks most of them:
+## Faster paths, proven or guarded
 
-- A typed application's remaining arity is the closure's true remaining arity. A saturated typed call checks it only in debug builds, and a partial one aborts only if it overflows the stage.
-- A stamp names the instance the value really is. A stamped call reads no header.
-- The packed word and the descriptor layout agree bit for bit across `Heap.hpp`, the packing helper, the fast-edge guard and the interning key. The guard reaches the `sat` table at a fixed offset of 24 bytes.
-- Every compiled closure's stage arity equals its descriptor's stage arity. The empty `sat[]` above arity 20 depends on it, and validating builds assert it during extension.
-- The kinds the wrapper decodes match the kinds on the header, because both come from the same target signature. The kind derivation aborts rather than default to boxed.
-- Code that fills value slots publishes `n_values` with no safepoint between setting the count and filling the slots, because the collector traces exactly that many. The generic field-store helpers must never be used on a closure.
+The compiler records on every call through a function value what it could establish about the callee. The faster paths come in two sorts, and the difference matters:
 
-## References
+- A **proven** path trusts a fact the compiler recorded and checks nothing at run time. The `singleton_fast` calls above are proven: the compiler names the one function the closure can be.
+- A **guarded** path reads the closure header, compares it with what the call site knows, and falls back to generic apply on any mismatch. It cannot miscompile.
 
-Related documents: [eco.md](/docs/theory) (parent), [global-optimization.md](/docs/global-optimization), [lambda-set-specialization.md](/docs/lambda-set-specialization), [mlir-generation.md](/docs/mlir-generation), [eco-dialect.md](/docs/eco-dialect), [lowering-passes.md](/docs/lowering-passes), [value-representation.md](/docs/value-representation), [kernels.md](/docs/kernels), [elm-kernel.md](/docs/elm-kernel), [garbage-collector.md](/docs/garbage-collector).
+| What the compiler knows | What the call becomes | Checked at run time |
+|---|---|---|
+| The callee is one specific closure | a direct call to its body, captures loaded at known types | nothing |
+| The remaining arity, and the call saturates | a saturated-call entry, behind a fast edge | the fast edge's guards |
+| The remaining arity, and the call is partial | the runtime's extend routine | only that the stage does not overflow |
+| Nothing, or only parameter types | generic apply, behind a fast edge | everything, from the header |
 
-Code:
+The fast edge is the guarded path for calls the compiler could not pin to one closure. A generic call site knows how many arguments it passes and their kinds, but not how many captures the callee holds. So each descriptor carries a small table, `sat[N]`, of entries that each take exactly N new arguments in registers and load the captures themselves. The fast edge reads the packed word and checks that the closure needs exactly N more arguments, that all its kinds fit in the packed word, that its result kind and remaining slot kinds match the call site's, and that `sat[N]` exists. If every check passes, the call goes straight to the entry and skips the argument array, its root registration and the runtime's argument splicing. Any failure takes the unchanged generic path, so a missing entry costs speed, never correctness.
 
-- `runtime/src/allocator/Heap.hpp`: `Closure`, `EvaluatorDesc`, `EvalParamLayout`, `ClosureKinds` and the closure constants.
-- `runtime/src/allocator/RuntimeExports.cpp`, section "Closure Operations": `eco_apply_closure_eval`, `invokeSaturatedTyped`, `spliceArgsForSaturatedCall`, `eco_pap_extend_l`, `eco_closure_call_saturated`, `eco_alloc_closure_k`, `eco_intern_closure0`, `eco_alloc_closure_group_l` and `ecoDescForKernelEvaluator`.
-- `runtime/src/allocator/RuntimeExports.h`: the C entry points and their contracts.
-- `runtime/src/codegen/Passes/EcoToLLVMClosures.cpp`: `getOrCreateWrapper`, `PapCreateOpLowering`, `PapExtendOpLowering` (`lowerGenericApply`, `lowerSegmentationUnknown` and the typed arms), `emitFastClosureCall`, `emitInlineClosureCall`, `emitClosureCall`, `getOrCreateEvalDesc`, `getOrCreateEvalDescForFunc` and `getOrCreateSatEntry`.
-- `runtime/src/codegen/EcoBackend.cpp`: `expandSatMarkers` and `runCapInlinePrepass`.
-- `runtime/src/allocator/NurserySpace.cpp`: closure tracing at `Tag_Closure`.
-- `compiler/src/Compiler/Generate/MLIR/Functions.elm`: `generateClosureFuncWithClones` and `generateGenericCloneFunc`. `Lambdas.elm` does the same for nested lambdas.
-- `compiler/src/Compiler/Generate/MLIR/Expr.elm`: `generateCall`, `generateGenericApply`, `generateUnknownSegmentationCall`, `generateFastDispatchCall`, `applyByStages` and `generateClosure`.
-- `runtime/src/codegen/Ops.td`: `eco.papCreate`, `eco.papCreateGroup`, `eco.papExtend` and `eco.project.closure`.
+## How much it matters
 
-Invariants (`design_docs/invariants.csv`):
+On the compiler compiling itself, the whole generic path (generic apply, the saturated dispatch and the extend routine) is a couple of percent of CPU cycles in self time. Lambda-set specialization is what keeps it that low. In one measurement, the same self-compile was run by a compiler built without lambda-set specialization and by one built with it: generic applications fell by roughly three quarters, and the share of calls with a statically known target rose from about 84% to about 94%.
 
-- GOPT_003, GOPT_016: staging preserves meaning; unprovable calls stay generic.
-- CGEN_052: a typed application's remaining arity is proven. CGEN_080: a stamp takes precedence over the call kind for closure values. CGEN_057: a kernel in closure position gets a back-end wrapper.
-- CGEN_059, CGEN_060: no boxing allocations in the IR for generic calls.
-- LSS_017, LSS_018, LSS_036: stamps only on provable single instances (AbiCloning's verbatim-copy license and fingerprint fence, `compiler/src/Compiler/GlobalOpt/AbiCloning.elm`).
-- RUNTIME_CLOSURE_004: over-application recurses through `eco_apply_closure_eval`.
-- REP_CLOSURE_001, FORBID_CLOSURE_001: only Int, Float and Char are raw in closures; Bool is boxed. REP_CLOSURE_002: arguments are converted to declared slot kinds.
-- HEAP_033: interned zero-capture closures. HEAP_034: closures are traced to `n_values`. HEAP_078: the 2047-parameter layout and every reader of it. HEAP_SNAPSHOT_001: published objects are never written.
+> **Designs we didn't use.** We rejected a uniform boxed calling convention with a generated partial-application wrapper per closure. Lambdas are typed end to end instead, so captured `Int`s, `Float`s and `Char`s flow raw, and the only wrapper left is the one behind the descriptor's array-taking entry.
+
+## Further reading
+
+- [Lambda-set specialization](/docs/lambda-set-specialization) — how the compiler learns which closures can reach a call.
+- [Global optimization](/docs/global-optimization) — where stages are chosen and call kinds recorded.
+- [Value representation](/docs/value-representation) — the slot kinds and the boxed word.
+- [Lowering passes](/docs/lowering-passes) — how `eco.papExtend` becomes LLVM calls.
+- The full design document: [Closures and calls theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/closures-and-calls.md)
+- Source: [`runtime/src/allocator`](https://github.com/eco-lang/eco-compiler/tree/master/runtime/src/allocator)

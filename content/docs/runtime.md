@@ -1,128 +1,64 @@
 ---
-title: "Runtime"
-description: "A compiled Eco program runs on a native runtime, written in C++ and linked into every executable, that has two parts."
-section: "Theory"
-sectionOrder: 2
-order: 17
+title: "The runtime"
+description: "Eco's C++ runtime, linked into every executable, gives each program one thread that owns the heap, a garbage collector and an event loop that runs Elm's tasks."
+section: "The runtime"
+sectionOrder: 4
+order: 1
 ---
 
-A compiled Eco program runs on a native runtime, written in C++ and linked into every executable, that has two parts. A garbage collector allocates every Elm value and reclaims the ones the program can no longer reach. A scheduler runs Elm's tasks, effect managers, timers, HTTP requests and ports. Both parts are built around one thread that the runtime starts for the program, called the eco thread. It is the only thread that runs Elm code or allocates Elm values, and each process has exactly one. The collector copies young objects that survive, and it needs no write barrier because Elm values never change once the program can see them. Threads that wait on timers, the network or child processes never touch the heap: they hand plain data back to the eco thread, which builds the Elm values.
+A compiled Eco program carries a runtime written in C++, linked into every executable. Its central rule is simple: one thread, the eco thread, runs all Elm code and is the only thread that touches the heap. Every other thread (timers, network waits, the collector's helpers) works on plain data or under a strict protocol, and hands results back to the eco thread to turn into Elm values.
+
+> **Background**
+>
+> - An [eco thread](/docs/glossary#eco-thread) is the one thread per process that runs Elm code and allocates Elm values.
+> - The [mutator](/docs/glossary#mutator) is collector jargon for the code that allocates and changes pointers; in Eco it is the eco thread.
+> - A [write barrier](/docs/glossary#write-barrier) is extra work a collector adds to every pointer store. Eco has none.
+
+The runtime has two halves. The garbage collector decides how values are stored and when they are reclaimed. The scheduler decides when Elm code runs. Both are built around the eco thread.
+
+![Threads in a running Eco program and what passes between them](/images/docs/runtime-threads.svg)
 
 ## The eco thread owns the heap
 
-The thread that runs Elm code and allocates is what a collector calls the mutator. Eco allows one per process, and creating a second live heap aborts the program while the second thread is being set up. With one mutator, the collector has the heap to itself whenever it runs: no other thread is allocating, reading or holding a pointer it has not been told about.
+Each process has exactly one mutator. With one mutator, the collector has the heap to itself whenever it runs: nothing else is allocating, reading, or holding a pointer the collector has not been told about. The scheduler follows from the same rule. It cannot hand Elm work to another thread, so it is an event loop on the eco thread: it steps one task at a time, and when nothing is ready it waits for an outside event.
 
-The scheduler is shaped by the same rule. It cannot hand Elm work to another thread, so it is an event loop on the eco thread: it steps one task at a time, and when nothing is ready it waits for an outside event.
+The missing write barrier has a different source: Elm's immutability. An old object can never point to a younger one, because the younger one did not exist when the old one was built, and nothing writes into an object afterwards. One mutator and immutability are separate facts, and the runtime needs both.
 
-The missing write barrier has a different source. It comes from Elm's immutability, as [eco.md](/docs/theory) explains: an old object can never point to a younger one, because the younger one did not exist when the old one was last written. One mutator and immutability are separate facts, and the runtime needs both.
+We considered three threading designs:
 
-Three designs for threads are easy to confuse, and they have different standing.
+| Design | Status |
+|---|---|
+| One heap, one mutator per process | What Eco does today. |
+| One shared heap with many mutators | Rejected: it needs pointers between threads' young objects, or stop-the-world collections with safepoint polls in every loop, and much larger formal models. |
+| A heap per thread, threads exchanging only messages | The chosen future direction, not built. Memory accounting is process-wide today and would have to be split per heap. |
 
-| Design | Standing | Why |
-|---|---|---|
-| One heap, one mutator per process | What the runtime does | The accounting of committed memory, the timing of returning memory to the system, and the list of released address ranges are all process-wide. Making them per heap costs far more than forbidding a second heap, and only benchmark and test harnesses ask for several. Every production entry point creates exactly one heap. |
-| One shared heap with many mutators | Rejected | It needs young objects that can point between threads, or stop-the-world young collections with safepoint polls in every loop, a marking handshake with each mutator, and much larger formal models. The JavaScript back end, running on Node workers, cannot offer the same behavior. |
-| A heap per thread, each with one mutator, threads exchanging only messages | The decided future direction, not built | It keeps every property the runtime relies on inside each heap. It needs the process-wide accounting above split per heap, which is why it is a project of its own and not a small change. |
+Besides the eco thread there are two other kinds of thread. The collector's helpers mark the old generation and promote survivors in the background, under protocols that are also written as formal models (see [Model-checking the collector](/docs/concurrency-models)). Service threads wait on timers, HTTP and child processes, and they hold only plain data: deadlines, request structures, resume tokens.
 
-Besides the eco thread, the runtime runs two kinds of thread. The collector's helper threads mark the old generation and promote survivors in the background, under a protocol the collector defines and formal models describe. Service threads wait on timers, HTTP and child processes, and they hold only plain data such as deadlines, request structures and resume tokens. A host program that embeds Eco adds a thread of its own, which talks to the eco thread through a queue.
+## How work leaves and re-enters
 
-```mermaid
-flowchart LR
-    W[service threads:<br/>timers, HTTP, process waits] -- "plain data:<br/>results and tokens" --> Q[ready queues]
-    H[host thread, when embedded] -- "port messages<br/>as serialized JSON" --> Q
-    Q -- "drained by the scheduler" --> E[eco thread:<br/>scheduler and Elm code]
-    E -- "allocate and read" --> HP[Elm heap]
-    E -- "plain requests" --> W
-    G[collector helper threads] -- "mark and promote<br/>under the collector's protocol" --> HP
-```
+Service threads never allocate, never follow a heap reference and never run Elm code. They post results to queues, and the scheduler drains those queues on the eco thread and builds the Elm values there. A timer thread that called back into Elm and allocated would corrupt the collector's state, so every service is built this way.
 
-## The collector and the scheduler
+A kernel function that returns a `Task` does no input or output when it is called. It returns a value that *describes* the work, and the work happens when the scheduler steps that task. If the work would block, it parks a resume token and a service thread makes the system call, so the eco thread keeps running other tasks. Doing the work at call time would break what a `Task` means in Elm: two tasks could never overlap, and a task that was stored and run twice would see the state of its first run.
 
-The runtime's two parts divide its work: the collector decides how values are stored and when they are reclaimed, and the scheduler decides when Elm code runs. The forms that strings, lists and byte sequences take inside the heap belong to the storage side, and they have a document of their own.
-
-The garbage collector gives each process's single mutator one heap. Young objects are allocated in a nursery by bumping a pointer, and the survivors of a young collection are copied out of it. Old objects live in a separate generation that does not move, in blocks grouped by object size, with a bitmap per block recording which cells are live. It can stay this simple because no published object is written again, so no old object points to a younger one. That removes the write barrier, and it also lets the old generation be marked, and survivors promoted, on helper threads without one. The cost is a discipline that code outside the collector must keep, and a body of protocol code, heap validators and formal models that check the concurrent parts. See [garbage-collector.md](/docs/garbage-collector).
-
-Inside the heap, strings, lists and byte sequences each have several forms, which the runtime chooses value by value under size thresholds that trade copying against sharing. A String may be a flat array of UTF-16 code units, a large array whose payload is kept apart from its header, a slice of another string, a rope joining two strings, or one of two all-ASCII UTF-8 forms. A List is a chain that can mix single cons cells with views over dense arrays, and Bytes is a flat buffer, a slice of one or a large buffer kept apart from its header. The empty value of all three is one shared constant. Kernels rely only on the content and on the length in the object's header, never on which form they hold, so a new string form, such as a rope or a UTF-8 string, is a change to the runtime and not to the kernels. Compiled code reads list cells inline, so a new list form is also a change to compiled code, and chunked lists are switched on for the whole program or not at all. See [runtime-data-structures.md](/docs/data-structures).
-
-The scheduler is Elm's own scheduler, implemented again over the Eco heap. The eco thread steps tasks and processes, which are themselves immutable heap values, and calls every effect manager and port synchronously. Timers, HTTP and child-process waits run on service threads that hand back plain tokens, and input from a host program arrives through a queue that the eco thread drains. The program stays alive exactly as long as it holds a counted claim, called a hold, on something it asked for. Running all of Elm on one thread follows from the collector's one-mutator design. See [scheduler-and-services.md](/docs/scheduler-and-services).
-
-The two parts meet each other and the code around them in five places: where compiled code reaches the heap, where the collector finds live values, where work leaves and re-enters the eco thread, where a program ends, and where it starts.
-
-## How compiled code reaches the heap
-
-Compiled code allocates in two ways. At points the compiler marks for it, it bumps the nursery pointer inline, so the commonest allocations cost no call. Every other heap operation, including larger allocations, applying a closure and building lists through a scratch stack, calls a C function the runtime exports.
-
-A heap reference is the object's raw address, aligned to eight bytes. Following it needs no base register, addition or shift, which keeps compiled code short. A few values are never allocated: True, False, one constant shared by Unit, the empty list, Nothing, the empty string and the empty record, and every other constructor with no fields. Each is a small word with a bit set that marks it as a constant rather than an address. The low bit of a Bool word equals the one-bit value the compiler uses for Bool in its intermediate code, so the Bool held in a heap field, passed across a call and used in the intermediate code line up without conversion. Code tells a constant from an address only by that bit, never by address range or a null test, because the bit is the encoding's only marker and a range test depends on where the heap happens to be reserved. [value-representation.md](/docs/value-representation) gives the word's full encoding and what each Elm value looks like in each of its representations.
-
-The collector never sees Elm types. Code generation decides, from each value's specialized type, which fields of each object hold an unboxed Int, Float or Char, and the object's layout records a small kind for each field. The collector reads those kinds to know which fields to trace. A change to what may be stored unboxed is therefore a change to code generation's layout rules and the layout kinds together, not to the collector.
+A program stays alive exactly while it waits for something it asked for. Each wait takes a counted claim called a hold, and the event loop exits when the run queue is empty and no holds remain. A program embedded in a host (as a shared library or a Node addon) works the same way: the host's thread never becomes the mutator, and port messages cross as JSON through a queue that the eco thread drains.
 
 ## How the collector finds live values
 
-Because the collector moves objects, it must find every live pointer, called a root, and rewrite each one when its object moves. Roots live in two kinds of code, and each kind has its own way of reporting them.
+Because the collector moves young objects, it must find every live pointer and rewrite it when its object moves. Compiled code reports its pointers through stack maps that LLVM writes into the executable, one per call site that may collect; the runtime walks the stack and looks up each frame. C++ code in the runtime and the kernels has no stack maps, so any C++ that holds a heap value across an allocation registers it as a root. An unregistered value is silently left pointing at the old copy.
 
-In compiled code, LLVM works out at every point where the collector might run which stack slots hold heap pointers, and it records the answer in stack maps inside the executable. At start-up the runtime finds those maps in its own executable, and during a collection it walks the stack with a per-platform unwinder and looks each frame up. This makes every compiled frame precise. Scanning the stack conservatively, treating any word that looks like an address as a pointer, does not work for a moving collector, because a word that only looks like a pointer must not be rewritten. Following the frame-pointer chain and guessing slot offsets is not used either: it works only on x86-64, needs frame pointers, and breaks under optimization.
+## What is in this section
 
-C++ code in the runtime and the kernels has no stack maps. Any C++ site that holds a heap value across an allocation must register it as a root, either with a guard object on the stack or with a scanner the collector calls. An unregistered value is silently left pointing at the old copy when its object moves. This is why the scheduler and the platform keep their heap values in registered member fields rather than in local variables, and why effect-manager records hold their heap references in a form the collector's scanners can rewrite.
+- [Value representation](/docs/value-representation): how every Elm value becomes one 64-bit word, and why a heap pointer is its own address.
+- [Closures and calls](/docs/closures-and-calls): the closure object, and how the runtime applies any closure to any number of arguments.
+- [Runtime data structures](/docs/data-structures): the several heap forms of strings, lists and bytes.
+- [The garbage collector](/docs/garbage-collector): a generational, concurrent collector with no write barrier.
+- [Scheduler and services](/docs/scheduler-and-services): Elm's scheduler, timers, HTTP and ports on one thread.
+- [Kernels](/docs/kernels) and [System libraries](/docs/system-libraries): Elm's built-in functions, rewritten in C++.
 
-## How work leaves and re-enters the eco thread
+## Further reading
 
-Service threads never allocate, never follow a heap reference and never run Elm code. They hold plain data, post results to queues, and the scheduler drains those queues on the eco thread and builds Elm values there. A timer thread that calls back into Elm and allocates corrupts the collector's state. Every service is therefore built this way: timers, HTTP, child-process waits, and the queue that carries port messages from a host.
-
-A kernel function that returns a Task does no input or output when it is called. It returns a Task value that describes the work, and the work runs inside a callback when the scheduler steps that Task. If the work would block, the callback parks a resume token and a service thread makes the system call, so the eco thread keeps running other tasks. Doing the work at call time breaks Elm's meaning of a Task. Two such Tasks could never overlap, a time-varying read would always return its value from module start-up, a blocking call would stall every other task, and a Task that is shared or memoized would see the state of its first run. For the same reason, Task and Process values are never changed after they are built.
-
-## When a program ends
-
-A program stays alive exactly while it waits for something it asked for. Each such wait takes a hold, and the event loop exits when the run queue is empty and no holds remain. Opening a listener or a socket takes no hold; waiting for a connection or a read on it does. Holds are taken and released only through one interface, exactly once on every path. With a single count behind a single interface, a program that never exits can be diagnosed by listing the holds still open, which scattered keep-alive counters and flags could not offer.
-
-## Start-up, embedding and platforms
-
-The program's entry point starts the eco thread, which sets up the heap, runs the Elm program and tears everything down. The same structure serves a program embedded as a shared library or Node addon. There the host's thread is never the mutator: it talks to the eco thread only through the port interface and a mutex-guarded queue. Port payloads cross as serialized JSON and are decoded into Elm values on the eco thread, so no heap value is ever built off it.
-
-Child processes are started by spawning, never by forking. A forked child would inherit the heap configuration, the reserved address range, the collector's helper threads and the runtime's global objects, while a spawn runs none of that.
-
-Reserving address space, unwinding the stack, finding the stack-map section and locating files all sit behind one file per operating system, below the collector. The same collector code runs on Linux, macOS and Windows with no platform conditionals in its body.
-
-## What the runtime cannot check
-
-The runtime depends on four properties of the code around it, and it has no way to check any of them at run time.
-
-1. Elm values are never changed once published. They can form cycles, for example a closure that captures itself or closures that capture each other, and the collector traces cycles like any other graph. What it depends on is immutability, not the absence of cycles.
-2. Compiled code stores only into objects it has just allocated, checks whether an object has been moved before following a reference to it, allocates inline only at the points marked for it, and carries stack maps the runtime can find.
-3. Kernel libraries register every heap value they hold across an allocation, write only into objects still being built, and defer their input and output into Task callbacks.
-4. All Elm code runs on the eco thread, and a process has one mutator.
-
-The collector's concurrent protocols are also written as TLA+ models: formal specifications that a model checker explores exhaustively. A canary records hashes of the code each model describes and warns when that code changes. A warning means the model may no longer match the code, so the model is checked first and the hash updated only after.
-
-## References
-
-Parent: [eco.md](/docs/theory). Children: [garbage-collector.md](/docs/garbage-collector), [runtime-data-structures.md](/docs/data-structures), [scheduler-and-services.md](/docs/scheduler-and-services).
-
-Code:
-
-- `runtime/src/allocator/Heap.hpp`, `AllocatorCommon.hpp`, `HeapHelpers.hpp`: object layouts, tags and the heap reference type `HPointer`.
-- `runtime/src/allocator/Allocator.cpp`, `ThreadLocalHeap.cpp`, `NurserySpace.cpp`, `OldGenSpace.cpp`: the collector; `initThread` refuses a second live heap.
-- `runtime/src/allocator/RuntimeExports.cpp`, `RuntimeExports.h`: the C interface compiled code calls (`eco_alloc_*`, closure application, the list scratch stack). Closure application is explained in [closures-and-calls.md](/docs/closures-and-calls).
-- `runtime/src/allocator/RootSet.cpp`, `StackMap.cpp`, `StackUnwind.cpp`, `StackMapRoots.hpp`: root discovery (`StackRootGuard`, external root scanners, `initStackMapFromSelf`).
-- `runtime/src/platform/Scheduler.cpp`, `PlatformRuntime.cpp`, `PortRuntime.cpp`, `TaskBinding.hpp`, `Liveness.hpp`: the scheduler, effect managers, ports, Task callbacks and holds.
-- `runtime/src/platform/TimerService.cpp`, `HttpService.cpp`, `WaitService.cpp`, `Spawn.cpp`: service threads and process spawning.
-- `runtime/src/platform/PlatformVirtualMemory_posix.cpp`, `PlatformVirtualMemory_win32.cpp`, `StackMapSection.hpp`, `PlatformPaths.hpp`: per-OS layers.
-- `runtime/src/codegen/eco_entry.cpp` (in the back end's directory), `runtime/src/embed/eco_embed.cpp`, `runtime/src/embed/eco_embed.h`: process entry and host embedding.
-- `elm-kernel-cpp/src/EffectManagerRegistry.cpp`: registration of the Elm kernel's effect managers.
-- `ECO_LIVENESS_REPORT=1`: lists the holds still open.
-
-Documents:
-
-- `design_docs/multi-threaded-eco/01-baseline-and-boundary.md`: one mutator per process, the rejected shared heap, and the heap-per-thread direction.
-- `test/tla/README.md`: the collector's formal models and canary.
-
-Invariants (`design_docs/invariants.csv`):
-
-- HEAP_005, HEAP_031: stores only into fresh objects. HEAP_SNAPSHOT_001: published values are immutable. HEAP_018: Elm value data is acyclic; closures are the exception.
-- HEAP_BUILDER_001 to HEAP_BUILDER_003: objects under construction in the runtime and kernels.
-- HEAP_004: adding object kinds. HEAP_007: one mutator per process.
-- HEAP_008, HEAP_028, REP_CONSTANT_001, HEAP_029: pointer words and embedded constants. FORBID_HEAP_001: telling constants apart.
-- HEAP_019, REP_HEAP_001, REP_HEAP_002: field kinds.
-- HEAP_020, FORBID_HEAP_003: rooting in C++. HEAP_030, HEAP_034: inline allocation and forwarding checks.
-- KERNEL_TASK_IO_001, KERNEL_TASK_IO_002: deferred kernel IO.
-- LIVE_001 to LIVE_006: holds. PORT_004, PORT_006, PORT_007: ports, the eco thread and JSON flags.
-- GC_DET_001: collector policy does not depend on helper-thread progress. The model canary's rule is in `test/tla/README.md` "The canary".
+- [Eco at a glance](/docs/theory) — where the runtime sits among the compiler and backend.
+- [The garbage collector](/docs/garbage-collector) — the immutability argument in full.
+- [Scheduler and services](/docs/scheduler-and-services) — the event loop and service threads in detail.
+- The full design document: [Runtime theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/runtime/runtime.md)
+- Source: [`runtime/src`](https://github.com/eco-lang/eco-compiler/tree/master/runtime/src)

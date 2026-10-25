@@ -1,146 +1,178 @@
 ---
 title: "Local optimization"
-description: "Before types are concrete, Eco optimizes each module on its own, and only with rewrites that keep every type."
-section: "Theory"
+description: "Before types are concrete, Eco rewrites each module on its own: pattern matches become decision trees, self-recursion becomes loops, operators become plain code, and some nested functions are merged, all while keeping every type."
+section: "The compiler"
 sectionOrder: 2
-order: 5
+order: 3
 ---
 
-Before types are concrete, Eco optimizes each module on its own, and only with rewrites that keep every type. Local optimization lowers a type-checked canonical module into the typed optimized form: one graph of top-level definitions per module, in which every expression still carries its type and its solver variable. On the way, pattern matches become decision trees, functions that call themselves in tail position become tail-call definitions, ports get JSON encoders and decoders, the short-circuit and pipe operators become conditionals and plain calls, and nested functions whose boundaries would force extra closures are merged into one. Any rewrite that needs the whole program or a concrete type waits for monomorphization and global optimization. The erased path, which feeds JavaScript, runs Elm's original untyped copy of this phase instead.
+Some optimizations need the whole program and concrete types. Others can be done on one module, with nothing known yet about whether `a` will turn out to be `Int` or `String`. Local optimization is the second kind. It turns pattern matches into decision trees, self-recursive functions into loops and a few operators into the code they stand for, and it does all of it without losing a single type, because the phases after it specialize the program from those types.
+
+> **Background**
+> - Decision tree: a compiled `case`, where each test looks at one part of the value and picks the next test.
+> - Tail call: a call that is the last thing a function does, so its stack frame can be reused.
+> - [Staging and arity](/docs/glossary#staging-and-arity): how a curried function's arguments are grouped into calls.
 
 ## Change the shape, keep the types
 
-The phase may change the shape of the program but never its meaning, and it never discards what the type checker recorded. Monomorphization, the phase that depends on these types, specializes each function from the recorded types, so a node that loses its type, or carries the wrong one, cannot be specialized correctly. The native back end needs the types to specialize functions, to lay out values in memory and to decide what can be stored unboxed, which is why Eco keeps a second, typed optimized form beside Elm's erased one ([compiler.md](/docs/compiler)).
+A rewrite belongs in this phase only if it passes three tests: it looks at one module, its result has the type of what it replaces, and it is correct for every type the code may later be specialized to. A rewrite that depends on whether a `comparable` is an `Int` or a `String` fails the third test and waits until after [monomorphization](/docs/monomorphization).
 
-Three tests follow for any rewrite. It belongs here only if it looks at one module, gives its result the type of what it replaces, and is correct for every type the code may later be specialized to. A rewrite that fails the third test, because it depends on whether a `comparable` is an Int or a String, belongs after monomorphization, where the type is known.
+Every expression in the phase's output carries two pieces of type information: its type in the type checker's terms, which may still contain variables such as `a` or `number`, and the solver variable the [front end](/docs/front-end) recorded for it. Any rewrite that builds a node has to supply both. Each rewrite reuses the type and variable of the node it replaces for the nodes it builds, and that discipline is what keeps the types right.
 
-## What every node carries
+The erased path, which produces JavaScript, runs Elm's own untyped copy of this phase instead, unchanged, so that Eco's JavaScript stays identical to Elm's. The typed copy mirrors the same algorithms. The price is that a fix to one copy must be made by hand in the other.
 
-Each expression in the typed optimized form carries two pieces of type information, which together form its metadata. The first is its type in the type checker's own terms, which may still contain variables such as `a` or `number`. The second is the solver variable for that node, which the front end recorded during constraint generation and normalized to its root after solving.
+## Pattern matches become decision trees
 
-```elm
-type alias Meta id =
-    { tipe : Can.Type id
-    , tvar : Maybe Vars.Variable
-    }
-
-type Expr id
-    = Bool A.Region Bool (Meta id)
-    ...
-    | VarLocal Name (Meta id)
-    ...
-    | VarGlobal A.Region Global (Meta id)
-    ...
-```
-
-From `compiler/src/Compiler/AST/TypedOptimized.elm`. Notice that the metadata is the last argument of every variant, so any rewrite that builds a node must supply both halves. The variable is optional in the type, but monomorphization depends on it for function-typed definitions and references. The design notes for the phase describe a bare type on each node; the code carries this record.
-
-The commonest way to break the metadata is to give a function-typed definition the variable of its body instead of the variable of the whole function. A local function used in several places must carry its full function type and variable, or monomorphization crashes or specializes it wrongly. The phase recovers the right variable from the binding that introduces the name. That lookup by name is unambiguous because name resolution forbids shadowing. Tail-call definitions carry a variable for the same reason.
-
-A reference to a top-level function is typed at the place it is used, from the solver's answer for that use. The function's general type, its scheme, comes from its annotation and is kept in the graph separately. Monomorphization caches schemes, and the cache must hold the general type, not whatever type the first use happened to have. Constructors of custom types and of record aliases get annotations for the same reason. Operators are also typed at the use site, from their operand types, because an operator's scheme can share its `number` variable with the enclosing definition and so carry that definition's constraint.
-
-The last step of the phase records which type variables carry Elm's built-in classes, such as `number` and `comparable`. It computes them from the finished graph and the solver roots, so later phases read the classes as data. Reading them from variable names would fail, because names do not survive unification and collide across modules.
-
-## From declarations to a graph
-
-The phase assembles the module graph in order: declarations first, then the expressions inside them, then passes over the finished graph.
-
-Each entry of the graph is one top-level item: a value or function, a record-alias constructor, a constructor of a custom type, a port or an effect manager. While the phase walks each item's expressions it collects the global names the item depends on and the record fields it uses, and stores them on the entry. The whole-program half links these graphs and follows the dependencies to find what is reachable from `main`.
-
-The typed graph is cached on disk between builds. A few fields are filled with defaults when the cache is read back, such as the set of fields used and whether the module defines `main`, so no later phase may depend on them. [compiler.md](/docs/compiler) explains how the `main` marker reaches the build despite this.
-
-## The expression rewrites
-
-Four rewrites happen as the phase walks each expression. Each needs only the module and the types the front end recorded.
-
-### Pattern matches become decision trees
-
-A pattern match is compiled into a tree of tests, each examining one part of the value, so that no part is examined twice. A branch reached by one path is placed inline; a branch reached by several paths becomes a shared jump target, so its code is not duplicated. Each step into a value records what kind of container it is looking inside, a list, a pair, a triple or a custom type, so that later phases can choose a typed projection instead of a generic one. The pattern checks have already run in the front end, so every tree is complete by construction and needs no fallback.
-
-### Self-recursion becomes a tail-call definition
-
-A function that calls itself as its final action is marked as a tail-call definition, so that later phases can compile it as a loop instead of a chain of calls that grows the stack.
-
-### Operators become what they mean
-
-The short-circuit operators become conditionals: `a && b` becomes `if a then b else False`, and `a || b` becomes `if a then True else b`. Treated as an ordinary call, `&&` reaches the strict `Basics.and`, whose intrinsic evaluates both operands and crashes programs that rely on the right-hand side not running. A conditional in the shared form gives every back end the right evaluation order with no special case. Passing `(&&)` as a function value stays strict, as it is in Elm.
-
-The pipes `a |> f` and `f <| a` become the application they denote. They exist only to avoid brackets, and every specialization of them is a copy of the same tiny function, so if they reached monomorphization they would fill its registry of specializations with clones. When `f` is itself a partial application, the argument is added to that call rather than wrapped around it, which gives the same saturated direct call the source would have produced without the pipe. Unary minus becomes a call of `Basics.negate`. Every other operator stays a reference to its function, typed at the use site.
-
-Only the infix form of an operator is rewritten:
+Here is a `case` with overlapping patterns over a list of `Maybe Int`:
 
 ```elm
-        Can.Binop _ binopHome name _ left right ->
-            ...
-            if binopHome == ModuleName.basics && name == "and" then
-                -- a && b  ==>  if a then b else False
-                lowerShortCircuit
-                    (\l r -> ( l, r, boolLit region False tvar ))
+describe : List (Maybe Int) -> String
+describe xs =
+    case xs of
+        [] ->
+            "empty"
 
-            else if binopHome == ModuleName.basics && name == "or" then
-                -- a || b  ==>  if a then True else b
-                lowerShortCircuit
-                    (\l r -> ( l, boolLit region True tvar, r ))
+        (Just 0) :: _ ->
+            "starts with zero"
 
-            else if binopHome == ModuleName.basics && (name == "apR" || name == "apL") then
-                -- a |> f  ==>  f a        f <| a  ==>  f a
-                ...
-                                |> Names.map (applyOneMore region tipe tvar optFn)
+        (Just n) :: [] ->
+            "one: " ++ String.fromInt n
 
-            else
-                -- The operator reference is typed at this use ...
+        Nothing :: rest ->
+            "skip " ++ describe rest
+
+        _ ->
+            "other"
 ```
 
-From the binary operator case of `optimize` in `compiler/src/Compiler/LocalOpt/Typed/Expression.elm`. Notice two things. An operator passed as a value, as in `List.foldl (&&)`, is a different canonical form and never reaches this case. And each rewrite reuses the operator node's own type and variable for the nodes it builds. That reuse is how the rewrites preserve types, and it is the only thing that does: type preservation is a documented rule that nothing checks.
+Tried in order, the patterns would test the head of the list several times. The decision tree tests each part of the value at most once: is the list empty; if not, is the head `Just`; if so, is its content `0`; if not, is the tail empty. Each answer leads straight to a branch or to the next test. Informally, the tree has three kinds of node: a leaf that holds the branch to run, a chain of tests that all have to pass, and a fan-out that picks one of several subtrees by the value at one position. A branch reachable by several paths becomes a shared jump target instead of being copied.
 
-These rewrites are done here and not during name resolution because the canonical tree keeps each operator for error messages, and that tree is also serialized for documentation and interface files, which must see the source as written.
+This is the top of the code Eco produces for `describe` (trimmed: attributes removed and the innermost tests elided):
 
-### Ports get their codecs
+```mlir
+^bb0(%xs: !eco.value):
+  %1 = "eco.get_tag"(%xs) : (!eco.value) -> i32
+  %2 = "arith.constant"() {value = 65533 : i32} : () -> i32
+  %3 = "arith.cmpi"(%1, %2) {predicate = 0 : i64} : (i32, i32) -> i1
+  %34 = "eco.case"(%3) ({
+        %4 = "eco.string_literal"() {value = "empty"} : () -> !eco.value
+        "eco.yield"(%4) : (!eco.value) -> ()
+  }, {
+        %5 = "eco.project.list_head"(%xs) : (!eco.value) -> !eco.value
+        %6 = "eco.get_tag"(%5) : (!eco.value) -> i32
+        %7 = "arith.constant"() {value = 0 : i32} : () -> i32
+        %8 = "arith.cmpi"(%6, %7) {predicate = 0 : i64} : (i32, i32) -> i1
+        %33 = "eco.case"(%8) ({
+              // head is Just: test its Int, then the tail ...
+        }, {
+              %29 = "eco.project.list_tail"(%xs) : (!eco.value) -> !eco.value
+              %30 = "eco.string_literal"() {value = "skip "} : () -> !eco.value
+              %31 = "eco.call"(%29) <{callee = @Case_describe_$_2}> : (!eco.value) -> !eco.value
+              ...
+        }) {case_kind = "bool"} : (i1) -> !eco.value
+        "eco.yield"(%33) : (!eco.value) -> ()
+  }) {case_kind = "bool"} : (i1) -> !eco.value
+```
 
-A port is a typed channel between an Elm program and its host. For each port the phase writes the JSON encoder or decoder as ordinary typed code, built from the port's declared type. Flags, the value the host passes in when the program starts, use the same decoder builder. The work needs only the declared type, so it is done per module.
+The first test compares the list's tag with the tag of the empty list. The second reads the head and compares its tag with `Just`'s. There is no test for `Nothing`: once the head is known not to be `Just`, it must be `Nothing`, so the `Nothing :: rest` branch is simply the other side. Inside the `Just` branch the content is read as an unboxed `i64` and compared with `0` directly.
+
+Each step into a value also records what kind of container it is looking inside, a list, a pair, a triple or a custom type, so that code generation can use a typed projection such as `eco.project.list_head` rather than a generic one. The pattern checks have already run, so every tree is complete and needs no fallback branch.
+
+## Self-recursion becomes a loop
+
+A function that calls itself as its final action is marked as a tail-call definition, so later phases compile it as a loop instead of a chain of calls that grows the stack:
+
+```elm
+sumTo : Int -> Int -> Int
+sumTo acc n =
+    if n <= 0 then
+        acc
+
+    else
+        sumTo (acc + n) (n - 1)
+```
+
+The output is an `scf.while` loop (trimmed: attributes and constant definitions removed). The loop carries `acc`, `n`, a "done" flag and the result, and the recursive call has become a `yield` of the new `acc + n` and `n - 1`:
+
+```mlir
+^bb0(%acc: i64, %n: i64):
+  %4, %5, %6, %7 = "scf.while"(%acc, %n, %2, %3) ({
+      ^bb0(%8: i64, %9: i64, %10: i1, %11: i64):
+        %12 = "arith.xori"(%10, %13) : (i1, i1) -> i1
+        "scf.condition"(%12, %8, %9, %10, %11) : (i1, i64, i64, i1, i64) -> ()
+  }, {
+      ^bb0(%14: i64, %15: i64, %16: i1, %17: i64):
+        %19 = "eco.int.le"(%15, %18) : (i64, i64) -> i1
+        %26, %27, %28, %29 = "eco.case"(%19) ({
+              "eco.yield"(%14, %15, %20, %14) : (i64, i64, i1, i64) -> ()
+        }, {
+              %21 = "eco.int.add"(%14, %15) : (i64, i64) -> i64
+              %23 = "eco.int.sub"(%15, %22) : (i64, i64) -> i64
+              "eco.yield"(%21, %23, %24, %25) : (i64, i64, i1, i64) -> ()
+        }) {case_kind = "bool"} : (i1) -> (i64, i64, i1, i64)
+        "scf.yield"(%26, %27, %28, %29) : (i64, i64, i1, i64) -> ()
+  }) : (i64, i64, i1, i64) -> (i64, i64, i1, i64)
+  "eco.return"(%7) : (i64) -> ()
+```
+
+Every value in the loop is unboxed, 64-bit integers and a 1-bit flag. Monomorphization fixed those types later; the decision to make a loop was taken here, per module.
+
+## Operators become what they mean
+
+The short-circuit operators become conditionals: `a && b` becomes `if a then b else False`, and `a || b` becomes `if a then True else b`. Treated as an ordinary call, `&&` would reach the strict `Basics.and`, which evaluates both operands and would break programs that rely on the right-hand side not running. Passing `(&&)` as a function value stays strict, as it is in Elm.
+
+The pipes `a |> f` and `f <| a` become the application they denote. They exist only to save brackets, and if they reached monomorphization each use would create another copy of the same tiny function. When `f` is already a partial application, the piped argument is added to that call, giving the same direct call the source would have produced without the pipe. Unary minus becomes a call of `Basics.negate`.
+
+Only the infix forms are rewritten. These rewrites happen here rather than during name resolution because the canonical program keeps each operator as written for error messages and documentation.
+
+Ports, the typed channels between an Elm program and its host, get their JSON encoders and decoders written here as ordinary typed code built from the port's declared type. The program's flags use the same decoder builder.
 
 ## Merging function boundaries
 
-The phase merges function boundaries that would otherwise force extra closures. A function that takes one argument, binds some local values and then returns another function, such as `\x -> let y = f x in \z -> g y z`, makes every call build an intermediate closure and call it again. Such a split is a staging boundary. At a case expression whose branches are functions, the boundaries also force each branch to be wrapped to a common shape. Merging them here leaves later phases fewer closures to build and fewer branches to wrap.
+A function that takes one argument, binds some local values and then returns another function makes every full call build an intermediate closure and then call it:
 
-Two rules do the merging. The first turns a function whose body, after its local bindings, is another function into a single function of both sets of parameters, with the bindings inside. The second turns a case whose branches are all functions of the same arity and parameter types into one function around the case, renaming each branch's parameters to one shared set of fresh names. Both are applied to each function repeatedly until nothing changes.
+```elm
+scale : Int -> Int -> Int -> Int
+scale k =
+    let
+        k2 =
+            k * k
+    in
+    \x y -> k2 * x + y
+```
 
-The case rule is all or nothing: every branch is merged or none is. Merging only some branches would leave the others needing wrappers of their own to match, which adds closures instead of removing them. The rule also leaves the code as written whenever its type check is unsure. The fresh names stay fresh across the module because name resolution forbids shadowing.
+Local optimization merges such a boundary. A function whose body, after its local bindings, is another function becomes a single function of both sets of parameters, with the bindings moved inside. A second rule does the same for a `case` whose branches are all functions of the same arity and parameter types: the parameters move outside the `case`, renamed to one fresh shared set. That rule is all or nothing, because merging only some branches would leave the others needing wrappers of their own. Both rules are applied until nothing changes. After the rest of the pipeline, `scale` is one three-argument function (trimmed):
 
-Merging runs here, before monomorphization, because monomorphization only specializes types and keeps whatever function structure it is handed. The final number of parameters of each function, and how calls to it are staged, are decided by global optimization once the whole program is specialized. Local optimization removes only the boundaries that are plainly spurious and chooses nothing else about arity. Functions built by merging carry no lambda identity yet. Those ids are given by the first whole-program step, which gives every variable in the linked graph an id ([compiler.md](/docs/compiler)).
+```mlir
+^bb0(%k: i64, %x: i64, %y: i64):
+  %3 = "eco.int.mul"(%k, %k) : (i64, i64) -> i64
+  %5 = "eco.int.mul"(%3, %x) : (i64, i64) -> i64
+  %6 = "eco.int.add"(%5, %y) : (i64, i64) -> i64
+  "eco.return"(%6) : (i64) -> ()
+```
 
-The typed and untyped optimized forms are not kept provably equivalent. Merging reshapes the typed form and has no counterpart in the erased one, so a check that the two agree would forbid the merging.
+Merging is not free, and it is worth being exact about what it does. The `let` now runs on every call, so `k * k` is computed each time `scale` is applied to all three arguments, even when the program applies it to `k` once and reuses the result. For a multiplication that does not matter. For expensive work it does. In this program
 
-## Two copies of the same algorithms
+```elm
+makeLookup : List Int -> Int -> Bool
+makeLookup xs =
+    let
+        s =
+            Set.fromList xs
+    in
+    \x -> Set.member x s
 
-The erased path keeps its own untyped copy of this phase. The typed pattern compiler, case lowering and port codec builder are typed mirrors of the erased ones and run the same algorithms. The erased copy stays as Elm wrote it, because the erased path must produce exactly what Elm produces ([compiler.md](/docs/compiler)), so the typed versions sit beside it rather than inside it. The cost is that a fix to one copy must be made by hand in the other. The usual hazard is an assumption about value layout that is copied across and holds only for some shapes, such as a tuple rule that works for pairs and fails for triples.
+isIn = makeLookup [ 1, 5, 9 ]
+```
 
-## What the phase takes from earlier phases
+`makeLookup` becomes one two-argument function whose body calls `Set.fromList` and then `Set.member`, so `List.filter isIn` rebuilds the set for every element it tests. The source suggests the set is built once; the compiled code builds it each time. This happens at default settings in 0.2.0, and we are treating it as a compiler issue to fix rather than a trade-off to keep.
 
-The work above is safe because of four guarantees from the front end. The repair step after solving gives every expression a complete type and a solver variable, and supplies the types of kernel functions. Name resolution forbids shadowing, which makes the binder lookup unambiguous and the renamed parameters fresh. The pattern checks have passed, so decision trees are complete. And the cached typed format records the graph exactly, except for the fields filled with defaults on reading.
+Merging runs before monomorphization because monomorphization keeps whatever function structure it is given. The final grouping of each function's parameters is decided later, by [global optimization](/docs/global-optimization), once the whole program is known; its eta-expansion step is what turns a simple nested lambda with no `let` in between, such as `adder a = \b -> a + b`, into a two-argument function.
 
-## References
+## Further reading
 
-Parent: [compiler.md](/docs/compiler). Related: [front-end.md](/docs/front-end), [monomorphization.md](/docs/monomorphization), [global-optimization.md](/docs/global-optimization), [mlir-generation.md](/docs/mlir-generation).
-
-Code:
-
-- `compiler/src/Compiler/LocalOpt/Typed/Module.elm`: `optimizeTyped`, the per-module entry point, declaration kinds and step order, ending in `withComputedVarSupers` (`varSupers`).
-- `compiler/src/Compiler/LocalOpt/Typed/Expression.elm`: expression lowering, the `Can.Binop` rewrites and `applyOneMore`, `optimizePotentialTailCall` (`TailDef`), `findVarLocalTvar`.
-- `compiler/src/Compiler/LocalOpt/Typed/NormalizeLambdaBoundaries.elm`: boundary merging and the `_hl_` renaming.
-- `compiler/src/Compiler/LocalOpt/Typed/Case.elm`, `DecisionTree.elm`: pattern compilation, `Inline` and `Jump` branches, `ContainerHint`.
-- `compiler/src/Compiler/LocalOpt/Typed/Names.elm`: the tracker that collects dependencies and fields.
-- `compiler/src/Compiler/LocalOpt/Typed/Port.elm`: port and flags codecs.
-- `compiler/src/Compiler/AST/TypedOptimized.elm`: the typed optimized form (`TOpt`), `Meta`, `LocalGraph`.
-- `compiler/src/Compiler/LocalOpt/Erased/`: the untyped copy, used by `Compiler.Compile.compile`.
-
-Documents:
-
-
-Invariants (`design_docs/invariants.csv`):
-
-- TOPT_001, TOPT_005: a type on every node, full function types on lambdas. TOPT_002: complete decision trees. TOPT_003: annotations kept in the graph. TOPT_004: type preservation, documented and not checked. TOPT_006: ground wrapper types on unboxing paths. TOPT_002 and TOPT_003 name `Compiler.Optimize.Typed.*`, which is `Compiler.LocalOpt.Typed.*` in the code.
-- SNAP_TVAR_001: polymorphic metadata keeps its solver variable.
-- PORT_007: port and flags codecs.
-- ECOT_001 to ECOT_003: the cached typed format.
-- GOPT_016: global optimization owns staging.
+- [Monomorphization](/docs/monomorphization) — the next phase, which specializes the rewritten graph.
+- [Global optimization](/docs/global-optimization) — where staging and call kinds are finally decided.
+- [MLIR generation](/docs/mlir-generation) — how decision trees and loops become eco-dialect operations.
+- The full design document: [Local optimization theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/compiler/local-optimization.md)
+- Source: [`compiler/src/Compiler/LocalOpt`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/LocalOpt)
