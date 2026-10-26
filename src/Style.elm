@@ -1323,6 +1323,9 @@ roadmapStyles =
         , Css.property "color" colors.heading
         , Css.property "line-height" "1.6"
         ]
+    , Css.Global.selector ".eco-roadmap-features + .eco-roadmap-desc"
+        [ marginTop 5
+        ]
     , Css.Global.class "eco-roadmap-feature"
         [ Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
