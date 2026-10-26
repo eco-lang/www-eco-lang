@@ -80,14 +80,14 @@ head app =
                     }
 
                 Nothing ->
-                    { url = [ "media", "logo.svg" ] |> UrlPath.join |> Pages.Url.fromPath
+                    { url = [ "images", "site-image.png" ] |> UrlPath.join |> Pages.Url.fromPath
                     , alt = Settings.title
-                    , dimensions = Just { width = 700, height = 351 }
-                    , mimeType = Just (MimeType.Image (MimeType.OtherImage "svg+xml"))
+                    , dimensions = Just { width = 810, height = 523 }
+                    , mimeType = Just (MimeType.Image MimeType.Png)
                     }
     in
     Seo.summaryLarge
-        { canonicalUrlOverride = Just Settings.canonicalUrl
+        { canonicalUrlOverride = Nothing
         , siteName = Settings.title
         , image = image
         , description = Maybe.withDefault Settings.subtitle meta.description

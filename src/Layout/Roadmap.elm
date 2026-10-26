@@ -1,8 +1,9 @@
-module Layout.Roadmap exposing (viewRoadmapPage)
+module Layout.Roadmap exposing (menuContents, viewRoadmapPage)
 
 import Content.Roadmap exposing (MilestoneGroup, MilestoneStatus(..))
 import Html exposing (Html)
 import Html.Attributes as Attrs
+import Layout.Site
 import Layout.Markdown exposing (docsSyntaxHighlight)
 import Markdown.Block as Block
 import Markdown.Renderer exposing (defaultHtmlRenderer)
@@ -16,12 +17,50 @@ viewRoadmapPage :
     -> List MilestoneGroup
     -> List (Html msg)
 viewRoadmapPage meta milestones =
-    [ Html.div [ Attrs.class "flex flex-1 relative" ]
+    [ Html.div [ Attrs.class "eco-roadmap-body" ]
         [ viewSidebar milestones
         , Html.div [ Attrs.class "eco-roadmap-timeline" ] []
         , viewContent meta milestones
         ]
     ]
+
+
+
+-- MENU
+
+
+{-| The milestones for the phone menu, each linking to its place on the page.
+-}
+menuContents : List MilestoneGroup -> List Layout.Site.MenuSection
+menuContents milestones =
+    [ { title = "Releases"
+      , links =
+            List.map
+                (\milestone ->
+                    { label = milestoneLabel milestone
+                    , href = "#" ++ milestoneId milestone
+                    , current = False
+                    }
+                )
+                milestones
+      }
+    ]
+
+
+milestoneLabel : MilestoneGroup -> String
+milestoneLabel milestone =
+    if String.isEmpty milestone.codename then
+        milestone.version
+
+    else
+        milestone.version ++ " \u{2014} " ++ milestone.codename
+
+
+{-| The id of a milestone's place on the page, such as `v0-2-0`.
+-}
+milestoneId : MilestoneGroup -> String
+milestoneId milestone =
+    String.replace "." "-" milestone.version
 
 
 
@@ -31,14 +70,14 @@ viewRoadmapPage meta milestones =
 viewSidebar : List MilestoneGroup -> Html msg
 viewSidebar milestones =
     Html.aside
-        [ Attrs.class "hidden md:flex flex-col flex-shrink-0 eco-sidebar"
+        [ Attrs.class "eco-sidebar"
         ]
         [ Html.span
-            [ Attrs.class "text-xs font-bold tracking-widest eco-sidebar-title"
+            [ Attrs.class "eco-sidebar-title"
             ]
             [ Html.text "ROADMAP" ]
         , Html.div [ Attrs.class "eco-sidebar-spacer" ] []
-        , Html.div [ Attrs.class "flex flex-col gap-1" ]
+        , Html.div [ Attrs.class "eco-roadmap-nav" ]
             (List.map viewNavItem milestones)
         ]
 
@@ -58,14 +97,10 @@ viewNavItem milestone =
                     ( "eco-roadmap-dot-future", "eco-roadmap-nav-future" )
 
         label =
-            if String.isEmpty milestone.codename then
-                milestone.version
-
-            else
-                milestone.version ++ " \u{2014} " ++ milestone.codename
+            milestoneLabel milestone
     in
     Html.div
-        [ Attrs.class ("flex items-center gap-2 " ++ labelClass)
+        [ Attrs.class labelClass
         ]
         [ Html.span [ Attrs.class dotClass ] []
         , Html.text label
@@ -79,18 +114,18 @@ viewNavItem milestone =
 viewContent : { title : String, description : String } -> List MilestoneGroup -> Html msg
 viewContent meta milestones =
     Html.div
-        [ Attrs.class "flex-1 eco-roadmap-content"
+        [ Attrs.class "eco-roadmap-content"
         ]
         (viewTitleArea meta
             :: List.concatMap viewMilestone milestones
-            ++ [ Html.div [ Attrs.class "h-16" ] [] ]
+            ++ [ Html.div [ Attrs.class "eco-roadmap-end-spacer" ] [] ]
         )
 
 
 viewTitleArea : { title : String, description : String } -> Html msg
 viewTitleArea meta =
     Html.div
-        [ Attrs.class "flex flex-col gap-2 pl-16 mb-12"
+        [ Attrs.class "eco-roadmap-header"
         ]
         [ Html.h1
             [ Attrs.class "eco-roadmap-title"
@@ -101,7 +136,7 @@ viewTitleArea meta =
             ]
             [ Html.text meta.description ]
         , Html.div
-            [ Attrs.class "eco-hero-accent-bar mt-2"
+            [ Attrs.class "eco-roadmap-accent-bar"
             ]
             []
         ]
@@ -109,18 +144,19 @@ viewTitleArea meta =
 
 viewMilestone : MilestoneGroup -> List (Html msg)
 viewMilestone milestone =
-    [ Html.div [ Attrs.class "h-12" ] []
+    [ Html.div [ Attrs.class "eco-roadmap-gap" ] []
     , Html.div
-        [ Attrs.class "eco-roadmap-milestone relative"
+        [ Attrs.class "eco-roadmap-milestone"
+        , Attrs.id (milestoneId milestone)
         ]
         [ viewStation milestone.status
         , Html.div
             [ Attrs.class
                 (if milestone.status == Planned then
-                    "flex flex-col gap-3 eco-roadmap-card-future"
+                    "eco-roadmap-card eco-roadmap-card-future"
 
                  else
-                    "flex flex-col gap-3"
+                    "eco-roadmap-card"
                 )
             ]
             [ viewMilestoneHeader milestone
@@ -184,7 +220,7 @@ viewMilestoneHeader milestone =
                         [ Html.text "Planned" ]
     in
     Html.div
-        [ Attrs.class "flex items-center gap-3"
+        [ Attrs.class "eco-roadmap-milestone-header"
         ]
         [ Html.span [ Attrs.class badgeClass ]
             [ Html.text milestone.version ]
@@ -210,20 +246,20 @@ roadmapRenderer =
         , unorderedList =
             \items ->
                 Html.div
-                    [ Attrs.class "flex flex-col gap-1.5 pt-2"
+                    [ Attrs.class "eco-roadmap-features"
                     ]
                     (List.map
                         (\item ->
                             case item of
                                 Block.ListItem Block.CompletedTask children ->
                                     Html.div
-                                        [ Attrs.class "flex items-baseline gap-2 eco-roadmap-feature"
+                                        [ Attrs.class "eco-roadmap-feature-task"
                                         ]
                                         (Html.text "\u{2022}  " :: children ++ [ checkIcon ])
 
                                 Block.ListItem Block.IncompleteTask children ->
                                     Html.div
-                                        [ Attrs.class "flex items-baseline gap-2 eco-roadmap-feature"
+                                        [ Attrs.class "eco-roadmap-feature-task"
                                         ]
                                         (Html.text "\u{2022}  " :: children ++ [ Html.span [ Attrs.style "color" Style.colors.currentBlue, Attrs.style "font-weight" "700" ] [ Html.text " \u{2026}" ] ])
 

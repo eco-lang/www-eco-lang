@@ -8,7 +8,6 @@ export default {
   adapter,
   headTagsTemplate(context) {
     return `
-<link rel="stylesheet" href="/style.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
@@ -16,8 +15,7 @@ export default {
 <link rel="mask-icon" href="/media/logo.svg" color="#4CAF50">
 <link rel="apple-touch-icon" href="/media/logo-180.png">
 <meta name="generator" content="elm-pages v${context.cliVersion}" />
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a" />
+<meta name="theme-color" content="#FDFCFA" />
 `;
 //  <link rel="manifest" href="manifest.json">
 

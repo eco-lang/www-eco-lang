@@ -11,7 +11,6 @@ import MimeType
 import Layout.Site
 import Pages.Url
 import Settings
-import Style
 import Svg
 import Svg.Attributes as SvgAttrs
 import UrlPath
@@ -27,7 +26,7 @@ seoHeaders author =
                     ([ "images", "site-image.png" ] |> UrlPath.join |> Pages.Url.fromPath)
     in
     Seo.summary
-        { canonicalUrlOverride = Just Settings.canonicalUrl
+        { canonicalUrlOverride = Nothing
         , siteName = Settings.title
         , image =
             { url = imageUrl
@@ -45,10 +44,9 @@ seoHeaders author =
 view : Author -> List (Html msg)
 view author =
     [ Html.div
-        [ Attrs.class "min-h-screen flex flex-col eco-page"
+        [ Attrs.class "eco-page"
         ]
-        [ Style.styleNode
-        , Layout.Site.viewHeader (Just Layout.Site.About)
+        [ Layout.Site.viewHeader { active = Just Layout.Site.About, path = "/about", contents = [] }
         , Html.div
             [ Attrs.class "eco-about-container"
             ]
@@ -61,7 +59,7 @@ view author =
                 ]
                 []
             , Html.div
-                [ Attrs.class "eco-about-layout flex-col md:flex-row"
+                [ Attrs.class "eco-about-layout"
                 ]
                 [ viewProfileCard author
                 , viewBioContent author
@@ -76,7 +74,7 @@ view author =
 viewProfileCard : Author -> Html msg
 viewProfileCard author =
     Html.div
-        [ Attrs.class "eco-profile-card self-center md:self-start"
+        [ Attrs.class "eco-profile-card"
         ]
         [ Html.div
             [ Attrs.class "eco-avatar"
@@ -134,7 +132,7 @@ viewSocials socials =
                 , Attrs.rel "noopener noreferrer"
                 , Attrs.class "eco-social-link"
                 ]
-                [ Html.span [ Attrs.class "sr-only" ] [ Html.text name ]
+                [ Html.span [ Attrs.class "eco-sr-only" ] [ Html.text name ]
                 , socialIcon name
                 ]
     in

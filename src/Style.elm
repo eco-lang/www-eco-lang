@@ -1,9 +1,47 @@
-module Style exposing (Colors, colors, styleNode)
+module Style exposing (Colors, colors, styleNode, highlightTheme)
 
 import Css
 import Css.Global
 import Html
 import Html.Styled
+import Style.Layout
+    exposing
+        ( alignItems
+        , alignSelf
+        , block
+        , column
+        , fullHeight
+        , fullWidth
+        , gap
+        , grow
+        , height
+        , hidden
+        , hoverUnderline
+        , marginBottom
+        , marginTop
+        , maxWidth
+        , minScreenHeight
+        , mobile
+        , noShrink
+        , noUnderline
+        , padLeft
+        , padTop
+        , padX
+        , padY
+        , relative
+        , reset
+        , rounded
+        , roundedLg
+        , row
+        , spaceBetween
+        , srOnly
+        , text4xl
+        , textLg
+        , textSm
+        , textXs
+        , weight
+        )
+import SyntaxHighlight
 
 
 
@@ -161,21 +199,37 @@ fontCode =
 -- STYLE NODE
 
 
+{-| The site's stylesheet, as a `<style>` element. `Shared.view` renders it once, at the top of every page.
+
+It is a constant, so Elm builds it once and the virtual DOM skips it on every render because it is the same object.
+Keep it a constant: built from arguments, it would be rebuilt and compared on every render.
+
+-}
 styleNode : Html.Html msg
 styleNode =
     Css.Global.global style
         |> Html.Styled.toUnstyled
 
 
+{-| The colours for syntax-highlighted code blocks, as a `<style>` element. Like `styleNode`, it is a constant that
+`Shared.view` renders once, so every page that shows code gets it.
+-}
+highlightTheme : Html.Html msg
+highlightTheme =
+    SyntaxHighlight.useTheme SyntaxHighlight.oneDark
+
+
 style : List Css.Global.Snippet
 style =
     List.concat
-        [ pageStyles
+        [ reset
+        , pageStyles
         , typographyStyles
         , headerFooterStyles
         , heroStyles
         , sectionStyles
         , codeBlockStyles
+        , highlightStyles
         , buttonStyles
         , sidebarStyles
         , contentAreaStyles
@@ -193,8 +247,14 @@ style =
 pageStyles : List Css.Global.Snippet
 pageStyles =
     [ Css.Global.class "eco-page"
-        [ Css.property "background-color" colors.bg
+        [ minScreenHeight
+        , column
+        , Css.property "background-color" colors.bg
         , Css.property "font-family" fontBody
+        ]
+    , Css.Global.class "eco-page-body"
+        [ row
+        , grow
         ]
     , Css.Global.class "eco-section-white"
         [ Css.property "background-color" colors.bgWhite
@@ -211,6 +271,9 @@ pageStyles =
     , Css.Global.class "eco-divider"
         [ Css.property "height" "1px"
         , Css.property "background-color" colors.border
+        ]
+    , Css.Global.class "eco-sr-only"
+        [ srOnly
         ]
     ]
 
@@ -255,36 +318,197 @@ typographyStyles =
 headerFooterStyles : List Css.Global.Snippet
 headerFooterStyles =
     [ Css.Global.class "eco-header"
-        [ Css.property "background-color" colors.bg
+        [ relative
+        , row
+        , alignItems "center"
+        , spaceBetween
+        , padX 18
+        , padY 4
+        , Css.property "background-color" colors.bg
+        , mobile [ padX 4 ]
+        ]
+    , Css.Global.class "eco-header-brand"
+        [ row
+        , alignItems "center"
+        , gap 3
         ]
     , Css.Global.class "eco-header-logo"
-        [ Css.property "color" colors.accent
+        [ textLg
+        , weight 700
+        , Css.property "color" colors.accent
         , Css.property "font-family" fontHeading
         , Css.property "letter-spacing" "1px"
         ]
     , Css.Global.class "eco-header-badge"
-        [ Css.property "color" colors.accent
+        [ textXs
+        , weight 600
+        , padX 2.5
+        , padY 1
+        , rounded
+        , Css.property "color" colors.accent
         , Css.property "background-color" "rgba(76, 175, 80, 0.1)"
         , Css.property "letter-spacing" "0.5px"
         ]
+    , Css.Global.class "eco-header-nav"
+        [ row
+        , alignItems "center"
+        , gap 7
+        , mobile [ hidden ]
+        ]
+    , Css.Global.class "eco-header-github"
+        [ row
+        , alignItems "center"
+        , gap 2
+        , Css.property "color" colors.heading
+        ]
+    , Css.Global.class "eco-header-github-label"
+        [ textSm
+        , weight 500
+        , Css.property "font-family" fontBody
+        ]
+    , Css.Global.class "eco-menu-wrap"
+        [ hidden
+        , mobile [ block ]
+        ]
+    , Css.Global.class "eco-menu-button"
+        [ row
+        , alignItems "center"
+        , Css.property "justify-content" "center"
+        , Css.property "width" "40px"
+        , Css.property "height" "40px"
+        , Css.property "margin-right" "-8px"
+        , Css.property "cursor" "pointer"
+        , Css.property "list-style" "none"
+        , Css.property "color" colors.text
+        ]
+    , Css.Global.class "eco-menu-icon-close"
+        [ hidden
+        ]
+    , Css.Global.selector ".eco-menu[open] .eco-menu-icon-open"
+        [ hidden
+        ]
+    , Css.Global.selector ".eco-menu[open] .eco-menu-icon-close"
+        [ block
+        ]
+    , Css.Global.selector ".eco-menu-button::-webkit-details-marker"
+        [ hidden
+        ]
+    , Css.Global.class "eco-menu-panel"
+        [ Css.property "position" "absolute"
+        , Css.property "top" "100%"
+        , Css.property "left" "0"
+        , Css.property "right" "0"
+        , Css.property "z-index" "10"
+        , Css.property "max-height" "calc(100vh - 72px)"
+        , Css.property "overflow-y" "auto"
+        , Css.property "padding" "4px 16px 16px"
+        , Css.property "background-color" colors.bgWhite
+        , Css.property "border-top" ("1px solid " ++ colors.border)
+        , Css.property "border-bottom" ("1px solid " ++ colors.border)
+        , Css.property "box-shadow" "0 12px 24px rgba(0, 0, 0, 0.08)"
+        ]
+    , Css.Global.class "eco-menu-site"
+        [ column
+        ]
+    , Css.Global.class "eco-menu-site-link"
+        [ block
+        , Css.property "padding" "10px 0"
+        , Css.property "font-size" "16px"
+        , Css.property "font-family" fontBody
+        , Css.property "color" colors.heading
+        , weight 500
+        ]
+    , Css.Global.class "eco-menu-site-link-active"
+        [ block
+        , Css.property "padding" "10px 0"
+        , Css.property "font-size" "16px"
+        , Css.property "font-family" fontBody
+        , Css.property "color" colors.text
+        , weight 600
+        ]
+    , Css.Global.class "eco-menu-section"
+        [ column
+        , Css.property "margin-top" "8px"
+        , Css.property "padding-top" "8px"
+        , Css.property "border-top" ("1px solid " ++ colors.border)
+        ]
+    , Css.Global.class "eco-menu-section-title"
+        [ Css.property "padding" "10px 0 6px"
+        , Css.property "font-size" "13px"
+        , weight 600
+        , Css.property "font-family" fontBody
+        , Css.property "color" colors.text
+        ]
+    , Css.Global.class "eco-menu-link"
+        [ block
+        , Css.property "padding" "8px 12px"
+        , Css.property "font-size" "14px"
+        , Css.property "font-family" fontBody
+        , Css.property "color" colors.heading
+        ]
+    , Css.Global.class "eco-menu-link-current"
+        [ block
+        , Css.property "padding" "8px 12px"
+        , Css.property "font-size" "14px"
+        , weight 500
+        , Css.property "font-family" fontBody
+        , Css.property "color" colors.accent
+        , Css.property "border-left" ("2px solid " ++ colors.accent)
+        ]
     , Css.Global.class "eco-nav-link"
-        [ Css.property "font-family" fontBody
+        [ textSm
+        , weight 500
+        , Css.property "font-family" fontBody
         , Css.property "color" colors.heading
         ]
     , Css.Global.class "eco-nav-link-active"
-        [ Css.property "font-family" fontBody
+        [ textSm
+        , Css.property "font-family" fontBody
         , Css.property "color" colors.text
         , Css.property "font-weight" "600"
         ]
     , Css.Global.class "eco-footer"
-        [ Css.property "max-width" "1200px"
+        [ row
+        , alignItems "center"
+        , spaceBetween
+        , padX 18
+        , padY 7
+        , gap 4
+        , Css.property "max-width" "1200px"
         , Css.property "margin" "0 auto"
         , Css.property "width" "100%"
+        , mobile
+            [ Css.property "flex-direction" "column"
+            , padX 4
+            ]
+        ]
+    , Css.Global.class "eco-footer-brand"
+        [ row
+        , alignItems "center"
+        , gap 2
         ]
     , Css.Global.class "eco-footer-logo"
-        [ Css.property "color" colors.accent
+        [ textSm
+        , weight 700
+        , Css.property "color" colors.accent
         , Css.property "font-family" fontHeading
         , Css.property "letter-spacing" "0.5px"
+        ]
+    , Css.Global.class "eco-footer-note"
+        [ textSm
+        , Css.property "color" colors.muted
+        , mobile [ Css.property "text-align" "center" ]
+        ]
+    , Css.Global.class "eco-footer-links"
+        [ row
+        , alignItems "center"
+        , gap 6
+        , mobile [ Css.property "flex-wrap" "wrap", Css.property "justify-content" "center", Css.property "gap" "8px 20px" ]
+        ]
+    , Css.Global.class "eco-footer-link"
+        [ textSm
+        , hoverUnderline
+        , Css.property "color" colors.muted
         ]
     ]
 
@@ -381,6 +605,48 @@ codeBlockStyles =
 
 
 
+-- SYNTAX HIGHLIGHTING
+
+
+{-| Layout for highlighted code blocks, whose colours come from `highlightTheme`, and the colours the theme has no
+class for, used by the MLIR and C++ highlighters in `src/Code/`.
+-}
+highlightStyles : List Css.Global.Snippet
+highlightStyles =
+    [ -- A <pre> does not widen its parent: a long line scrolls inside the block instead of widening the page.
+      Css.Global.selector "pre"
+        [ Css.property "contain" "inline-size"
+        ]
+    , Css.Global.selector "pre.elmsh"
+        [ Css.property "text-align" "left"
+        , Css.property "margin" "0"
+        , Css.property "padding" "10px"
+        , Css.property "overflow" "auto"
+        ]
+    , Css.Global.selector "code.elmsh"
+        [ Css.property "padding" "0"
+        ]
+    , Css.Global.selector ".elmsh-line:before"
+        [ Css.property "content" "attr(data-elmsh-lc)"
+        , Css.property "text-align" "right"
+        , Css.property "opacity" "0.3"
+        , Css.property "width" "40px"
+        , Css.property "padding" "0 20px 0 0"
+        , Css.property "display" "inline-block"
+        ]
+    , Css.Global.class "eco-hl-type"
+        [ Css.property "color" "#e6c07b"
+        ]
+    , Css.Global.class "eco-hl-variable"
+        [ Css.property "color" "#e06c75"
+        ]
+    , Css.Global.class "eco-hl-label"
+        [ Css.property "color" "#56b6c2"
+        ]
+    ]
+
+
+
 -- BUTTONS
 
 
@@ -403,13 +669,18 @@ buttonStyles =
 sidebarStyles : List Css.Global.Snippet
 sidebarStyles =
     [ Css.Global.class "eco-sidebar"
-        [ Css.property "width" "280px"
+        [ column
+        , noShrink
+        , Css.property "width" "280px"
         , Css.property "background-color" colors.bgWhite
         , Css.property "border-right" ("1px solid " ++ colors.border)
         , Css.property "padding" "32px 0 32px 72px"
+        , mobile [ hidden ]
         ]
     , Css.Global.class "eco-sidebar-title"
-        [ Css.property "color" colors.muted
+        [ textXs
+        , weight 700
+        , Css.property "color" colors.muted
         , Css.property "font-family" fontHeading
         , Css.property "letter-spacing" "1.5px"
         ]
@@ -420,25 +691,32 @@ sidebarStyles =
         [ Css.property "padding" "10px 0"
         ]
     , Css.Global.class "eco-toc-section-name"
-        [ Css.property "color" colors.text
+        [ textSm
+        , weight 600
+        , Css.property "color" colors.text
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
         ]
     , Css.Global.class "eco-toc-items"
-        [ Css.property "padding-left" "12px"
+        [ column
+        , Css.property "padding-left" "12px"
         ]
     , Css.Global.class "eco-toc-gap"
         [ Css.property "height" "8px"
         ]
     , Css.Global.class "eco-toc-item"
-        [ Css.property "padding" "7px 12px"
+        [ block
+        , textSm
+        , Css.property "padding" "7px 12px"
         , Css.property "font-size" "13px"
         , Css.property "font-family" fontBody
         , Css.property "text-decoration" "none"
         , Css.property "color" colors.heading
         ]
     , Css.Global.class "eco-toc-item-active"
-        [ Css.property "padding" "7px 12px"
+        [ block
+        , textSm
+        , Css.property "padding" "7px 12px"
         , Css.property "font-size" "13px"
         , Css.property "font-family" fontBody
         , Css.property "text-decoration" "none"
@@ -456,34 +734,60 @@ sidebarStyles =
 contentAreaStyles : List Css.Global.Snippet
 contentAreaStyles =
     [ Css.Global.class "eco-content-area"
-        [ Css.property "background-color" colors.bg
+        [ Css.property "min-width" "0"
+        , grow
+        , Css.property "background-color" colors.bg
         , Css.property "padding" "48px 80px 64px 64px"
+        , mobile [ Css.property "padding" "24px 16px 48px" ]
         ]
     , Css.Global.class "eco-breadcrumb"
-        [ Css.property "margin-bottom" "32px"
+        [ row
+        , alignItems "center"
+        , gap 2
+        , Css.property "margin-bottom" "32px"
+        , mobile [ Css.property "flex-wrap" "wrap", Css.property "margin-bottom" "20px" ]
         ]
     , Css.Global.class "eco-breadcrumb-text"
+        [ textSm
+        , Css.property "color" colors.muted
+        , Css.property "font-size" "13px"
+        ]
+    , Css.Global.class "eco-breadcrumb-sep"
         [ Css.property "color" colors.muted
         , Css.property "font-size" "13px"
         ]
     , Css.Global.class "eco-breadcrumb-active"
-        [ Css.property "color" colors.text
+        [ textSm
+        , weight 500
+        , Css.property "color" colors.text
         , Css.property "font-size" "13px"
         ]
     , Css.Global.class "eco-page-header"
-        [ Css.property "margin-bottom" "32px"
+        [ column
+        , gap 3
+        , Css.property "margin-bottom" "32px"
+        , mobile [ Css.property "margin-bottom" "24px" ]
         ]
     , Css.Global.class "eco-page-title"
-        [ Css.property "color" colors.heading
+        [ text4xl
+        , weight 600
+        , Css.property "color" colors.heading
         , Css.property "font-family" fontHeading
         , Css.property "letter-spacing" "-0.5px"
         , Css.property "font-size" "36px"
+        , mobile [ Css.property "font-size" "28px", Css.property "line-height" "1.2" ]
         ]
     , Css.Global.class "eco-page-desc"
         [ Css.property "color" colors.heading
         , Css.property "font-family" fontBody
         , Css.property "font-size" "17px"
         , Css.property "line-height" "1.7"
+        , mobile [ Css.property "font-size" "16px", Css.property "line-height" "1.6" ]
+        ]
+    , Css.Global.class "eco-article-banner"
+        [ fullWidth
+        , roundedLg
+        , marginTop 4
         ]
     , Css.Global.class "eco-article-body"
         [ Css.property "color" colors.text
@@ -493,12 +797,38 @@ contentAreaStyles =
         [ Css.property "height" "1px"
         , Css.property "background-color" colors.border
         , Css.property "margin" "32px 0"
+        , mobile [ Css.property "margin" "24px 0" ]
+        ]
+    , Css.Global.class "eco-page-nav"
+        [ row
+        , alignItems "center"
+        , spaceBetween
+        , mobile [ Css.property "flex-direction" "column", alignItems "stretch", gap 6 ]
+        ]
+    , Css.Global.class "eco-page-nav-prev"
+        [ column
+        , gap 1
+        , noUnderline
+        ]
+    , Css.Global.class "eco-page-nav-next"
+        [ column
+        , alignItems "flex-end"
+        , gap 1
+        , noUnderline
+        ]
+    , Css.Global.class "eco-page-nav-link-row"
+        [ row
+        , alignItems "center"
+        , gap 1.5
         ]
     , Css.Global.class "eco-page-nav-label"
-        [ Css.property "color" colors.muted
+        [ textXs
+        , Css.property "color" colors.muted
         ]
     , Css.Global.class "eco-page-nav-title"
-        [ Css.property "color" colors.accent
+        [ textSm
+        , weight 500
+        , Css.property "color" colors.accent
         , Css.property "font-size" "15px"
         ]
     ]
@@ -515,6 +845,7 @@ docStyles =
         , Css.property "padding" "24px"
         , Css.property "margin" "18px 0"
         , Css.property "overflow-x" "auto"
+        , mobile [ Css.property "padding" "16px 8px", Css.property "margin" "18px -16px" ]
         ]
     , Css.Global.class "eco-doc-code-fallback"
         [ Css.property "margin" "0"
@@ -561,6 +892,7 @@ docStyles =
         , Css.property "line-height" "30px"
         , Css.property "color" colors.text
         , Css.property "margin" "0 0 18px 0"
+        , mobile [ Css.property "font-size" "17px", Css.property "line-height" "28px" ]
         ]
     , Css.Global.class "eco-doc-figure"
         [ Css.property "display" "block"
@@ -573,6 +905,7 @@ docStyles =
         , Css.property "background-color" "rgba(76, 175, 80, 0.04)"
         , Css.property "padding" "18px 24px 6px 24px"
         , Css.property "margin" "24px 0 18px 0"
+        , mobile [ Css.property "padding" "14px 16px 4px 16px" ]
         ]
     , Css.Global.class "eco-doc-code-inline"
         [ Css.property "font-family" fontCode
@@ -581,6 +914,7 @@ docStyles =
         , Css.property "padding" "2px 6px"
         , Css.property "border-radius" "3px"
         , Css.property "color" colors.text
+        , Css.property "overflow-wrap" "anywhere"
         ]
     , Css.Global.class "eco-doc-ul"
         [ Css.property "list-style" "none"
@@ -621,11 +955,15 @@ docStyles =
         , Css.property "color" colors.text
         , Css.property "margin-bottom" "6px"
         ]
+    , Css.Global.class "eco-doc-table-wrap"
+        [ Css.property "margin" "18px 0"
+        , Css.property "overflow-x" "auto"
+        , Css.property "contain" "inline-size"
+        ]
     , Css.Global.class "eco-doc-table"
         [ Css.property "width" "100%"
         , Css.property "border-collapse" "collapse"
         , Css.property "border" ("1px solid " ++ colors.border)
-        , Css.property "margin" "18px 0"
         ]
     , Css.Global.class "eco-doc-thead"
         [ Css.property "background-color" colors.tableBg
@@ -688,18 +1026,22 @@ aboutStyles =
         , Css.property "margin-bottom" "48px"
         ]
     , Css.Global.class "eco-about-layout"
-        [ Css.property "display" "flex"
+        [ Css.property "flex-direction" "row"
+        , Css.property "display" "flex"
         , Css.property "gap" "56px"
         , Css.property "align-items" "flex-start"
+        , mobile [ Css.property "flex-direction" "column" ]
         ]
     , Css.Global.class "eco-profile-card"
-        [ Css.property "display" "flex"
+        [ alignSelf "flex-start"
+        , Css.property "display" "flex"
         , Css.property "flex-direction" "column"
         , Css.property "align-items" "center"
         , Css.property "gap" "4px"
         , Css.property "min-width" "220px"
         , Css.property "width" "220px"
         , Css.property "padding-top" "8px"
+        , mobile [ alignSelf "center" ]
         ]
     , Css.Global.class "eco-avatar"
         [ Css.property "width" "140px"
@@ -760,7 +1102,9 @@ roadmapStyles : List Css.Global.Snippet
 roadmapStyles =
     [ -- Content area
       Css.Global.class "eco-roadmap-content"
-        [ Css.property "padding" "48px 64px 64px 0"
+        [ grow
+        , Css.property "padding" "48px 64px 64px 0"
+        , mobile [ Css.property "padding" "32px 16px 48px 24px", Css.property "min-width" "0" ]
         ]
     , Css.Global.class "eco-roadmap-title"
         [ Css.property "font-family" fontHeading
@@ -768,6 +1112,7 @@ roadmapStyles =
         , Css.property "font-weight" "700"
         , Css.property "color" colors.text
         , Css.property "letter-spacing" "-1px"
+        , mobile [ Css.property "font-size" "30px" ]
         ]
     , Css.Global.class "eco-roadmap-subtitle"
         [ Css.property "font-family" fontBody
@@ -775,17 +1120,67 @@ roadmapStyles =
         , Css.property "color" colors.heading
         , Css.property "line-height" "1.6"
         ]
+    , Css.Global.class "eco-roadmap-body"
+        [ row
+        , grow
+        , relative
+        ]
+    , Css.Global.class "eco-roadmap-nav"
+        [ column
+        , gap 1
+        ]
+    , Css.Global.class "eco-roadmap-header"
+        [ column
+        , gap 2
+        , padLeft 16
+        , marginBottom 12
+        , mobile [ padLeft 6, marginBottom 6 ]
+        ]
+    , Css.Global.class "eco-roadmap-accent-bar"
+        [ marginTop 2
+        , Css.property "width" "64px"
+        , Css.property "height" "3px"
+        , Css.property "background-color" colors.accent
+        ]
+    , Css.Global.class "eco-roadmap-gap"
+        [ height 12
+        , mobile [ height 8 ]
+        ]
+    , Css.Global.class "eco-roadmap-end-spacer"
+        [ height 16
+        ]
+    , Css.Global.class "eco-roadmap-card"
+        [ column
+        , gap 3
+        ]
+    , Css.Global.class "eco-roadmap-milestone-header"
+        [ row
+        , alignItems "center"
+        , gap 3
+        , mobile [ Css.property "flex-wrap" "wrap", gap 2 ]
+        ]
+    , Css.Global.class "eco-roadmap-features"
+        [ column
+        , gap 1.5
+        , padTop 2
+        ]
 
     -- Sidebar nav items
     , Css.Global.class "eco-roadmap-nav-released"
-        [ Css.property "padding" "7px 12px"
+        [ row
+        , alignItems "center"
+        , gap 2
+        , Css.property "padding" "7px 12px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
         , Css.property "color" colors.accent
         , Css.property "font-weight" "500"
         ]
     , Css.Global.class "eco-roadmap-nav-current"
-        [ Css.property "padding" "7px 12px"
+        [ row
+        , alignItems "center"
+        , gap 2
+        , Css.property "padding" "7px 12px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
         , Css.property "color" colors.text
@@ -794,13 +1189,19 @@ roadmapStyles =
         , Css.property "border-left" "3px solid #4A9EFF"
         ]
     , Css.Global.class "eco-roadmap-nav-future"
-        [ Css.property "padding" "7px 12px"
+        [ row
+        , alignItems "center"
+        , gap 2
+        , Css.property "padding" "7px 12px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
         , Css.property "color" colors.muted
         ]
     , Css.Global.class "eco-roadmap-nav-default"
-        [ Css.property "padding" "7px 12px"
+        [ row
+        , alignItems "center"
+        , gap 2
+        , Css.property "padding" "7px 12px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
         , Css.property "color" colors.heading
@@ -927,6 +1328,14 @@ roadmapStyles =
         , Css.property "font-size" "14px"
         , Css.property "color" colors.heading
         ]
+    , Css.Global.class "eco-roadmap-feature-task"
+        [ row
+        , alignItems "baseline"
+        , gap 2
+        , Css.property "font-family" fontBody
+        , Css.property "font-size" "14px"
+        , Css.property "color" colors.heading
+        ]
     , Css.Global.class "eco-roadmap-card-future"
         [ Css.property "opacity" "0.6"
         ]
@@ -939,6 +1348,7 @@ roadmapStyles =
         , Css.property "bottom" "0"
         , Css.property "left" "279px"
         , Css.property "background-color" colors.border
+        , mobile [ Css.property "left" "23px" ]
         ]
 
     -- Milestone layout
@@ -976,6 +1386,7 @@ homepageStyles =
         , Css.property "overflow" "hidden"
         , Css.property "height" "440px"
         , Css.property "background" "radial-gradient(ellipse at 100% 100%, rgba(102,187,106,0.25) 0%, transparent 50%), radial-gradient(ellipse at 70% 100%, rgba(165,214,167,0.2) 0%, transparent 45%), radial-gradient(ellipse at 100% 50%, rgba(200,230,201,0.18) 0%, transparent 40%), radial-gradient(ellipse at 40% 80%, rgba(232,245,233,0.2) 0%, transparent 40%), #FFFFFF"
+        , mobile [ Css.property "height" "auto" ]
         ]
     , Css.Global.class "eco-home-hero-lattice"
         [ Css.property "position" "absolute"
@@ -984,8 +1395,29 @@ homepageStyles =
         , Css.property "z-index" "0"
         ]
     , Css.Global.class "eco-home-hero-content"
-        [ Css.property "position" "relative"
+        [ row
+        , alignItems "center"
+        , gap 16
+        , padX 20
+        , fullHeight
+        , Css.property "position" "relative"
         , Css.property "z-index" "1"
+        , mobile [ Css.property "flex-direction" "column", alignItems "stretch", gap 10, padX 4, padY 10 ]
+        ]
+    , Css.Global.class "eco-home-hero-text"
+        [ column
+        , gap 6
+        , maxWidth "520px"
+        , mobile [ Css.property "max-width" "none" ]
+        ]
+    , Css.Global.class "eco-home-hero-actions"
+        [ row
+        , alignItems "center"
+        , gap 4
+        , mobile [ Css.property "flex-wrap" "wrap" ]
+        ]
+    , Css.Global.class "eco-home-hero-editor"
+        [ grow
         ]
     , Css.Global.class "eco-home-accent-bar"
         [ Css.property "width" "64px"
@@ -1017,6 +1449,7 @@ homepageStyles =
         , Css.property "color" colors.text
         , Css.property "letter-spacing" "-2px"
         , Css.property "line-height" "1.2"
+        , mobile [ Css.property "font-size" "34px", Css.property "letter-spacing" "-1px" ]
         ]
     , Css.Global.class "eco-home-subtitle"
         [ Css.property "font-family" fontBody
@@ -1034,7 +1467,10 @@ homepageStyles =
         , Css.property "overflow" "hidden"
         ]
     , Css.Global.class "eco-home-editor-bar"
-        [ Css.property "height" "36px"
+        [ row
+        , alignItems "center"
+        , gap 2
+        , Css.property "height" "36px"
         , Css.property "padding" "0 14px"
         , Css.property "background-color" colors.bgCode
         ]
@@ -1062,7 +1498,10 @@ homepageStyles =
         , Css.property "color" colors.editorFilename
         ]
     , Css.Global.class "eco-home-editor-body"
-        [ Css.property "padding" "16px 20px"
+        [ column
+        , gap 0.5
+        , Css.property "padding" "16px 20px"
+        , Css.property "overflow-x" "auto"
         ]
     , Css.Global.class "eco-home-code-line"
         [ Css.property "font-family" fontCode
@@ -1112,12 +1551,40 @@ homepageStyles =
         , Css.property "line-height" "1.7"
         , Css.property "text-align" "center"
         ]
+    , Css.Global.class "eco-home-steps-section"
+        [ column
+        , alignItems "center"
+        , gap 12
+        , padY 16
+        , padX 30
+        , mobile [ padX 4, padY 12, gap 8 ]
+        ]
+    , Css.Global.class "eco-home-steps"
+        [ row
+        , gap 8
+        , fullWidth
+        , mobile [ Css.property "flex-direction" "column", gap 10 ]
+        ]
+    , Css.Global.class "eco-home-step"
+        [ column
+        , alignItems "center"
+        , gap 4
+        , grow
+        , padX 4
+        , mobile [ padX 0 ]
+        ]
 
     -- Comparison section
     , Css.Global.class "eco-home-comp-section"
-        [ Css.property "background-color" colors.bgWhite
+        [ column
+        , alignItems "center"
+        , gap 10
+        , padY 16
+        , padX 40
+        , Css.property "background-color" colors.bgWhite
         , Css.property "border-top" ("1px solid " ++ colors.border)
         , Css.property "border-bottom" ("1px solid " ++ colors.border)
+        , mobile [ padX 4, padY 12, gap 8 ]
         ]
     , Css.Global.class "eco-home-comp-title"
         [ Css.property "font-family" fontHeading
@@ -1125,59 +1592,85 @@ homepageStyles =
         , Css.property "font-weight" "600"
         , Css.property "color" colors.text
         , Css.property "letter-spacing" "-0.5px"
+        , mobile [ Css.property "font-size" "26px", Css.property "text-align" "center" ]
         ]
     , Css.Global.class "eco-home-table"
-        [ Css.property "border-radius" "8px"
+        [ fullWidth
+        , Css.property "border-radius" "8px"
         , Css.property "border" ("1px solid " ++ colors.border)
         , Css.property "overflow" "hidden"
         ]
     , Css.Global.class "eco-home-table-header"
-        [ Css.property "background-color" colors.tableHeaderBg
+        [ row
+        , Css.property "background-color" colors.tableHeaderBg
         , Css.property "border-bottom" ("1px solid " ++ colors.border)
+        , mobile [ hidden ]
         ]
     , Css.Global.class "eco-home-table-th"
-        [ Css.property "padding" "14px 20px"
+        [ grow
+        , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
         , Css.property "font-weight" "600"
         , Css.property "color" colors.muted
         ]
     , Css.Global.class "eco-home-table-th-eco"
-        [ Css.property "padding" "14px 20px"
+        [ grow
+        , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
         , Css.property "font-weight" "600"
         , Css.property "color" colors.accent
         ]
     , Css.Global.class "eco-home-table-row"
-        [ Css.property "border-bottom" "1px solid #F0F0F0"
+        [ row
+        , Css.property "border-bottom" "1px solid #F0F0F0"
+        , mobile [ Css.property "flex-direction" "column", padY 3 ]
+        ]
+    , Css.Global.class "eco-home-table-row-last"
+        [ row
+        , mobile [ Css.property "flex-direction" "column", padY 3 ]
         ]
     , Css.Global.class "eco-home-table-cell"
-        [ Css.property "padding" "14px 20px"
+        [ grow
+        , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
         , Css.property "color" colors.text
+        , mobile [ Css.property "padding" "2px 16px" ]
+        , mobile [ Css.property "font-weight" "600", Css.property "padding-bottom" "6px" ]
         ]
     , Css.Global.class "eco-home-table-cell-dim"
-        [ Css.property "padding" "14px 20px"
+        [ grow
+        , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
         , Css.property "color" colors.heading
+        , mobile [ Css.property "padding" "2px 16px" ]
+        , mobile [ Css.before [ Css.property "content" "\"Elm compiler: \"", Css.property "color" colors.muted ] ]
         ]
     , Css.Global.class "eco-home-table-cell-eco"
-        [ Css.property "padding" "14px 20px"
+        [ grow
+        , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
         , Css.property "font-weight" "600"
         , Css.property "color" colors.accent
+        , mobile [ Css.property "padding" "2px 16px" ]
+        , mobile [ Css.before [ Css.property "content" "\"eco: \"", Css.property "color" colors.muted, Css.property "font-weight" "400" ] ]
         ]
 
     -- Community cards
     , Css.Global.class "eco-home-comm-card"
-        [ Css.property "border-radius" "8px"
+        [ column
+        , alignItems "center"
+        , gap 3
+        , grow
+        , Css.property "border-radius" "8px"
         , Css.property "background-color" colors.bgWhite
         , Css.property "border" ("1px solid " ++ colors.border)
         , Css.property "padding" "32px"
+        , mobile [ Css.property "padding" "24px" ]
         ]
     , Css.Global.class "eco-home-comm-title"
         [ Css.property "font-family" fontHeading
@@ -1191,6 +1684,20 @@ homepageStyles =
         , Css.property "color" colors.heading
         , Css.property "line-height" "1.7"
         , Css.property "text-align" "center"
+        ]
+    , Css.Global.class "eco-home-community-section"
+        [ column
+        , alignItems "center"
+        , gap 10
+        , padY 16
+        , padX 30
+        , mobile [ padX 4, padY 12, gap 8 ]
+        ]
+    , Css.Global.class "eco-home-comm-cards"
+        [ row
+        , gap 6
+        , fullWidth
+        , mobile [ Css.property "flex-direction" "column", gap 4 ]
         ]
     , Css.Global.class "eco-home-btn-dark"
         [ Css.property "background-color" colors.text
@@ -1213,8 +1720,12 @@ homepageStyles =
 
     -- CTA Band
     , Css.Global.class "eco-home-cta"
-        [ Css.property "background-color" colors.accent
+        [ row
+        , alignItems "center"
+        , spaceBetween
+        , Css.property "background-color" colors.accent
         , Css.property "padding" "48px 120px"
+        , mobile [ Css.property "flex-direction" "column", alignItems "flex-start", gap 6, Css.property "padding" "32px 16px" ]
         ]
     , Css.Global.class "eco-home-cta-title"
         [ Css.property "font-family" fontHeading
@@ -1227,8 +1738,21 @@ homepageStyles =
         , Css.property "font-size" "15px"
         , Css.property "color" "rgba(255, 255, 255, 0.8)"
         ]
+    , Css.Global.class "eco-home-cta-text"
+        [ column
+        , gap 1.5
+        ]
+    , Css.Global.class "eco-home-cta-actions"
+        [ row
+        , alignItems "center"
+        , gap 3
+        , mobile [ Css.property "flex-wrap" "wrap" ]
+        ]
     , Css.Global.class "eco-home-cta-btn-white"
-        [ Css.property "background-color" colors.bgWhite
+        [ row
+        , alignItems "center"
+        , gap 2
+        , Css.property "background-color" colors.bgWhite
         , Css.property "color" colors.accent
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
@@ -1272,6 +1796,7 @@ homepageStyles =
         , Css.property "font-weight" "600"
         , Css.property "color" colors.text
         , Css.property "letter-spacing" "-0.5px"
+        , mobile [ Css.property "font-size" "28px", Css.property "text-align" "center" ]
         ]
     , Css.Global.class "eco-home-section-sub"
         [ Css.property "font-family" fontBody
@@ -1280,5 +1805,6 @@ homepageStyles =
         , Css.property "line-height" "1.7"
         , Css.property "text-align" "center"
         , Css.property "max-width" "600px"
+        , mobile [ Css.property "font-size" "16px" ]
         ]
     ]

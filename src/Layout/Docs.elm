@@ -11,17 +11,19 @@ import Route
 import Style
 import Svg
 import Svg.Attributes as SvgAttrs
-import SyntaxHighlight
 
 
 viewDocsPage : String -> DocPage -> List TocSection -> List (Html msg)
 viewDocsPage currentSlug docPage sections =
     [ Html.div
-        [ Attrs.class "min-h-screen flex flex-col eco-page"
+        [ Attrs.class "eco-page"
         ]
-        [ Style.styleNode
-        , Layout.Site.viewHeader (Just Layout.Site.Docs)
-        , Html.div [ Attrs.class "flex flex-1" ]
+        [ Layout.Site.viewHeader
+            { active = Just Layout.Site.Docs
+            , path = Route.toString (Route.Docs__Slug_ { slug = currentSlug })
+            , contents = menuContents currentSlug sections
+            }
+        , Html.div [ Attrs.class "eco-page-body" ]
             [ viewSidebar currentSlug sections
             , viewContent docPage
             ]
@@ -32,16 +34,41 @@ viewDocsPage currentSlug docPage sections =
 
 
 
+-- MENU
+
+
+{-| The section's contents for the phone menu: the same entries as the sidebar.
+-}
+menuContents : String -> List TocSection -> List Layout.Site.MenuSection
+menuContents currentSlug sections =
+    List.map
+        (\section ->
+            { title = section.name
+            , links =
+                List.map
+                    (\meta ->
+                        { label = meta.title
+                        , href = Route.toString (Route.Docs__Slug_ { slug = meta.slug })
+                        , current = meta.slug == currentSlug
+                        }
+                    )
+                    section.pages
+            }
+        )
+        sections
+
+
+
 -- SIDEBAR
 
 
 viewSidebar : String -> List TocSection -> Html msg
 viewSidebar currentSlug sections =
     Html.aside
-        [ Attrs.class "hidden md:flex flex-col flex-shrink-0 eco-sidebar"
+        [ Attrs.class "eco-sidebar"
         ]
         (Html.span
-            [ Attrs.class "text-xs font-bold tracking-widest eco-sidebar-title"
+            [ Attrs.class "eco-sidebar-title"
             ]
             [ Html.text "Documentation" ]
             :: Html.div [ Attrs.class "eco-sidebar-spacer" ] []
@@ -55,12 +82,12 @@ viewTocSection currentSlug section =
         [ Attrs.class "eco-toc-section"
         ]
         [ Html.span
-            [ Attrs.class "text-sm font-semibold eco-toc-section-name"
+            [ Attrs.class "eco-toc-section-name"
             ]
             [ Html.text section.name ]
         ]
     , Html.div
-        [ Attrs.class "flex flex-col eco-toc-items"
+        [ Attrs.class "eco-toc-items"
         ]
         (List.map (viewTocItem currentSlug) section.pages)
     , Html.div [ Attrs.class "eco-toc-gap" ] []
@@ -77,10 +104,10 @@ viewTocItem currentSlug meta =
         |> Route.link
             [ Attrs.class
                 (if isActive then
-                    "block text-sm eco-toc-item-active"
+                    "eco-toc-item-active"
 
                  else
-                    "block text-sm eco-toc-item"
+                    "eco-toc-item"
                 )
             ]
             [ Html.text meta.title ]
@@ -93,7 +120,7 @@ viewTocItem currentSlug meta =
 viewContent : DocPage -> Html msg
 viewContent docPage =
     Html.main_
-        [ Attrs.class "flex-1 eco-content-area"
+        [ Attrs.class "eco-content-area"
         ]
         [ viewBreadcrumb docPage.metadata
         , viewPageHeader docPage.metadata
@@ -101,9 +128,7 @@ viewContent docPage =
         , Html.article
             [ Attrs.class "eco-article-body"
             ]
-            (SyntaxHighlight.useTheme SyntaxHighlight.oneDark
-                :: viewDocBody docPage.body
-            )
+            (viewDocBody docPage.body)
         , viewDivider
         , viewPageNav docPage.previousPage docPage.nextPage
         ]
@@ -116,26 +141,26 @@ viewContent docPage =
 viewBreadcrumb : DocMetadata -> Html msg
 viewBreadcrumb meta =
     Html.nav
-        [ Attrs.class "flex items-center gap-2 eco-breadcrumb"
+        [ Attrs.class "eco-breadcrumb"
         ]
         [ Html.span
-            [ Attrs.class "text-sm eco-breadcrumb-text"
+            [ Attrs.class "eco-breadcrumb-text"
             ]
             [ Html.text "Docs" ]
         , Html.span
-            [ Attrs.class "eco-breadcrumb-text"
+            [ Attrs.class "eco-breadcrumb-sep"
             ]
             [ Html.text "/" ]
         , Html.span
-            [ Attrs.class "text-sm eco-breadcrumb-text"
+            [ Attrs.class "eco-breadcrumb-text"
             ]
             [ Html.text meta.section ]
         , Html.span
-            [ Attrs.class "eco-breadcrumb-text"
+            [ Attrs.class "eco-breadcrumb-sep"
             ]
             [ Html.text "/" ]
         , Html.span
-            [ Attrs.class "text-sm font-medium eco-breadcrumb-active"
+            [ Attrs.class "eco-breadcrumb-active"
             ]
             [ Html.text meta.title ]
         ]
@@ -148,10 +173,10 @@ viewBreadcrumb meta =
 viewPageHeader : DocMetadata -> Html msg
 viewPageHeader meta =
     Html.div
-        [ Attrs.class "flex flex-col gap-3 eco-page-header"
+        [ Attrs.class "eco-page-header"
         ]
         [ Html.h1
-            [ Attrs.class "text-4xl font-semibold eco-page-title"
+            [ Attrs.class "eco-page-title"
             ]
             [ Html.text meta.title ]
         , Html.Extra.viewMaybe
@@ -189,7 +214,7 @@ viewDivider =
 viewPageNav : Maybe DocMetadata -> Maybe DocMetadata -> Html msg
 viewPageNav previous next =
     Html.div
-        [ Attrs.class "flex items-center justify-between"
+        [ Attrs.class "eco-page-nav"
         ]
         [ case previous of
             Just prev ->
@@ -210,16 +235,16 @@ viewPrevLink : DocMetadata -> Html msg
 viewPrevLink meta =
     Route.Docs__Slug_ { slug = meta.slug }
         |> Route.link
-            [ Attrs.class "flex flex-col gap-1 no-underline"
+            [ Attrs.class "eco-page-nav-prev"
             ]
             [ Html.span
-                [ Attrs.class "text-xs eco-page-nav-label"
+                [ Attrs.class "eco-page-nav-label"
                 ]
                 [ Html.text "Previous" ]
-            , Html.div [ Attrs.class "flex items-center gap-1.5" ]
+            , Html.div [ Attrs.class "eco-page-nav-link-row" ]
                 [ arrowLeftIcon
                 , Html.span
-                    [ Attrs.class "text-sm font-medium eco-page-nav-title"
+                    [ Attrs.class "eco-page-nav-title"
                     ]
                     [ Html.text meta.title ]
                 ]
@@ -230,15 +255,15 @@ viewNextLink : DocMetadata -> Html msg
 viewNextLink meta =
     Route.Docs__Slug_ { slug = meta.slug }
         |> Route.link
-            [ Attrs.class "flex flex-col items-end gap-1 no-underline"
+            [ Attrs.class "eco-page-nav-next"
             ]
             [ Html.span
-                [ Attrs.class "text-xs eco-page-nav-label"
+                [ Attrs.class "eco-page-nav-label"
                 ]
                 [ Html.text "Next" ]
-            , Html.div [ Attrs.class "flex items-center gap-1.5" ]
+            , Html.div [ Attrs.class "eco-page-nav-link-row" ]
                 [ Html.span
-                    [ Attrs.class "text-sm font-medium eco-page-nav-title"
+                    [ Attrs.class "eco-page-nav-title"
                     ]
                     [ Html.text meta.title ]
                 , arrowRightIcon

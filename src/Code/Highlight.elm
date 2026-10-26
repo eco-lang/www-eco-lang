@@ -10,9 +10,9 @@ support.
 
 The rendered markup matches what `SyntaxHighlight.toBlockHtml (Just 1)`
 produces (`pre.elmsh > code > div.elmsh-line`), so the theme installed with
-`SyntaxHighlight.useTheme` and the line-number rules in `style.css` apply
+`Style.highlightTheme` and the line-number rules in `Style.highlightStyles` apply
 unchanged. Kinds with no colour in the theme use `eco-hl-*` classes, which are
-coloured in `style.css`.
+coloured in `Style.highlightStyles`.
 
 @docs Kind, Token
 @docs toBlockHtml

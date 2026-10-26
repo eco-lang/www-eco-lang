@@ -14,7 +14,8 @@ This is the Eco Compiler website built with elm-pages v3. Eco is a reimagined El
 - `content/blog/` - Markdown blog posts with frontmatter
 - `content/authors/` - Author profiles in markdown
 - `public/` - Static assets (copied to dist/)
-- `style.css` - Tailwind CSS v4 styling
+- `src/Style.elm` - the whole stylesheet, written with elm-css `Css.Global` as `eco-*` classes; phone rules sit inside each class as `mobile [ … ]` (below 768px). `src/Style/Layout.elm` has the layout functions (`row`, `gap 7`, `padX 4`, …) and the CSS reset. There is no Tailwind and no CSS file.
+- `script/check-layout.mjs` - after `npm run build`: `fit` checks every page fits 390–1440px and the phone menu works; `snapshot`/`compare` (with `--by-box`) detect layout changes
 
 ### Routing
 Routes are automatically generated from `app/Route/` files:

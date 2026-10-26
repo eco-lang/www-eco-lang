@@ -69,7 +69,7 @@ head _ =
         , image =
             { url = imageUrl
             , alt = "logo"
-            , dimensions = Just { width = 500, height = 333 }
+            , dimensions = Just { width = 810, height = 523 }
             , mimeType = Just (MimeType.Image MimeType.Png)
             }
         , description = Settings.subtitle
@@ -87,10 +87,9 @@ view _ _ =
     { title = Settings.title ++ " - " ++ Settings.subtitle
     , body =
         [ Html.div
-            [ Attrs.class "min-h-screen flex flex-col eco-page"
+            [ Attrs.class "eco-page"
             ]
-            [ Style.styleNode
-            , Layout.Site.viewHeader (Just Layout.Site.Home)
+            [ Layout.Site.viewHeader { active = Just Layout.Site.Home, path = "/", contents = [] }
             , viewHero
             , viewHowItWorks
             , viewComparison
@@ -113,8 +112,8 @@ viewHero =
         [ Attrs.class "eco-home-hero"
         ]
         [ viewCrystalLattice
-        , Html.div [ Attrs.class "flex items-center gap-16 px-20 h-full eco-home-hero-content" ]
-            [ Html.div [ Attrs.class "flex flex-col gap-6 max-w-[520px]" ]
+        , Html.div [ Attrs.class "eco-home-hero-content" ]
+            [ Html.div [ Attrs.class "eco-home-hero-text" ]
                 [ Html.h1
                     [ Attrs.class "eco-home-title"
                     ]
@@ -124,7 +123,7 @@ viewHero =
                     [ Attrs.class "eco-home-subtitle"
                     ]
                     [ Html.text "Self-hosted. Native output. No Haskell knowledge required." ]
-                , Html.div [ Attrs.class "flex items-center gap-4" ]
+                , Html.div [ Attrs.class "eco-home-hero-actions" ]
                     [ Html.a
                         [ Attrs.href "/docs"
                         , Attrs.class "eco-home-btn-primary"
@@ -137,7 +136,7 @@ viewHero =
                         [ Html.text "View Docs →" ]
                     ]
                 ]
-            , Html.div [ Attrs.class "flex-1" ]
+            , Html.div [ Attrs.class "eco-home-hero-editor" ]
                 [ viewEditorMockup ]
             ]
         ]
@@ -175,25 +174,23 @@ meshPathData =
 viewEditorMockup : Html msg
 viewEditorMockup =
     Html.div [ Attrs.class "eco-home-editor" ]
-        [ Html.div [ Attrs.class "flex items-center gap-2 eco-home-editor-bar" ]
+        [ Html.div [ Attrs.class "eco-home-editor-bar" ]
             [ Html.span [ Attrs.class "eco-home-editor-dot-red" ] []
             , Html.span [ Attrs.class "eco-home-editor-dot-yellow" ] []
             , Html.span [ Attrs.class "eco-home-editor-dot-green" ] []
-            , Html.span [ Attrs.class "eco-home-editor-filename" ] [ Html.text "  Main.elm" ]
+            , Html.span [ Attrs.class "eco-home-editor-filename" ] [ Html.text "  Hello.elm" ]
             ]
-        , Html.div [ Attrs.class "flex flex-col gap-0.5 eco-home-editor-body" ]
-            [ codeLine "module Main exposing (main)"
+        , Html.div [ Attrs.class "eco-home-editor-body" ]
+            [ codeLine "module Hello exposing (main)"
             , codeLine "\u{00A0}"
-            , codeLine "import Eco.Console"
-            , codeLine "import Platform"
+            , codeLine "import Stream"
+            , codeLine "import System"
             , codeLine "\u{00A0}"
-            , codeLine "main : Program () {} ()"
+            , codeLine "\u{00A0}"
+            , codeLine "main : Platform.Program System.Environment () ()"
             , codeLine "main ="
-            , codeLine "\u{00A0}\u{00A0}Platform.worker"
-            , codeLine "\u{00A0}\u{00A0}\u{00A0}\u{00A0}{ init = \\_ -> ( Eco.Console.log \"Hello World!\" {}, Cmd.none )"
-            , codeLine "\u{00A0}\u{00A0}\u{00A0}\u{00A0}, update = \\_ model -> ( model, Cmd.none )"
-            , codeLine "\u{00A0}\u{00A0}\u{00A0}\u{00A0}, subscriptions = \\_ -> Sub.none"
-            , codeLine "\u{00A0}\u{00A0}\u{00A0}\u{00A0}}"
+            , codeLine "\u{00A0}\u{00A0}\u{00A0}\u{00A0}System.simpleProgram"
+            , codeLine "\u{00A0}\u{00A0}\u{00A0}\u{00A0}\u{00A0}\u{00A0}\u{00A0}\u{00A0}(\\env -> Stream.logLine \"Hello World!\" env.stdout)"
             , codeLine " "
             ]
         ]
@@ -206,11 +203,11 @@ viewEditorMockup =
 viewHowItWorks : Html msg
 viewHowItWorks =
     Html.section
-        [ Attrs.class "flex flex-col items-center gap-12 py-16 px-20 md:px-30"
+        [ Attrs.class "eco-home-steps-section"
         ]
         [ Html.h2 [ Attrs.class "eco-home-section-title" ]
             [ Html.text "How it works" ]
-        , Html.div [ Attrs.class "flex gap-8 w-full" ]
+        , Html.div [ Attrs.class "eco-home-steps" ]
             [ viewStep "1" "Write Elm" "Write standard Elm code using the types and patterns you already know and love."
             , viewStep "2" "Compile with eco" "eco analyses, optimises, and compiles your code through MLIR and LLVM to high performance native."
             , viewStep "3" "Ship anywhere" "Deploy native binaries, or web apps, all from a single codebase."
@@ -221,7 +218,7 @@ viewHowItWorks =
 viewStep : String -> String -> String -> Html msg
 viewStep number title description =
     Html.div
-        [ Attrs.class "flex flex-col items-center gap-4 flex-1 px-4"
+        [ Attrs.class "eco-home-step"
         ]
         [ Html.div [ Attrs.class "eco-home-step-number" ] [ Html.text number ]
         , Html.div [ Attrs.class "eco-home-step-title" ] [ Html.text title ]
@@ -236,11 +233,11 @@ viewStep number title description =
 viewComparison : Html msg
 viewComparison =
     Html.section
-        [ Attrs.class "flex flex-col items-center gap-10 py-16 px-20 md:px-40 eco-home-comp-section"
+        [ Attrs.class "eco-home-comp-section"
         ]
         [ Html.h2 [ Attrs.class "eco-home-comp-title" ]
             [ Html.text "eco vs. the official Elm compiler" ]
-        , Html.div [ Attrs.class "w-full eco-home-table" ]
+        , Html.div [ Attrs.class "eco-home-table" ]
             [ viewTableHeader
             , viewTableRow True "Written in" "Haskell" "Elm, C++ ✓"
             , viewTableRow True "Output targets" "JavaScript only" "Native, JavaScript ✓"
@@ -252,10 +249,10 @@ viewComparison =
 
 viewTableHeader : Html msg
 viewTableHeader =
-    Html.div [ Attrs.class "flex eco-home-table-header" ]
-        [ Html.div [ Attrs.class "flex-1 eco-home-table-th" ] [ Html.text "Feature" ]
-        , Html.div [ Attrs.class "flex-1 eco-home-table-th" ] [ Html.text "Elm Compiler" ]
-        , Html.div [ Attrs.class "flex-1 eco-home-table-th-eco" ] [ Html.text "eco" ]
+    Html.div [ Attrs.class "eco-home-table-header" ]
+        [ Html.div [ Attrs.class "eco-home-table-th" ] [ Html.text "Feature" ]
+        , Html.div [ Attrs.class "eco-home-table-th" ] [ Html.text "Elm Compiler" ]
+        , Html.div [ Attrs.class "eco-home-table-th-eco" ] [ Html.text "eco" ]
         ]
 
 
@@ -264,15 +261,15 @@ viewTableRow hasBorder feature elm eco =
     Html.div
         [ Attrs.class
             (if hasBorder then
-                "flex eco-home-table-row"
+                "eco-home-table-row"
 
              else
-                "flex"
+                "eco-home-table-row-last"
             )
         ]
-        [ Html.div [ Attrs.class "flex-1 eco-home-table-cell" ] [ Html.text feature ]
-        , Html.div [ Attrs.class "flex-1 eco-home-table-cell-dim" ] [ Html.text elm ]
-        , Html.div [ Attrs.class "flex-1 eco-home-table-cell-eco" ] [ Html.text eco ]
+        [ Html.div [ Attrs.class "eco-home-table-cell" ] [ Html.text feature ]
+        , Html.div [ Attrs.class "eco-home-table-cell-dim" ] [ Html.text elm ]
+        , Html.div [ Attrs.class "eco-home-table-cell-eco" ] [ Html.text eco ]
         ]
 
 
@@ -283,13 +280,13 @@ viewTableRow hasBorder feature elm eco =
 viewCommunity : Html msg
 viewCommunity =
     Html.section
-        [ Attrs.class "flex flex-col items-center gap-10 py-16 px-20 md:px-30"
+        [ Attrs.class "eco-home-community-section"
         ]
         [ Html.h2 [ Attrs.class "eco-home-section-title" ]
             [ Html.text "Join the community" ]
         , Html.p [ Attrs.class "eco-home-section-sub" ]
             [ Html.text "eco is open source and community-driven. Contributors, testers, and feedback are all welcome." ]
-        , Html.div [ Attrs.class "flex gap-6 w-full" ]
+        , Html.div [ Attrs.class "eco-home-comm-cards" ]
             [ viewCommunityCard
                 { icon = githubIcon
                 , title = "Contribute on GitHub"
@@ -313,7 +310,7 @@ viewCommunityCard :
     -> Html msg
 viewCommunityCard card =
     Html.div
-        [ Attrs.class "flex flex-col items-center gap-3 flex-1 eco-home-comm-card"
+        [ Attrs.class "eco-home-comm-card"
         ]
         [ card.icon
         , Html.div [ Attrs.class "eco-home-comm-title" ] [ Html.text card.title ]
@@ -334,18 +331,18 @@ viewCommunityCard card =
 viewCtaBand : Html msg
 viewCtaBand =
     Html.section
-        [ Attrs.class "flex items-center justify-between eco-home-cta"
+        [ Attrs.class "eco-home-cta"
         ]
-        [ Html.div [ Attrs.class "flex flex-col gap-1.5" ]
+        [ Html.div [ Attrs.class "eco-home-cta-text" ]
             [ Html.div [ Attrs.class "eco-home-cta-title" ]
                 [ Html.text "Ready to compile Elm to native?" ]
             , Html.div [ Attrs.class "eco-home-cta-sub" ]
                 [ Html.text "Install in one command. Start building immediately." ]
             ]
-        , Html.div [ Attrs.class "flex items-center gap-3" ]
+        , Html.div [ Attrs.class "eco-home-cta-actions" ]
             [ Html.a
                 [ Attrs.href "/docs"
-                , Attrs.class "flex items-center gap-2 eco-home-cta-btn-white"
+                , Attrs.class "eco-home-cta-btn-white"
                 ]
                 [ terminalIcon 16 Style.colors.accent
                 , Html.text "Install eco"

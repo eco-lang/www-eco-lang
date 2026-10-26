@@ -4,6 +4,7 @@ module Settings exposing
     , locale
     , subtitle
     , title
+    , version
     )
 
 import LanguageTag.Language as Language
@@ -33,3 +34,10 @@ subtitle =
 author : String
 author =
     "eco Team"
+
+
+{-| The current release, shown in the site header and footer.
+-}
+version : String
+version =
+    "0.2.0"

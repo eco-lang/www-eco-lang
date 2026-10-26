@@ -1,6 +1,6 @@
 # Eco Website
 
-Website for the [Eco compiler](https://github.com/eco-lang/eco) (Elm Compiler Optimized). Built with [elm-pages](https://elm-pages.com) v3 and Tailwind CSS v4, deployed on Netlify.
+Website for the [Eco compiler](https://github.com/eco-lang/eco) (Elm Compiler Optimized). Built with [elm-pages](https://elm-pages.com) v3 and styled with elm-css, deployed on Netlify.
 
 **https://eco-lang.org**
 
@@ -29,11 +29,13 @@ src/
   Content/Docs.elm     Docs content loader
   Content/About.elm    Author content loader
   Settings.elm         Site title, URL, metadata
+  Style.elm            The site stylesheet (elm-css), desktop and phone rules together
+  Style/Layout.elm     Layout building blocks and the CSS reset used by Style.elm
 content/
   docs/                Documentation (markdown with frontmatter)
   authors/             Author profiles
 public/                Static assets (copied to dist/)
-style.css              Tailwind CSS v4
+script/check-layout.mjs  Layout checks in headless Chrome: page fit, phone menu, snapshot comparison
 ```
 
 ## Documentation

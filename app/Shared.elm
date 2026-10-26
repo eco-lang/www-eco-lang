@@ -10,6 +10,7 @@ import Pages.PageUrl exposing (PageUrl)
 import Process
 import Route exposing (Route)
 import SharedTemplate exposing (SharedTemplate)
+import Style
 import Task
 import UrlPath exposing (UrlPath)
 import View exposing (View)
@@ -27,8 +28,7 @@ template =
 
 
 type Msg
-    = MenuClicked
-    | PageChanged (Maybe String)
+    = PageChanged (Maybe String)
     | ScrolledToFragment
 
 
@@ -41,8 +41,7 @@ type SharedMsg
 
 
 type alias Model =
-    { showMenu : Bool
-    }
+    {}
 
 
 init :
@@ -59,7 +58,7 @@ init :
             }
     -> ( Model, Effect Msg )
 init _ _ =
-    ( { showMenu = False }
+    ( {}
     , Effect.none
     )
 
@@ -67,9 +66,6 @@ init _ _ =
 update : Msg -> Model -> ( Model, Effect Msg )
 update msg model =
     case msg of
-        MenuClicked ->
-            ( { model | showMenu = not model.showMenu }, Effect.none )
-
         PageChanged (Just fragment) ->
             ( model, Effect.fromCmd (scrollToFragment fragment) )
 
@@ -113,51 +109,9 @@ view :
     -> (Msg -> msg)
     -> View msg
     -> { body : List (Html msg), title : String }
-view _ page model toMsg pageView =
-    case page.route of
-        Just Route.Index ->
-            -- Landing page has its own custom layout
-            { body = pageView.body
-            , title = pageView.title
-            }
-
-        Just Route.Docs ->
-            -- Docs pages have their own custom layout
-            { body = pageView.body
-            , title = pageView.title
-            }
-
-        Just (Route.Docs__Slug_ _) ->
-            -- Docs pages have their own custom layout
-            { body = pageView.body
-            , title = pageView.title
-            }
-
-        Just Route.Articles ->
-            -- Articles pages have their own custom layout
-            { body = pageView.body
-            , title = pageView.title
-            }
-
-        Just (Route.Articles__Slug_ _) ->
-            -- Articles pages have their own custom layout
-            { body = pageView.body
-            , title = pageView.title
-            }
-
-        Just Route.About ->
-            -- About page has its own custom layout
-            { body = pageView.body
-            , title = pageView.title
-            }
-
-        Just Route.Roadmap ->
-            -- Roadmap page has its own custom layout
-            { body = pageView.body
-            , title = pageView.title
-            }
-
-        _ ->
-            { body = pageView.body
-            , title = pageView.title
-            }
+view _ _ _ _ pageView =
+    -- Every route draws its own layout. The stylesheets go here, once, at the same place on every page, so that
+    -- navigating between layouts does not recreate them.
+    { body = Style.styleNode :: Style.highlightTheme :: pageView.body
+    , title = pageView.title
+    }

@@ -174,10 +174,13 @@ docsRenderer =
                     )
         , table =
             \children ->
-                Html.table
-                    [ Attrs.class "eco-doc-table"
+                -- The wrapper scrolls a table too wide for the screen, instead of widening the page.
+                Html.div [ Attrs.class "eco-doc-table-wrap" ]
+                    [ Html.table
+                        [ Attrs.class "eco-doc-table"
+                        ]
+                        children
                     ]
-                    children
         , tableHeader =
             \children ->
                 Html.thead

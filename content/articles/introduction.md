@@ -42,7 +42,7 @@ code-while remaining firmly rooted in the values and design of Elm.
 
 ## Status
 
-The overall status of the 0.1.0 release is alpha, reflecting the maturity of the code at this time. There 
+The version number, 0.1.0, reflects the maturity of the code at this time. There 
 will be bugs (please find some!), possibly even severe ones. The bundled kernel IO code is an internal compiler
 API exposed for convenience; experiment with it but don't get too comfortable and don't rely on it. A more
 complete set of IO APIs will follow and replace this API.

@@ -3,8 +3,8 @@ title: "Roadmap"
 description: "Track the evolution of eco from first commit to stable release."
 statuses:
   v0.1.0: released
-  v0.2.0: current
-  v0.3.0: planned
+  v0.2.0: released
+  v0.3.0: current
   v0.4.0: planned
   v1.0.0: planned
   v1.1.0: planned
@@ -25,33 +25,44 @@ The initial release establishing the foundation of the eco compiler infrastructu
 - [x] Self-compilation.
 - [x] NodeJS embedding of Platform.Worker with JS ports.
 - [x] Linux only.
+- [x] Tidy ups (strip debug symbols, don't link unused stuff).
 
-## v0.2.0: Platforms
+## v0.2.0: Platforms, Compiler and Runtime
 
 Support the platforms that Elm developers use.
 
 - [ ] Support for Mac.
 - [ ] Support for Windows.
-- [ ] Tidy ups (strip debug symbols, don't link unused stuff).
+- [ ] New Eco Kernel packages suited to CLI and server-side environments (files, sockets, posix).
+- [ ] Completion of all standard libraries (browser, virtual-dom)
 
-## v0.3.0: Core
+Core compiler techniques establishing the optimising compiler architecture.
+
+- [ ] Optimizations (UTF-8 String support, closure elimination, representation streamlining)
+- [ ] Closure elimination, lambda set specialization.
+- [ ] More compiler front end optimisation, tail recursion modulo cons, and so on.
+
+Core runtime 
+
+- [ ] Garbage collector performance, lower pause times and concurrent collection work.
+- [ ] Runtime modelling and testing with TLA+ to help verify threaded GC algorithms.
+- [ ] CI nightly builds with extensive testing.
+
+## v0.2.1: Gap Fill
+
+
+## v0.3.0: Optimize and Threads
+
+incremental compilation
 
 Ecosystem growth, APIs and build maturity.
 
-- [ ] New Eco Kernel packages suited to CLI and server-side environments (files, sockets, posix).
 - [ ] Multi-threading support (actors, typed mail boxes, Task spawning)
-- [ ] Completion of all standard libraries (browser, virtual-dom)
 - [ ] Support for elm-test.
-- [ ] Optimizations (UTF-8 String support, closure elimination, representation streamlining)
-- [ ] CI nightly builds with extensive testing.
-
-## v0.4.0: Optimize
 
 Advanced optimizations, and production-grade output quality.
 
-- [ ] Closure elimination, lambda set specialization.
 - [ ] Perceus reference counting algorithm as alternative to garbage collection.
-- [ ] More compiler front end optimisation, tail recursion modulo cons, and so on.
 - [ ] What optimisations can MLIR yield ? Loop fusion, vectorization ?
 
 ## v1.0.0: Stable

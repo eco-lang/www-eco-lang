@@ -58,7 +58,7 @@ The suite also found a few places where native results differ from Elm's JavaScr
 
 ## Where the project stands
 
-The current release is 0.2.0, published as nightly builds for Linux x86_64, macOS on Apple Silicon and Windows x86_64. It is alpha software. Expect bugs, and expect the IO libraries to change.
+The current release is 0.2.0, published as nightly builds for Linux x86_64, macOS on Apple Silicon and Windows x86_64. Expect bugs, and expect the IO libraries to change.
 
 Eco is built by Rupert Smith. Work began in November 2025, and the repository has about 2,000 commits since. Besides the compiler, it holds a runtime of about 103,000 lines of C++ (the garbage collector and the scheduler), the C++ kernels, and the tests: around 1,400 end-to-end Elm programs, hundreds of fixtures for the code generator, and eight formal models of the collector's concurrency written in TLA+. Every build checks that the compiler can rebuild itself and get byte-for-byte identical output, which we treat as the strongest single test of the whole stack. See [The compiler compiles itself](/docs/bootstrap).
 

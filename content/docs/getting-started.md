@@ -6,7 +6,7 @@ sectionOrder: 1
 order: 2
 ---
 
-Eco is distributed as one self-contained bundle per platform. The current release is 0.2.0, published as nightly builds. It is alpha software, so expect bugs, and expect the IO libraries to change. This page installs it, builds hello world and introduces `eco/system`, the package for programs that run outside the browser.
+Eco is distributed as one self-contained bundle per platform. The current release is 0.2.0, published as nightly builds. Expect bugs, and expect the IO libraries to change. This page installs it, builds hello world and introduces `eco/system`, the package for programs that run outside the browser.
 
 ## Download
 

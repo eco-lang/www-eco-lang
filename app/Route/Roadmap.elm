@@ -15,7 +15,6 @@ import PagesMsg exposing (PagesMsg)
 import RouteBuilder exposing (App, StatelessRoute)
 import Settings
 import Shared
-import Style
 import UrlPath
 import View exposing (View)
 
@@ -61,12 +60,12 @@ head :
     -> List Head.Tag
 head app =
     Seo.summary
-        { canonicalUrlOverride = Just Settings.canonicalUrl
+        { canonicalUrlOverride = Nothing
         , siteName = Settings.title
         , image =
             { url = [ "images", "site-image.png" ] |> UrlPath.join |> Pages.Url.fromPath
             , alt = "eco Roadmap"
-            , dimensions = Just { width = 300, height = 300 }
+            , dimensions = Just { width = 810, height = 523 }
             , mimeType = Just (MimeType.Image MimeType.Png)
             }
         , description = app.data.meta.description
@@ -84,10 +83,13 @@ view app _ =
     { title = app.data.meta.title
     , body =
         [ Html.div
-            [ Attrs.class "min-h-screen flex flex-col eco-page"
+            [ Attrs.class "eco-page"
             ]
-            ([ Style.styleNode
-             , Layout.Site.viewHeader (Just Layout.Site.Roadmap)
+            ([ Layout.Site.viewHeader
+                { active = Just Layout.Site.Roadmap
+                , path = "/roadmap"
+                , contents = Layout.Roadmap.menuContents app.data.milestones
+                }
              ]
                 ++ Layout.Roadmap.viewRoadmapPage
                     { title = app.data.meta.title
