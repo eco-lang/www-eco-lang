@@ -9,7 +9,7 @@
   "devDependencies": {
     "elm-codegen": "^0.6.1",
     "elm-optimize-level-2": "^0.3.5",
-    "elm-pages": "^3.0.27",
+    "elm-pages": "3.0.27",
     "elm-review": "^2.13.5",
     "elm-tooling": "^1.17.0",
     "lamdera": "^0.19.1-1.4.0",
@@ -17,5 +17,16 @@
   },
   "dependencies": {
     "@netlify/functions": "^5.1.2"
+  },
+  "overrides": {
+    "node-elm-compiler": {
+      "cross-spawn": "^6.0.6"
+    },
+    "devcert": {
+      "tmp": "^0.2.6"
+    },
+    "elm-doc-preview": {
+      "tmp": "^0.2.6"
+    }
   }
 }
