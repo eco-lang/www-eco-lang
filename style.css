@@ -51,6 +51,20 @@ code.not-prose {
   padding: .15em .2em .05em;
 }
 
+/* Colours for the hand-written MLIR and C++ highlighters (src/Code/),
+ * for kinds the One Dark theme has no class for. */
+.eco-hl-type {
+  color: #e6c07b;
+}
+
+.eco-hl-variable {
+  color: #e06c75;
+}
+
+.eco-hl-label {
+  color: #56b6c2;
+}
+
 .elmsh-line:before {
   content: attr(data-elmsh-lc);
   display: inline-block;

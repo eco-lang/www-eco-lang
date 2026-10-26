@@ -1,5 +1,8 @@
 module Layout.Markdown exposing (docsBlocksToHtml, docsSyntaxHighlight)
 
+import Code.Cpp
+import Code.Highlight
+import Code.Mlir
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Markdown.Block as Block
@@ -59,14 +62,25 @@ docsSyntaxHighlight codeBlock =
     Html.div
         [ Attrs.class "eco-doc-code-block"
         ]
-        [ language codeBlock.language sanitiseCodeBlock
-            |> Result.map (SyntaxHighlight.toBlockHtml (Just 1))
-            |> Result.withDefault
-                (Html.pre
-                    [ Attrs.class "eco-doc-code-fallback"
-                    ]
-                    [ Html.code [] [ Html.text sanitiseCodeBlock ] ]
-                )
+        [ case codeBlock.language of
+            Just "mlir" ->
+                Code.Highlight.toBlockHtml (Code.Mlir.tokenize sanitiseCodeBlock)
+
+            Just "cpp" ->
+                Code.Highlight.toBlockHtml (Code.Cpp.tokenize sanitiseCodeBlock)
+
+            Just "c" ->
+                Code.Highlight.toBlockHtml (Code.Cpp.tokenize sanitiseCodeBlock)
+
+            _ ->
+                language codeBlock.language sanitiseCodeBlock
+                    |> Result.map (SyntaxHighlight.toBlockHtml (Just 1))
+                    |> Result.withDefault
+                        (Html.pre
+                            [ Attrs.class "eco-doc-code-fallback"
+                            ]
+                            [ Html.code [] [ Html.text sanitiseCodeBlock ] ]
+                        )
         ]
 
 

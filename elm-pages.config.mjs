@@ -3,7 +3,7 @@ import adapter from "elm-pages/adapter/netlify.js";
 
 export default {
   vite: defineConfig({
-    server: { allowedHosts: ["devboxmini.thesett.com"] },
+    server: { allowedHosts: ["station.thesett.com"] },
   }),
   adapter,
   headTagsTemplate(context) {
