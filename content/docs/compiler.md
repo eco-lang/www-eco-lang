@@ -42,7 +42,7 @@ The typed path has six parts, in the order a program passes through them.
 - **[Monomorphization](/docs/monomorphization)** starts from `main` and makes one specialization of each function for each concrete type it is used at, typing each one with the type checker's own unifier.
 - **[Lambda-set specialization](/docs/lambda-set-specialization)** works out which functions can reach each call. It is not a separate pass: it runs inside monomorphization, in the same solver.
 - **[Global optimization](/docs/global-optimization)** inlines, regroups curried functions by the arguments they take, and records how every call is made.
-- **[MLIR generation](/docs/mlir-generation)** writes the finished program out in the eco dialect. Everything has been decided by then, so it only reads decisions. [Bytes fusion](/docs/bytes-fusion) is a fast path inside it for `elm/bytes` encoders and decoders.
+- **[MLIR generation](/docs/mlir-generation)** writes the finished program out in the eco dialect. Everything has been decided by then, so it only reads decisions. [Bytes fusion](/docs/bytes-fusion) is a fast path inside it for `elm/bytes` encoders and decoders, and Eco's largest use of [reification](/docs/reification).
 
 Beside them sit [JavaScript output](/docs/javascript-output), Elm's original generator, and [the build driver](/docs/build-driver), which runs everything over a project from the cache.
 

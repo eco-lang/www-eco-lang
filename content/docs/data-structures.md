@@ -16,7 +16,7 @@ An Elm `String` has one meaning but, in Eco's heap, several layouts. It may be a
 
 ## One meaning, many layouts
 
-Every form of a type means the same thing: two equal strings in different forms compare equal, order the same way and print the same. Any code that compares two values by their tags first must therefore pass strings and lists on to a comparison of content.
+Every form of a type means the same thing: two equal strings in different forms compare equal, order the same way and print the same. Any code that compares two values by their tags first must therefore pass strings and lists on to a comparison of content. Giving a type forms its library never had, with no change in meaning, is what we call [reification](/docs/reification).
 
 A string's header always records its length in UTF-16 code units, whatever its form. `String.length` and slice arithmetic count in those units, so compiled code can read a length inline without testing the form, and a rope can add its children's lengths whatever their encodings.
 
@@ -112,6 +112,7 @@ On the compiler compiling itself, chunked lists cut cons cells by roughly 50%, a
 
 ## Further reading
 
+- [Reification](/docs/reification) — the technique these forms are one use of.
 - [The garbage collector](/docs/garbage-collector) — builders, the large-object space and why published objects never change.
 - [Value representation](/docs/value-representation) — the Empty word and element kinds.
 - [Kernels](/docs/kernels) — the C++ functions that build these values.

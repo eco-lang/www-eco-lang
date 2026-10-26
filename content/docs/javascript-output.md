@@ -3,7 +3,7 @@ title: "JavaScript output"
 description: "Why Eco keeps the stock Elm compiler's JavaScript and HTML generator, unchanged and fed from the untyped program, alongside its native back end."
 section: "The compiler"
 sectionOrder: 2
-order: 9
+order: 10
 ---
 
 Eco still writes JavaScript, with the same generator stock Elm uses, and we think it should keep doing so for two reasons. The compiler is itself an Elm program, so before any native binary of it exists it has to run as JavaScript. Elm's JavaScript output is also the established behaviour of Elm programs, and so the reference the native path is checked against.

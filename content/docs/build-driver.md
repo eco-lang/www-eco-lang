@@ -3,7 +3,7 @@ title: "The build driver"
 description: "How Eco's build driver takes a project on disk to a finished compile — caching per module, recompiling only what an interface change forces, and handing the program to the JavaScript or native back end — while running unchanged on stock Elm, JavaScript and native hosts."
 section: "The compiler"
 sectionOrder: 2
-order: 10
+order: 11
 ---
 
 The build driver is the part of the compiler that decides what has to be rebuilt, and leaves how to compile it to the compiler's phases. It is Elm code that has to run on three hosts: built by stock Elm, as JavaScript, and as native code. A self-compile is also large enough that peak memory decides whether it finishes. Those two facts shape most of the driver's design.

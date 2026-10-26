@@ -3,13 +3,14 @@ title: "Bytes fusion"
 description: "How Eco compiles elm/bytes encoders and decoders whose shape it can read at compile time into code that writes or reads the buffer directly, and falls back to the elm/bytes kernel for everything else."
 section: "The compiler"
 sectionOrder: 2
-order: 8
+order: 9
 ---
 
 In elm/bytes an encoder is a value: a tree that describes what to write. The library builds that tree, walks it once to find the total size, and walks it again to write the bytes. When Eco can read the shape of an encoder from the program, it skips the tree: it works out the exact size, allocates the buffer once, and writes each value straight into it. Decoders get the same treatment. Anything Eco cannot read stays a call to the elm/bytes kernel, which is always correct.
 
 > **Background**
 >
+> - [Reification](/docs/glossary#reification) is implementing a library's opaque type in a different way from the library itself. Bytes fusion is Eco's largest example ([Reification](/docs/reification)).
 > - A [kernel](/docs/glossary#kernel) is a built-in library function implemented in C++ rather than Elm; elm/bytes' encode and decode are kernels on the native path ([Kernels](/docs/kernels)).
 > - A [dialect](/docs/glossary#dialect) is a family of MLIR operations. Fused code is written in a small dialect of its own, `bf`.
 > - [Lowering](/docs/glossary#lowering) turns operations of one dialect into lower-level ones, here into loads, stores and calls to runtime helpers.
@@ -150,6 +151,7 @@ These are medians of 11 runs after 3 warm-ups, from a development build of the n
 
 ## Further reading
 
+- [Reification](/docs/reification) — the general technique, and Eco's other uses of it.
 - [MLIR generation](/docs/mlir-generation) — fusion is one of the specialised emitters layered on the core generator.
 - [Lowering passes](/docs/lowering-passes) — where the `bf` lowering runs among the other passes.
 - [Kernels](/docs/kernels) — the elm/bytes kernel that fusion falls back on.

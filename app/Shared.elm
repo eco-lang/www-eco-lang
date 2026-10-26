@@ -1,13 +1,16 @@
 module Shared exposing (Data, Model, Msg(..), SharedMsg(..), template)
 
 import BackendTask exposing (BackendTask)
+import Browser.Dom
 import Effect exposing (Effect)
 import FatalError exposing (FatalError)
 import Html exposing (Html)
 import Pages.Flags
 import Pages.PageUrl exposing (PageUrl)
+import Process
 import Route exposing (Route)
 import SharedTemplate exposing (SharedTemplate)
+import Task
 import UrlPath exposing (UrlPath)
 import View exposing (View)
 
@@ -19,12 +22,14 @@ template =
     , view = view
     , data = data
     , subscriptions = subscriptions
-    , onPageChange = Nothing
+    , onPageChange = Just (\page -> PageChanged page.fragment)
     }
 
 
 type Msg
     = MenuClicked
+    | PageChanged (Maybe String)
+    | ScrolledToFragment
 
 
 type alias Data =
@@ -64,6 +69,28 @@ update msg model =
     case msg of
         MenuClicked ->
             ( { model | showMenu = not model.showMenu }, Effect.none )
+
+        PageChanged (Just fragment) ->
+            ( model, Effect.fromCmd (scrollToFragment fragment) )
+
+        PageChanged Nothing ->
+            ( model, Effect.none )
+
+        ScrolledToFragment ->
+            ( model, Effect.none )
+
+
+{-| elm-pages scrolls to the top after navigating to another page, even when
+the URL has a fragment, so a link such as `/docs/glossary#kernel` would land at
+the top of the glossary. Once the new page has rendered, scroll to the element
+the fragment names instead. If there is no such element, stay where we are.
+-}
+scrollToFragment : String -> Cmd Msg
+scrollToFragment id =
+    Process.sleep 50
+        |> Task.andThen (\_ -> Browser.Dom.getElement id)
+        |> Task.andThen (\found -> Browser.Dom.setViewport 0 found.element.y)
+        |> Task.attempt (\_ -> ScrolledToFragment)
 
 
 subscriptions : UrlPath -> Model -> Sub Msg

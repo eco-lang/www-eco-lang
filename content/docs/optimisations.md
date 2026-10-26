@@ -65,7 +65,7 @@ These happen while the program is written out as MLIR. See [MLIR generation](/do
 
 The tuple in between exists only as an SSA value, never on the heap.
 
-**Bytes fusion.** Encoders and decoders from `elm/bytes` that are fully known at compile time become direct reads and writes on a buffer. An encoder of three bytes becomes one allocation and three writes (trimmed):
+**Bytes fusion.** Encoders and decoders from `elm/bytes` that are fully known at compile time become direct reads and writes on a buffer, a [reification](/docs/reification) of the library's opaque types. An encoder of three bytes becomes one allocation and three writes (trimmed):
 
 ```mlir
 %11 = "bf.alloc"(%10) : (i32) -> !eco.value
@@ -97,7 +97,7 @@ See [The runtime](/docs/runtime), [The garbage collector](/docs/garbage-collecto
 
 **Concurrent marking and parallel minor collections.** The old generation is marked on background threads while the program runs, and young collections are shared among several threads. On the compiler compiling itself, the worst pause is under 100 ms, where a single-threaded collector would pause for nearly three seconds.
 
-**String and list forms.** A string can be a flat array, a slice of another string or a rope joining two, so slicing and repeated `++` do not copy. A list can mix single cons cells with views over dense arrays, which bulk operations such as `reverse` and `append` produce. On the compiler's own run, chunked lists cut the number of cons cells by roughly half.
+**String and list forms.** A string can be a flat array, a slice of another string or a rope joining two, so slicing and repeated `++` do not copy. A list can mix single cons cells with views over dense arrays, which bulk operations such as `reverse` and `append` produce. On the compiler's own run, chunked lists cut the number of cons cells by roughly half. Both are [reifications](/docs/reification): the types mean what they always did, but are built differently.
 
 ## Further reading
 

@@ -48,6 +48,8 @@ Three of Elm's guarantees do most of the work. Each one removes a problem that c
 
 **The whole program is known.** There is no dynamic code loading, so the compiler sees every use of every function. Eco makes one copy of each polymorphic function for each type it is used at, which lets it keep integers and floats in machine registers instead of boxing them. It also works out which functions can reach each call through a function value, so that many such calls become direct calls. See [Monomorphization](/docs/monomorphization) and [Lambda-set specialization](/docs/lambda-set-specialization).
 
+Elm's custom types help in one more way. A library can export a type without its constructors, which separates its API from its implementation, and many of Elm's own libraries do. Eco uses that separation to implement some of them differently, which we call [reification](/docs/reification): strings in several layouts, lists built in chunks, and `elm/bytes` encoders compiled into code that writes the buffer directly.
+
 ## How fast it is
 
 On a suite of 62 benchmark workloads, Eco's native code was 1.58 times faster in total than stock Elm's JavaScript, and it was faster on 51 of the 62. The best cases are tight numeric and bit-twiddling loops: a random number generator went from 295 ms to 18 ms, and CRC-32 from 227 ms to 29 ms. The losses are real too. JSON decoding is about twice as slow as in JavaScript today, and repeatedly appending to a long string is slower. The [Performance](/docs/performance) page gives the wins, the losses and how both were measured.

@@ -72,9 +72,17 @@ The garbage-collection term for code that allocates objects and changes pointers
 
 The nursery is the young part of Eco's heap, collected often. New objects are allocated in eden, part of the nursery, by bumping a pointer. Each minor collection copies eden's survivors into one of a few survivor extents in the same nursery. See [The garbage collector](/docs/garbage-collector).
 
+## Opaque type
+
+A custom type that its module exports without its constructors, so the rest of the program can build and take apart its values only through the module's functions. `elm/bytes`' `Encoder` and `elm/virtual-dom`'s `Node` are opaque. See [Reification](/docs/reification).
+
 ## Partial application
 
 A function applied to fewer arguments than it needs, such as `add 1`. In Eco the result is a new closure holding the arguments given so far, which runs the function once the rest arrive. See [Closures and calls](/docs/closures-and-calls).
+
+## Reification
+
+Making an existing abstraction concrete in a different way to the original: implementing an opaque type's API differently from its library, with no change any program can observe. Eco reifies strings and lists in its runtime, and `elm/bytes` encoders and decoders in its compiler. See [Reification](/docs/reification).
 
 ## Safepoint
 
