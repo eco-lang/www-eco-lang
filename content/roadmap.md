@@ -4,7 +4,8 @@ description: "Track the evolution of eco from first commit to stable release."
 statuses:
   v0.1.0: released
   v0.2.0: released
-  v0.3.0: current
+  v0.2.1: current
+  v0.3.0: planned
   v0.4.0: planned
   v1.0.0: planned
   v1.1.0: planned
@@ -31,38 +32,44 @@ The initial release establishing the foundation of the eco compiler infrastructu
 
 Support the platforms that Elm developers use.
 
-- [ ] Support for Mac.
-- [ ] Support for Windows.
-- [ ] New Eco Kernel packages suited to CLI and server-side environments (files, sockets, posix).
-- [ ] Completion of all standard libraries (browser, virtual-dom)
+- [x] Support for Mac.
+- [x] Support for Windows.
+- [x] New Eco Kernel packages suited to CLI and server-side environments (files, webserver, sockets, posix).
+- [x] Completion of all standard libraries (browser, virtual-dom)
+- [x] CI nightly builds with extensive testing.
 
 Core compiler techniques establishing the optimising compiler architecture.
 
-- [ ] Optimizations (UTF-8 String support, closure elimination, representation streamlining)
-- [ ] Closure elimination, lambda set specialization.
-- [ ] More compiler front end optimisation, tail recursion modulo cons, and so on.
+- [x] Closure elimination, lambda set specialization.
+- [x] Optimizations (UTF-8 String support, chunked lists, inlining and fast calls)
+- [x] New monomorphizer engine based on the type solver.
 
-Core runtime 
+Runtime 
 
-- [ ] Garbage collector performance, lower pause times and concurrent collection work.
-- [ ] Runtime modelling and testing with TLA+ to help verify threaded GC algorithms.
-- [ ] CI nightly builds with extensive testing.
+- [x] Garbage collector performance, lower pause times and concurrent collection work.
+- [x] Runtime modelling and testing with TLA+ to help verify threaded GC algorithms.
 
 ## v0.2.1: Gap Fill
 
+The remaining Elm standard libraries under elm-explorations/.
+
+- [ ] Support for elm-explorations/webgl and elm-explorations/linear-algebra.
+- [ ] Support for elm-explorations/test.
+- [ ] Support for elm-explorations/benchmark.
+- [ ] Support for elm-explorations/markdown.
 
 ## v0.3.0: Optimize and Threads
 
-incremental compilation
-
-Ecosystem growth, APIs and build maturity.
+First true multi-threaded Elm.
 
 - [ ] Multi-threading support (actors, typed mail boxes, Task spawning)
-- [ ] Support for elm-test.
 
 Advanced optimizations, and production-grade output quality.
 
-- [ ] Perceus reference counting algorithm as alternative to garbage collection.
+- [ ] Incremental compilation.
+- [ ] Kernel calls removed, replaced with MLIR templates and intrinsics.
+- [ ] Escape analysis as borrow inference.
+- [ ] Functional but in-place opportunistic mutation.
 - [ ] What optimisations can MLIR yield ? Loop fusion, vectorization ?
 
 ## v1.0.0: Stable
