@@ -234,6 +234,7 @@ style =
         , sidebarStyles
         , contentAreaStyles
         , docStyles
+        , packageStyles
         , aboutStyles
         , roadmapStyles
         , homepageStyles
@@ -752,6 +753,13 @@ contentAreaStyles =
         , Css.property "color" colors.muted
         , Css.property "font-size" "13px"
         ]
+    , Css.Global.class "eco-breadcrumb-link"
+        [ textSm
+        , Css.property "color" colors.muted
+        , Css.property "font-size" "13px"
+        , noUnderline
+        , hoverUnderline
+        ]
     , Css.Global.class "eco-breadcrumb-sep"
         [ Css.property "color" colors.muted
         , Css.property "font-size" "13px"
@@ -997,6 +1005,115 @@ docStyles =
     , Css.Global.class "eco-doc-link"
         [ Css.property "color" colors.accent
         , Css.property "text-decoration" "none"
+        ]
+    ]
+
+
+
+-- PACKAGES
+
+
+packageStyles : List Css.Global.Snippet
+packageStyles =
+    [ Css.Global.class "eco-pkg-list"
+        [ column
+        , gap 4
+        ]
+    , Css.Global.class "eco-pkg-card"
+        [ column
+        , gap 1.5
+        , noUnderline
+        , Css.property "background-color" colors.bgWhite
+        , Css.property "border" ("1px solid " ++ colors.border)
+        , Css.property "border-radius" "8px"
+        , Css.property "padding" "20px 24px"
+        , Css.hover [ Css.property "border-color" colors.accent ]
+        , mobile [ Css.property "padding" "16px" ]
+        ]
+    , Css.Global.class "eco-pkg-card-head"
+        [ row
+        , alignItems "baseline"
+        , gap 3
+        ]
+    , Css.Global.class "eco-pkg-card-name"
+        [ weight 600
+        , Css.property "font-family" fontHeading
+        , Css.property "font-size" "18px"
+        , Css.property "color" colors.heading
+        ]
+    , Css.Global.class "eco-pkg-card-version"
+        [ textXs
+        , Css.property "color" colors.muted
+        ]
+    , Css.Global.class "eco-pkg-card-summary"
+        [ Css.property "font-family" fontBody
+        , Css.property "font-size" "15px"
+        , Css.property "line-height" "1.6"
+        , Css.property "color" colors.text
+        ]
+    , Css.Global.class "eco-pkg-facts"
+        [ row
+        , gap 8
+        , Css.property "flex-wrap" "wrap"
+        , mobile [ column, gap 3 ]
+        ]
+    , Css.Global.class "eco-pkg-fact"
+        [ column
+        , gap 1
+        ]
+    , Css.Global.class "eco-pkg-fact-label"
+        [ textXs
+        , weight 600
+        , Css.property "color" colors.muted
+        , Css.property "letter-spacing" "1px"
+        , Css.property "text-transform" "uppercase"
+        ]
+    , Css.Global.class "eco-pkg-fact-value"
+        [ Css.property "font-family" fontBody
+        , Css.property "font-size" "15px"
+        , Css.property "color" colors.text
+        ]
+    , Css.Global.class "eco-pkg-constraint"
+        [ Css.property "margin-left" "12px"
+        , Css.property "font-family" fontCode
+        , Css.property "font-size" "13px"
+        , Css.property "color" colors.muted
+        ]
+
+    -- A declaration: its signature, then its doc comment. The signature scrolls sideways when too long for the page.
+    , Css.Global.class "eco-pkg-decl"
+        [ Css.property "margin" "40px 0 0 0"
+        , Css.property "scroll-margin-top" "16px"
+        ]
+    , Css.Global.class "eco-pkg-sig"
+        [ Css.property "margin" "0"
+        , Css.property "padding" "12px 16px"
+        , Css.property "overflow-x" "auto"
+        , Css.property "background-color" colors.bgWhite
+        , Css.property "border" ("1px solid " ++ colors.border)
+        , Css.property "border-left" ("3px solid " ++ colors.accent)
+        , Css.property "border-radius" "4px"
+        , Css.property "font-family" fontCode
+        , Css.property "font-size" "14px"
+        , Css.property "line-height" "22px"
+        , Css.property "color" colors.text
+        , mobile [ Css.property "font-size" "13px", Css.property "padding" "10px 12px" ]
+        ]
+    , Css.Global.class "eco-pkg-sig-name"
+        [ weight 600
+        , noUnderline
+        , Css.property "color" colors.text
+        ]
+    , Css.Global.class "eco-pkg-sig-keyword"
+        [ Css.property "color" colors.muted
+        ]
+    , Css.Global.class "eco-pkg-sig-type"
+        [ noUnderline
+        , hoverUnderline
+        , Css.property "color" colors.accent
+        ]
+    , Css.Global.class "eco-pkg-decl-doc"
+        [ Css.property "padding-top" "16px"
         ]
     ]
 

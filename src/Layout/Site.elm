@@ -11,6 +11,7 @@ import Svg.Attributes as SvgAttrs
 type NavItem
     = Home
     | Docs
+    | Packages
     | Articles
     | Roadmap
     | About
@@ -37,6 +38,7 @@ siteLinks : List ( NavItem, String, String )
 siteLinks =
     [ ( Home, "/", "Home" )
     , ( Docs, "/docs", "Docs" )
+    , ( Packages, "/packages", "Packages" )
     , ( Articles, "/articles", "Articles" )
     , ( Roadmap, "/roadmap", "Roadmap" )
     , ( About, "/about", "About" )

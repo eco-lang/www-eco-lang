@@ -27,6 +27,10 @@ const PAGES = [
   "/articles/introduction",
   "/roadmap",
   "/about",
+  "/packages",
+  "/packages/eco/system",
+  "/packages/eco/system/Http-Server",
+  "/packages/eco/system/WebSocket",
 ];
 const WIDTHS = [390, 768, 1024, 1440];
 const HEIGHT = 900;
