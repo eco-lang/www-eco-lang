@@ -89,7 +89,7 @@ foundations this project relies on: the language design, the type system, and th
 **Décio Ferreira** ported the Elm compiler from Haskell to Elm, making it possible to have a self‑hosting
 toolchain.
 
-**Robin Heggelund Hanses**, the creator of Gren, gave permission for Gren's standard libraries to be copied
+**Robin Heggelund Hansen**, the creator of Gren, gave permission for Gren's standard libraries to be copied
 as the starting point for eco's system library, [eco/system](/packages/eco/system). Gren's streams, one of
 Robin's notable innovations, are the model that library is built around.
 
