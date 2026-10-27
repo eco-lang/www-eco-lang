@@ -29,6 +29,7 @@ type alias ArticleMetadata =
     , sectionOrder : Int
     , order : Int
     , image : Maybe String
+    , socialImage : Maybe String
     }
 
 
@@ -57,6 +58,7 @@ metadataDecoder slug =
         |> Decode.andMap (Decode.field "sectionOrder" Decode.int)
         |> Decode.andMap (Decode.field "order" Decode.int)
         |> Decode.andMap (Decode.maybe (Decode.field "image" Decode.string))
+        |> Decode.andMap (Decode.maybe (Decode.field "socialImage" Decode.string))
 
 
 articleFiles : BackendTask FatalError (List { filePath : String, slug : String })

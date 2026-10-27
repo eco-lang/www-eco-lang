@@ -61,7 +61,7 @@ head :
 head _ =
     let
         imageUrl =
-            [ "images", "site-image.png" ] |> UrlPath.join |> Pages.Url.fromPath
+            [ "images", "site-card.png" ] |> UrlPath.join |> Pages.Url.fromPath
     in
     Seo.summaryLarge
         { canonicalUrlOverride = Just Settings.canonicalUrl
@@ -69,7 +69,7 @@ head _ =
         , image =
             { url = imageUrl
             , alt = "logo"
-            , dimensions = Just { width = 810, height = 523 }
+            , dimensions = Just { width = 1200, height = 630 }
             , mimeType = Just (MimeType.Image MimeType.Png)
             }
         , description = Settings.subtitle

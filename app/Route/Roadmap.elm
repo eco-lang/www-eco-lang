@@ -63,9 +63,9 @@ head app =
         { canonicalUrlOverride = Nothing
         , siteName = Settings.title
         , image =
-            { url = [ "images", "site-image.png" ] |> UrlPath.join |> Pages.Url.fromPath
+            { url = [ "images", "site-card.png" ] |> UrlPath.join |> Pages.Url.fromPath
             , alt = "eco Roadmap"
-            , dimensions = Just { width = 810, height = 523 }
+            , dimensions = Just { width = 1200, height = 630 }
             , mimeType = Just (MimeType.Image MimeType.Png)
             }
         , description = app.data.meta.description

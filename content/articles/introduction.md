@@ -5,6 +5,7 @@ section: "Compilers"
 sectionOrder: 1
 order: 1
 image: /images/intro-banner.png
+socialImage: /images/intro-social.png
 ---
 
 

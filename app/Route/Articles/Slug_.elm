@@ -70,19 +70,28 @@ head app =
         meta =
             app.data.articlePage.metadata
 
+        -- Link previews want a 1200 by 630 image, which a wide banner is not, so an article can name a separate
+        -- `socialImage` for them. Without one, the banner is used, and without that, the site's image.
         image =
-            case meta.image of
-                Just imagePath ->
+            case ( meta.socialImage, meta.image ) of
+                ( Just imagePath, _ ) ->
+                    { url = imagePath |> String.dropLeft 1 |> UrlPath.fromString |> Pages.Url.fromPath
+                    , alt = meta.title
+                    , dimensions = Just { width = 1200, height = 630 }
+                    , mimeType = Just (MimeType.Image MimeType.Png)
+                    }
+
+                ( Nothing, Just imagePath ) ->
                     { url = imagePath |> String.dropLeft 1 |> UrlPath.fromString |> Pages.Url.fromPath
                     , alt = meta.title
                     , dimensions = Nothing
                     , mimeType = Just (MimeType.Image MimeType.Png)
                     }
 
-                Nothing ->
-                    { url = [ "images", "site-image.png" ] |> UrlPath.join |> Pages.Url.fromPath
+                ( Nothing, Nothing ) ->
+                    { url = [ "images", "site-card.png" ] |> UrlPath.join |> Pages.Url.fromPath
                     , alt = Settings.title
-                    , dimensions = Just { width = 810, height = 523 }
+                    , dimensions = Just { width = 1200, height = 630 }
                     , mimeType = Just (MimeType.Image MimeType.Png)
                     }
     in
