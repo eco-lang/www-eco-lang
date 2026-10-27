@@ -1,7 +1,8 @@
-module Style exposing (Colors, colors, styleNode, highlightTheme)
+module Style exposing (Colors, colors, heroDark, styleNode, highlightTheme)
 
 import Css
 import Css.Global
+import Css.Media
 import Html
 import Html.Styled
 import Style.Layout
@@ -1417,21 +1418,58 @@ roadmapStyles =
 -- HOMEPAGE (VARIATION C)
 
 
+{-| The home page hero sits on a deep green ground of its own; the rest of the site is light.
+-}
+heroDark :
+    { ground : String
+    , accent : String
+    , text : String
+    , subtitle : String
+    , link : String
+    , buttonText : String
+    , editorBg : String
+    , editorBar : String
+    , editorBorder : String
+    , editorFilename : String
+    }
+heroDark =
+    { ground = "#0D1B12"
+    , accent = "#66BB6A"
+    , text = "#F4FAF5"
+    , subtitle = "#CFE3D2"
+    , link = "#A5D6A7"
+    , buttonText = "#0B160E"
+    , editorBg = "#08110B"
+    , editorBar = "#13241A"
+    , editorBorder = "#234030"
+    , editorFilename = "#9DB8A3"
+    }
+
+
 homepageStyles : List Css.Global.Snippet
 homepageStyles =
-    [ -- Split Hero (Crystal Lattice variant)
+    [ -- Split hero on a deep green ground, with the three circles behind the editor
       Css.Global.class "eco-home-hero"
         [ Css.property "position" "relative"
         , Css.property "overflow" "hidden"
         , Css.property "height" "440px"
-        , Css.property "background" "radial-gradient(ellipse at 100% 100%, rgba(102,187,106,0.25) 0%, transparent 50%), radial-gradient(ellipse at 70% 100%, rgba(165,214,167,0.2) 0%, transparent 45%), radial-gradient(ellipse at 100% 50%, rgba(200,230,201,0.18) 0%, transparent 40%), radial-gradient(ellipse at 40% 80%, rgba(232,245,233,0.2) 0%, transparent 40%), #FFFFFF"
+        , Css.property "background-color" heroDark.ground
         , mobile [ Css.property "height" "auto" ]
         ]
-    , Css.Global.class "eco-home-hero-lattice"
+    , Css.Global.class "eco-home-hero-circles"
         [ Css.property "position" "absolute"
         , Css.property "inset" "0"
         , Css.property "pointer-events" "none"
         , Css.property "z-index" "0"
+        ]
+    , Css.Global.class "eco-home-hero-circles-art"
+        [ -- Drawn at its designed size, pinned to the right, so the circles
+          -- stay the same size behind the editor at every width
+          Css.property "position" "absolute"
+        , Css.property "right" "0"
+        , Css.property "top" "50%"
+        , Css.property "transform" "translateY(-50%)"
+        , Css.property "overflow" "visible"
         ]
     , Css.Global.class "eco-home-hero-content"
         [ row
@@ -1457,11 +1495,16 @@ homepageStyles =
         ]
     , Css.Global.class "eco-home-hero-editor"
         [ grow
+
+        -- Its longest line needs about 500px; below 1024px there is no room
+        -- for it beside the headline, so the hero shows the text alone
+        , Css.Media.withMediaQuery [ "(max-width: 1023.98px)" ]
+            [ Css.property "display" "none" ]
         ]
     , Css.Global.class "eco-home-accent-bar"
         [ Css.property "width" "64px"
         , Css.property "height" "3px"
-        , Css.property "background-color" colors.accent
+        , Css.property "background-color" heroDark.accent
         ]
     , Css.Global.class "eco-home-badge"
         [ Css.property "background-color" colors.releasedGreenBg
@@ -1485,24 +1528,28 @@ homepageStyles =
         [ Css.property "font-family" fontHeading
         , Css.property "font-size" "44px"
         , Css.property "font-weight" "700"
-        , Css.property "color" colors.text
+        , Css.property "color" heroDark.text
         , Css.property "letter-spacing" "-2px"
         , Css.property "line-height" "1.2"
         , mobile [ Css.property "font-size" "34px", Css.property "letter-spacing" "-1px" ]
         ]
+    , Css.Global.class "eco-home-title-eco"
+        [ Css.property "color" heroDark.accent
+        ]
     , Css.Global.class "eco-home-subtitle"
         [ Css.property "font-family" fontBody
         , Css.property "font-size" "17px"
-        , Css.property "color" colors.heading
+        , Css.property "color" heroDark.subtitle
         , Css.property "line-height" "1.7"
         , Css.property "max-width" "460px"
         ]
 
     -- Editor mockup
     , Css.Global.class "eco-home-editor"
-        [ Css.property "background-color" colors.editorBg
-        , Css.property "border-radius" "8px"
-        , Css.property "box-shadow" "0 8px 32px rgba(0, 0, 0, 0.13)"
+        [ Css.property "background-color" heroDark.editorBg
+        , Css.property "border" ("1px solid " ++ heroDark.editorBorder)
+        , Css.property "border-radius" "10px"
+        , Css.property "box-shadow" "0 16px 40px rgba(0, 0, 0, 0.45)"
         , Css.property "overflow" "hidden"
         ]
     , Css.Global.class "eco-home-editor-bar"
@@ -1511,7 +1558,7 @@ homepageStyles =
         , gap 2
         , Css.property "height" "36px"
         , Css.property "padding" "0 14px"
-        , Css.property "background-color" colors.bgCode
+        , Css.property "background-color" heroDark.editorBar
         ]
     , Css.Global.class "eco-home-editor-dot-red"
         [ Css.property "width" "10px"
@@ -1534,7 +1581,7 @@ homepageStyles =
     , Css.Global.class "eco-home-editor-filename"
         [ Css.property "font-family" fontCode
         , Css.property "font-size" "11px"
-        , Css.property "color" colors.editorFilename
+        , Css.property "color" heroDark.editorFilename
         ]
     , Css.Global.class "eco-home-editor-body"
         [ column
@@ -1812,8 +1859,8 @@ homepageStyles =
 
     -- Hero buttons
     , Css.Global.class "eco-home-btn-primary"
-        [ Css.property "background-color" colors.accent
-        , Css.property "color" colors.bgWhite
+        [ Css.property "background-color" heroDark.accent
+        , Css.property "color" heroDark.buttonText
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
         , Css.property "font-weight" "600"
@@ -1821,7 +1868,7 @@ homepageStyles =
         , Css.property "padding" "12px 24px"
         ]
     , Css.Global.class "eco-home-btn-outline"
-        [ Css.property "color" colors.accent
+        [ Css.property "color" heroDark.link
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
         , Css.property "font-weight" "600"

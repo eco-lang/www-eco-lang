@@ -111,13 +111,15 @@ viewHero =
     Html.section
         [ Attrs.class "eco-home-hero"
         ]
-        [ viewCrystalLattice
+        [ viewCircles
         , Html.div [ Attrs.class "eco-home-hero-content" ]
             [ Html.div [ Attrs.class "eco-home-hero-text" ]
                 [ Html.h1
                     [ Attrs.class "eco-home-title"
                     ]
-                    [ Html.text "eco: Elm Compiler Optimized, built in Elm." ]
+                    [ Html.span [ Attrs.class "eco-home-title-eco" ] [ Html.text "eco" ]
+                    , Html.text ": Elm Compiler Optimized, built in Elm."
+                    ]
                 , Html.div [ Attrs.class "eco-home-accent-bar" ] []
                 , Html.p
                     [ Attrs.class "eco-home-subtitle"
@@ -142,33 +144,37 @@ viewHero =
         ]
 
 
-viewCrystalLattice : Html msg
-viewCrystalLattice =
-    Html.div [ Attrs.class "eco-home-hero-lattice" ]
+{-| The three circles, filled and faint, behind the editor.
+-}
+viewCircles : Html msg
+viewCircles =
+    Html.div [ Attrs.class "eco-home-hero-circles" ]
         [ Svg.svg
-            [ SvgAttrs.width "100%"
-            , SvgAttrs.height "100%"
+            [ SvgAttrs.class "eco-home-hero-circles-art"
+            , SvgAttrs.width "1440"
+            , SvgAttrs.height "440"
             , SvgAttrs.viewBox "0 0 1440 440"
-            , SvgAttrs.preserveAspectRatio "none"
             ]
             [ Svg.g
-                [ SvgAttrs.transform "translate(-80, 200) rotate(-22, 0, 0) scale(1.2, 1.2)"
+                [ SvgAttrs.fill Style.heroDark.accent
+                , SvgAttrs.fillOpacity "0.1"
                 ]
-                [ Svg.path
-                    [ SvgAttrs.d meshPathData
-                    , SvgAttrs.fill (Style.colors.accent ++ "08")
-                    , SvgAttrs.stroke (Style.colors.accent ++ "30")
-                    , SvgAttrs.strokeWidth "1.1"
+                (List.map
+                    (\( cx, cy, r ) ->
+                        Svg.circle
+                            [ SvgAttrs.cx (String.fromFloat cx)
+                            , SvgAttrs.cy (String.fromFloat cy)
+                            , SvgAttrs.r (String.fromFloat r)
+                            ]
+                            []
+                    )
+                    [ ( 1010, 225, 235 )
+                    , ( 770, 30, 125 )
+                    , ( 1270, 430, 150 )
                     ]
-                    []
-                ]
+                )
             ]
         ]
-
-
-meshPathData : String
-meshPathData =
-    "M0 0l28 18 14-13 26 17-13 20 27-10 23 16-13-20 26-13 24 20-14 20 27-13 23 16-13-20 27-13 23 20-13 17 26-12 24 18-14-20 27-13 23 20-13 17 27-12 23 18-13-20 26-13 24 20-14 17 27-12 23 18-13-20 27-13 23 20-13 17 26-12 24 18-14-20 27-13 23 20-13 17 27-12 23 18-13-20 26-13 24 20-14 17 27-12 23 18-13-20 27-13 23 20-13 17 26-12 24 18-14-20 27-13 23 20-13 17 27-12 23 18-13-20 26-13 24 20-14 17 27-12 23 18-13-20 27-13 23 20-13 17 26-12 24 18-14-20 27-13 23 20-13 17 27-12 23 18-13-20 26-13 24 20-14 17 27-12 23 18-13-20 27-13 23 20-13 17 26-12 24 18-14-20 27-13 23 20-13 17 27-12 23 18-13-20 26-13 24 20-14 17 27-12 23 18-13-20 27-13 23 20-13 17 26-12 24 18-14-20 27-13 23 20-13 17 27-12 23 18-13-20 28-13 0 30z m0 0l0 35 28-17z m28 18l27 24-13-37 26 17z m27 24l27-10-14-10z m27-10l23 16-13-20z m10-4l26-13z m26-13l24 20-14 20z m10 40l27-13z m27-13l23 16-13-20z m10-4l27-13z m27-13l23 20-13 17z m10 37l26-12z m26-12l24 18-14-20z m10-2l27-13z m27-13l23 20-13 17z m10 37l27-12z m27-12l23 18-13-20z m10-2l26-13z m26-13l24 20-14 17z m10 37l27-12z m27-12l23 18-13-20z m10-2l27-13z m27-13l23 20-13 17z m10 37l26-12z m26-12l24 18-14-20z m10-2l27-13z m27-13l23 20-13 17z m10 37l27-12z m27-12l23 18-13-20z m10-2l26-13z m26-13l24 20-14 17z m10 37l27-12z m27-12l23 18-13-20z m10-2l27-13z m27-13l23 20-13 17z m10 37l26-12z m26-12l24 18-14-20z m10-2l27-13z m-678-73l0 37 15-17 13-37z m15 20l40-13z m-15 17l0 38 18-18 17-20-20-17z m35 0l20-30 27-10-7 26z m40-14l30-10 23 7-13 23z m40 20l27-43 13 7-10 30z m30-6l33-14 24 4-14 26z m43 16l27-43 13 5-10 30z m30-8l34-12 23 4-13 26z m44 18l26-43 14 5-10 28z m30-10l33-10 23 4-13 26z m43 20l27-43 13 5-10 28z m30-10l33-10 24 4-14 26z m43 20l27-43 13 5-10 28z m30-10l34-10 23 4-13 26z m44 20l26-43 14 5-10 28z m30-10l33-10 23 4-13 26z m43 20l27-43 13 5-10 28z m30-10l33-10 24 4-14 26z m43 20l27-43 13 5-10 28z m30-10l34-10 23 4-13 26z m44 20l26-43 14 5-10 28z m30-10l33-10 23 4-13 26z m43 20l27-43 13 5-10 28z m30-10l33-10 24 4-14 26z m43 20l27-43 13 5-10 28z m30-10l34-10 23 4-13 26z m44 20l26-43 14 5-10 28z m30-10l33-10 23 4-13 26z m43 20l27-43 13 5-10 28z m30-10l33-10 24 4-14 26z m43 20l27-43 13 5-10 28z m30-10l34-10 23 4-13 26z m44 20l26-43 14 5-10 28z m30-10l33-10 23 4-13 26z m43 20l27-43 13 5-10 28z m30-10l33-10 24 4-14 26z m43 20l27-43 13 5-10 28z m30-10l34-10 23 4-13 26z m44 20l26-43 14 5-10 28z m30-10l33-10 15-3 0 30-22-7z m-1392-128l0 38 22-16-4-40z m22 22l13-60 40-14-13 40z m40-34l53-20 30-6-13 36z m70 10l56-20 30-8-13 38z m73 10l57-20 30-10-14 37z m73 7l57-17 30-10-13 37z m74 10l56-17 30-10-13 37z m73 10l57-17 30-10-14 37z m73 10l57-17 30-10-13 37z m74 10l56-17 30-10-13 37z m73 10l57-17 30-10-14 37z m73 10l57-17 30-10-13 37z m74 10l56-17 30-10-13 37z m73 10l57-17 30-10-14 37z m73 10l57-17 30-10-13 37z m74 10l56-17 30-10-13 37z m73 10l57-17 30-10-14 37z m73 10l57-17 30-10-13 37z m74 10l56-17 30-10-13 37z m73 10l57-17 30-10-14 37z m73 10l40-27 22 7 0 30z m-1378-127l0 40 25-16-3-40z m25 24l37-74 70 10-14 40z m93-24l87-30 73 7-16 40z m144 17l90-30 73 10-17 40z m146 20l90-30 74 10-17 40z m147 20l90-30 73 10-16 40z m147 20l90-30 73 10-17 40z m146 20l90-30 74 10-17 40z m147 20l90-30 73 10-16 40z m147 20l90-30 73 10-17 40z m146 20l90-30 62 10 0 35z m-1288-117l0 40 28-18-3-38z m28 22l90-62 144 17-17 45z m217 0l163-25 147 20-20 43z m290 38l167-23 146 20-20 43z m293 40l167-23 147 20-20 43z m294 40l166-23 152 15 0 38z m-1122-100l0 40 32-18-4-40z m32 22l213-40 290 38-20 44z m483 42l313-4 294 40-20 40z m587 76l338-10 0 40z m-1102-100l0 42 35-18-3-42z m35 24l480 0 587 76-20 40z m1047 116l358-10 0 42z m-1082-98l0 40 38-18-3-40z m38 22l1044 76 358 32z m-38 18l0 45 42-20-4-43z m42 25l1398 65z m-42 20l0 45 1440 0-1398-65z"
 
 
 viewEditorMockup : Html msg
