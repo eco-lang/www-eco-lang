@@ -122,7 +122,7 @@ viewHero =
                 , Html.p
                     [ Attrs.class "eco-home-subtitle"
                     ]
-                    [ Html.text "Self-hosted. Native output. No Haskell knowledge required." ]
+                    [ Html.text "Written in Elm. Native output. Same Elm you know." ]
                 , Html.div [ Attrs.class "eco-home-hero-actions" ]
                     [ Html.a
                         [ Attrs.href "/docs/getting-started"
