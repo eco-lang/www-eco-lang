@@ -1,9 +1,9 @@
 ---
 title: "Reification"
 description: "How eco gives an Elm library type a different implementation from the library's own without changing anything a program can observe: string and list layouts in the runtime, elm/bytes encoders compiled to buffer writes, and where the technique could go next."
-section: "The compiler"
-sectionOrder: 2
-order: 8
+section: "Introduction"
+sectionOrder: 1
+order: 7
 ---
 
 An Elm module can export a type without its constructors, so that the rest of the program reaches its values only through the functions the module provides. That separates an API from its implementation, and it leaves eco free to implement the same API another way. We call this *reification*: taking an existing abstraction and making it concrete in a different way to the original. eco reifies strings and lists in its runtime, and `elm/bytes` encoders and decoders in its compiler. No program can tell the difference, except by how fast it runs.

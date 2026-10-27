@@ -3,7 +3,7 @@ title: "Glossary"
 description: "Short definitions, in eco's terms, of the compiler, runtime and verification terms used across the eco documentation, each linked to the article that explains it."
 section: "Introduction"
 sectionOrder: 1
-order: 7
+order: 8
 ---
 
 These are the terms used across the eco documentation. Each is defined as eco uses it, which is sometimes narrower than the general meaning, and links to the article that explains it in full.

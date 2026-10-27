@@ -3,7 +3,7 @@ title: "Bytes fusion"
 description: "How eco compiles elm/bytes encoders and decoders whose shape it can read at compile time into code that writes or reads the buffer directly, and falls back to the elm/bytes kernel for everything else."
 section: "The compiler"
 sectionOrder: 2
-order: 9
+order: 8
 ---
 
 In elm/bytes an encoder is a value: a tree that describes what to write. The library builds that tree, walks it once to find the total size, and walks it again to write the bytes. When eco can read the shape of an encoder from the program, it skips the tree: it works out the exact size, allocates the buffer once, and writes each value straight into it. Decoders get the same treatment. Anything eco cannot read stays a call to the elm/bytes kernel, which is always correct.
