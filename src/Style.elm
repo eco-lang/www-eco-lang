@@ -745,6 +745,16 @@ contentAreaStyles =
         , Css.property "padding" "48px 80px 64px 64px"
         , mobile [ Css.property "padding" "24px 16px 48px" ]
         ]
+
+    -- Everything on a docs or article page keeps to a readable width, about 90 characters of body text, however
+    -- wide the window, centred in the space beside the sidebar. An 80-column line of code fits comfortably in a
+    -- code block of the same width. The selector outranks a child's own class, so the centring wins over margins such as the
+    -- dividers' `32px 0`.
+    , Css.Global.selector ".eco-page-body > .eco-content-area > *"
+        [ Css.property "max-width" "800px"
+        , Css.property "margin-left" "auto"
+        , Css.property "margin-right" "auto"
+        ]
     , Css.Global.class "eco-breadcrumb"
         [ row
         , alignItems "center"
@@ -1164,10 +1174,17 @@ roadmapStyles =
         , gap 3
         , mobile [ Css.property "flex-wrap" "wrap", gap 2 ]
         ]
+    -- A milestone's text is indented one step from its heading, and its lists one step further.
+    , Css.Global.class "eco-roadmap-details"
+        [ Css.property "padding-left" "24px"
+        , mobile [ Css.property "padding-left" "16px" ]
+        ]
     , Css.Global.class "eco-roadmap-features"
         [ column
         , gap 1.5
         , padTop 2
+        , Css.property "padding-left" "24px"
+        , mobile [ Css.property "padding-left" "16px" ]
         ]
 
     -- Sidebar nav items

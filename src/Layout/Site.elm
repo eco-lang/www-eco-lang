@@ -268,7 +268,7 @@ viewFooter =
             , Html.span
                 [ Attrs.class "eco-footer-note"
                 ]
-                [ Html.text ("\u{2014} release " ++ Settings.version ++ ". Use at your own risk.") ]
+                [ Html.text ("\u{2014} release " ++ Settings.version) ]
             ]
         , Html.div [ Attrs.class "eco-footer-links" ]
             [ Html.a

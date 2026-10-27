@@ -125,7 +125,7 @@ viewHero =
                     [ Html.text "Self-hosted. Native output. No Haskell knowledge required." ]
                 , Html.div [ Attrs.class "eco-home-hero-actions" ]
                     [ Html.a
-                        [ Attrs.href "/docs"
+                        [ Attrs.href "/docs/getting-started"
                         , Attrs.class "eco-home-btn-primary"
                         ]
                         [ Html.text "Get Started" ]
@@ -341,7 +341,7 @@ viewCtaBand =
             ]
         , Html.div [ Attrs.class "eco-home-cta-actions" ]
             [ Html.a
-                [ Attrs.href "/docs"
+                [ Attrs.href "/docs/getting-started"
                 , Attrs.class "eco-home-cta-btn-white"
                 ]
                 [ terminalIcon 16 Style.colors.accent

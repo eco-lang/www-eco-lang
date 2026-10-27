@@ -160,7 +160,7 @@ viewMilestone milestone =
                 )
             ]
             [ viewMilestoneHeader milestone
-            , Html.div [] (renderBlocks milestone.blocks)
+            , Html.div [ Attrs.class "eco-roadmap-details" ] (renderBlocks milestone.blocks)
             ]
         ]
     ]
