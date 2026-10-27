@@ -1,12 +1,12 @@
 ---
 title: "The backend"
-description: "How Eco's C++ backend turns the compiler's eco-dialect module into a native executable or in-memory code, with exact garbage-collector roots and parallel code generation."
+description: "How eco's C++ backend turns the compiler's eco-dialect module into a native executable or in-memory code, with exact garbage-collector roots and parallel code generation."
 section: "The backend"
 sectionOrder: 3
 order: 1
 ---
 
-The backend takes the program the Elm-written compiler hands over and turns it into machine code. It makes no decisions about what a value means; the compiler has settled that. What it decides is how to make the code safe for a collector that moves objects, and how to produce code fast when the program is the Eco compiler itself, a single module of tens of thousands of small functions.
+The backend takes the program the Elm-written compiler hands over and turns it into machine code. It makes no decisions about what a value means; the compiler has settled that. What it decides is how to make the code safe for a collector that moves objects, and how to produce code fast when the program is the eco compiler itself, a single module of tens of thousands of small functions.
 
 > **Background**
 >
@@ -27,7 +27,7 @@ The product compiler, the bootstrap compiler, a developer tool and the test JIT 
 
 ## Finding every heap pointer
 
-Eco's collector moves objects. At every call that might collect, it must know each stack slot and register holding a heap pointer, and be able to replace it with the object's new address. Eco gets this from LLVM rather than computing it by hand, using the statepoint mechanism LLVM provides for collectors that relocate objects. Every boxed value is lowered to a pointer in a separate address space, which Eco's collector strategy marks as garbage-collected memory, and LLVM's statepoint pass works out from liveness which of those pointers survive each call.
+eco's collector moves objects. At every call that might collect, it must know each stack slot and register holding a heap pointer, and be able to replace it with the object's new address. eco gets this from LLVM rather than computing it by hand, using the statepoint mechanism LLVM provides for collectors that relocate objects. Every boxed value is lowered to a pointer in a separate address space, which eco's collector strategy marks as garbage-collected memory, and LLVM's statepoint pass works out from liveness which of those pointers survive each call.
 
 A test fixture shows the effect (trimmed). `%root` is live across two calls that may allocate:
 
@@ -41,7 +41,7 @@ func.func @test_loop_root(%root: !eco.value, %other: !eco.value) -> !eco.value {
 
 Nothing in the input mentions roots. In the LLVM output each call becomes a `gc.statepoint`, and `%root` comes back from each through `gc.relocate`, so the value returned is the twice-relocated pointer. The stack maps go into a section of each object file that the collector reads from the running image, so every link step must keep it.
 
-One danger follows. Compiled code sometimes reads a heap pointer as an integer, to test a tag bit, and if that integer is used after a statepoint, it is stale. Eco therefore places statepoints *before* LLVM's optimiser, not after it as LLVM intends, and until then writes such conversions in a form LLVM cannot fold away.
+One danger follows. Compiled code sometimes reads a heap pointer as an integer, to test a tag bit, and if that integer is used after a statepoint, it is stale. eco therefore places statepoints *before* LLVM's optimiser, not after it as LLVM intends, and until then writes such conversions in a form LLVM cannot fold away.
 
 ## Whole-program facts first, then split
 

@@ -34,7 +34,7 @@ Support the platforms that Elm developers use.
 
 - [x] Support for Mac.
 - [x] Support for Windows.
-- [x] New Eco Kernel packages suited to CLI and server-side environments (files, webserver, sockets, posix).
+- [x] New eco Kernel packages suited to CLI and server-side environments (files, webserver, sockets, posix).
 - [x] Completion of all standard libraries (browser, virtual-dom)
 - [x] CI nightly builds with extensive testing.
 

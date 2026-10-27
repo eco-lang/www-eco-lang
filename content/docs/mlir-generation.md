@@ -1,6 +1,6 @@
 ---
 title: "MLIR generation"
-description: "How Eco writes the fully specialized program out as eco-dialect MLIR, one function per specialization, reading every decision from the program graph and converting values between their boxed and unboxed forms only where two forms meet."
+description: "How eco writes the fully specialized program out as eco-dialect MLIR, one function per specialization, reading every decision from the program graph and converting values between their boxed and unboxed forms only where two forms meet."
 section: "The compiler"
 sectionOrder: 2
 order: 7
@@ -10,7 +10,7 @@ By the time MLIR generation runs, every decision that changes what the program m
 
 > **Background**
 >
-> - [MLIR](/docs/glossary#mlir) is a compiler framework built from [dialects](/docs/glossary#dialect), families of operations. Eco's own dialect is described in [The eco dialect](/docs/eco-dialect).
+> - [MLIR](/docs/glossary#mlir) is a compiler framework built from [dialects](/docs/glossary#dialect), families of operations. eco's own dialect is described in [The eco dialect](/docs/eco-dialect).
 > - [SSA](/docs/glossary#ssa) (static single assignment) is the style of MLIR code: each value is defined exactly once.
 > - [Boxed and unboxed](/docs/glossary#boxed-and-unboxed): an unboxed value is a raw number in a register; a boxed value is a pointer to a heap object.
 
@@ -35,7 +35,7 @@ main =
     text (String.fromInt (magnitude point))
 ```
 
-Read naively, this program allocates two tuples: the one returned by `divMod`, and `point`. At default settings Eco allocates neither. This is the output (trimmed: operand types and most function attributes removed):
+Read naively, this program allocates two tuples: the one returned by `divMod`, and `point`. At default settings eco allocates neither. This is the output (trimmed: operand types and most function attributes removed):
 
 ```mlir
   "func.func"() ({

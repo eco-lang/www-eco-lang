@@ -1,12 +1,12 @@
 ---
 title: "Closures and calls"
-description: "How Eco represents every Elm function value as a heap closure whose header says how to apply it, so that one generic runtime routine is always correct and the compiler adds faster paths only where it can prove they are safe."
+description: "How eco represents every Elm function value as a heap closure whose header says how to apply it, so that one generic runtime routine is always correct and the compiler adds faster paths only where it can prove they are safe."
 section: "The runtime"
 sectionOrder: 4
 order: 3
 ---
 
-Every Elm function value in Eco is a closure on the heap, and its header says everything needed to call it: how many arguments it takes, how many it already holds, and how each one is stored. One runtime routine can therefore apply *any* closure to *any* number of arguments, with no help from the call site. Because that generic path is always correct, every faster path the compiler adds is optional, and the compiler takes one only where it can prove, or cheaply check, that it is safe.
+Every Elm function value in eco is a closure on the heap, and its header says everything needed to call it: how many arguments it takes, how many it already holds, and how each one is stored. One runtime routine can therefore apply *any* closure to *any* number of arguments, with no help from the call site. Because that generic path is always correct, every faster path the compiler adds is optional, and the compiler takes one only where it can prove, or cheaply check, that it is safe.
 
 > **Background**
 >
@@ -16,7 +16,7 @@ Every Elm function value in Eco is a closure on the heap, and its header says ev
 
 ## One small example
 
-The shapes program from [A tour through the compiler](/docs/tour) contains `twice (add 1) 10`, where `add a b = a + b` and `twice f x = f (f x)`. Eco's compiler emits this for it (trimmed: operand types removed):
+The shapes program from [A tour through the compiler](/docs/tour) contains `twice (add 1) 10`, where `add a b = a + b` and `twice f x = f (f x)`. eco's compiler emits this for it (trimmed: operand types removed):
 
 ```mlir
 %4 = "eco.papCreate"() {_result_kind = 1 : i8, arity = 2, function = @Main_add_$_1, num_captured = 0} : () -> !eco.value

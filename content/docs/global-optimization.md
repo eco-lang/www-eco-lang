@@ -1,6 +1,6 @@
 ---
 title: "Global optimization"
-description: "How Eco, once the whole program is specialized, decides how every call is made — a direct call, a fast closure call or the runtime's generic apply — and writes that decision onto the call for code generation to read."
+description: "How eco, once the whole program is specialized, decides how every call is made — a direct call, a fast closure call or the runtime's generic apply — and writes that decision onto the call for code generation to read."
 section: "The compiler"
 sectionOrder: 2
 order: 6
@@ -116,7 +116,7 @@ Calls to kernels and to top-level functions with all their arguments are plain `
 %12 = "eco.papExtend"(%fn, %7, %acc) {_call_kind = "singleton_fast", _fast_evaluator = @Stage_lambda_12$cap, remaining_arity = 2, ...} : (!eco.value, i64, !eco.value) -> !eco.value
 ```
 
-The order of the tests is the policy. A known segmentation needs every test to pass: the callee must come from something the phase can see (a top-level function, a closure bound by `let` or captured, or a tail-recursive definition); it must not be a function-typed parameter of an enclosing loop; and it must not trace back to a partial application whose return type was polymorphic. An arity read only from the type never claims a known segmentation. A `case` or `if` that produces closures yields known stages only when every branch agrees; Eco does not re-stage branches to make them agree, and leaves such joins to the runtime.
+The order of the tests is the policy. A known segmentation needs every test to pass: the callee must come from something the phase can see (a top-level function, a closure bound by `let` or captured, or a tail-recursive definition); it must not be a function-typed parameter of an enclosing loop; and it must not trace back to a partial application whose return type was polymorphic. An arity read only from the type never claims a known segmentation. A `case` or `if` that produces closures yields known stages only when every branch agrees; eco does not re-stage branches to make them agree, and leaves such joins to the runtime.
 
 ## Two rules every pass shares
 
@@ -124,7 +124,7 @@ Every pass that needs to know what a C++ kernel does reads the same table: wheth
 
 `Debug` output is observable on the native path, because optimised native builds keep `Debug` calls. Therefore no pass may delete, merge or reorder an expression that can reach a `Debug` kernel, directly or through the functions it calls. A whole-program analysis works out which specializations can.
 
-> **Designs we didn't use.** A staging solver could group closures into classes, vote on one staging per class and wrap the closures that disagree. We built one, and on every program we measured it inserted no wrappers and the output without it was byte for byte the same, so Eco does without it.
+> **Designs we didn't use.** A staging solver could group closures into classes, vote on one staging per class and wrap the closures that disagree. We built one, and on every program we measured it inserted no wrappers and the output without it was byte for byte the same, so eco does without it.
 
 ## Further reading
 

@@ -1,22 +1,22 @@
 ---
 title: "The runtime"
-description: "Eco's C++ runtime, linked into every executable, gives each program one thread that owns the heap, a garbage collector and an event loop that runs Elm's tasks."
+description: "eco's C++ runtime, linked into every executable, gives each program one thread that owns the heap, a garbage collector and an event loop that runs Elm's tasks."
 section: "The runtime"
 sectionOrder: 4
 order: 1
 ---
 
-Every compiled Eco program links in a runtime written in C++. Its central rule is that one thread, the eco thread, runs all Elm code and is the only thread that touches the heap. Every other thread (timers, network waits, the collector's helpers) works on plain data or under a strict protocol, and hands results back to the eco thread to turn into Elm values.
+Every compiled eco program links in a runtime written in C++. Its central rule is that one thread, the eco thread, runs all Elm code and is the only thread that touches the heap. Every other thread (timers, network waits, the collector's helpers) works on plain data or under a strict protocol, and hands results back to the eco thread to turn into Elm values.
 
 > **Background**
 >
 > - An [eco thread](/docs/glossary#eco-thread) is the one thread per process that runs Elm code and allocates Elm values.
-> - The [mutator](/docs/glossary#mutator) is collector jargon for the code that allocates and changes pointers; in Eco it is the eco thread.
-> - A [write barrier](/docs/glossary#write-barrier) is extra work a collector adds to every pointer store. Eco has none.
+> - The [mutator](/docs/glossary#mutator) is collector jargon for the code that allocates and changes pointers; in eco it is the eco thread.
+> - A [write barrier](/docs/glossary#write-barrier) is extra work a collector adds to every pointer store. eco has none.
 
 The runtime has two halves. The garbage collector decides how values are stored and when they are reclaimed. The scheduler decides when Elm code runs. Both are built around the eco thread.
 
-![Threads in a running Eco program and what passes between them](/images/docs/runtime-threads.svg)
+![Threads in a running eco program and what passes between them](/images/docs/runtime-threads.svg)
 
 ## The eco thread owns the heap
 
@@ -49,7 +49,7 @@ The collector moves young objects, so it must find every live pointer and rewrit
 
 ## Where threads could go
 
-Two ideas are easy to confuse here. *Concurrency* is a program doing several things that wait on the world, such as timers, sockets and child processes. *Parallelism* is Elm code running on several cores at once. Eco has the first today, through the scheduler and its service threads. It does not yet have the second.
+Two ideas are easy to confuse here. *Concurrency* is a program doing several things that wait on the world, such as timers, sockets and child processes. *Parallelism* is Elm code running on several cores at once. eco has the first today, through the scheduler and its service threads. It does not yet have the second.
 
 One heap shared by several mutators is the route we rejected. Young objects on one thread would become reachable from another, and the collector's central simplification, that no object ever points at a younger one, would no longer hold. Avoiding that with stop-the-world collections would need safepoint polls in every loop, and either way the formal models of the collector would grow much larger. In our view the right shape is a heap per thread, with immutable messages as the only thing that crosses between them. That is close to the actor model, and to how Elm programs are already structured:
 
@@ -62,7 +62,7 @@ This is a sketch, not an API we are building, and memory accounting, which is pr
 
 ## Further reading
 
-- [Eco at a glance](/docs/theory) — where the runtime sits among the compiler and backend.
+- [eco at a glance](/docs/theory) — where the runtime sits among the compiler and backend.
 - [The garbage collector](/docs/garbage-collector) — the immutability argument in full.
 - [Scheduler and services](/docs/scheduler-and-services) — the event loop and service threads in detail.
 - The full design document: [Runtime theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/runtime/runtime.md)

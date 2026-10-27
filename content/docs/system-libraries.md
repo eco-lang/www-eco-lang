@@ -1,22 +1,22 @@
 ---
 title: "System libraries"
-description: "What Eco's own IO libraries give a program, from files and child processes to sockets and an HTTP server, and how their C++ kernels do slow work off the thread that runs Elm."
+description: "What eco's own IO libraries give a program, from files and child processes to sockets and an HTTP server, and how their C++ kernels do slow work off the thread that runs Elm."
 section: "The runtime"
 sectionOrder: 4
 order: 8
 ---
 
-Elm was built for the browser, and has no way to read a file, start a process or listen on a socket. Eco adds one: `eco/system`, an Elm package for command-line programs and servers, whose functions end in C++ kernels for native code and JavaScript kernels for Node. Its API is a port of the Node library of Gren, a language close to Elm. A program written with it is still an ordinary Elm program: it describes work as tasks and commands, and the runtime does the work.
+Elm was built for the browser, and has no way to read a file, start a process or listen on a socket. eco adds one: `eco/system`, an Elm package for command-line programs and servers, whose functions end in C++ kernels for native code and JavaScript kernels for Node. Its API is a port of the Node library of Gren, a language close to Elm. A program written with it is still an ordinary Elm program: it describes work as tasks and commands, and the runtime does the work.
 
 > **Background**
 >
 > - [Kernel](/docs/glossary#kernel): a function with no Elm body, implemented by the platform.
-> - [Eco thread](/docs/glossary#eco-thread): the one thread that runs Elm code and owns the heap.
+> - [eco thread](/docs/glossary#eco-thread): the one thread that runs Elm code and owns the heap.
 > - A *stream* is a source or sink of bytes that can be read or written a piece at a time.
 
 ## A small program
 
-This is the `cat` from Eco's examples, which copies each file named on the command line to standard output, or standard input when none is named (module header and imports trimmed):
+This is the `cat` from eco's examples, which copies each file named on the command line to standard output, or standard input when none is named (module header and imports trimmed):
 
 ```elm
 main : Platform.Program System.Environment () ()
@@ -70,7 +70,7 @@ Three things in it are typical. The environment arrives as the program's flags: 
 - **An HTTP server** with HTTP/1.1, HTTPS and HTTP/2 over TLS, and **WebSockets** as client and server.
 - **The terminal**, signals and file watches.
 
-There is no HTTP client. Elm's own `elm/http` already runs natively through [Elm's kernels](/docs/kernels), so `eco/system` adds only streaming request and response bodies on top of it. The examples folder that ships with Eco has an `ls`, TCP and UDP echo servers, a TLS client, an HTTP echo server and a WebSocket chat room. [Getting started](/docs/getting-started) shows how to build them.
+There is no HTTP client. Elm's own `elm/http` already runs natively through [Elm's kernels](/docs/kernels), so `eco/system` adds only streaming request and response bodies on top of it. The examples folder that ships with eco has an `ls`, TCP and UDP echo servers, a TLS client, an HTTP echo server and a WebSocket chat room. [Getting started](/docs/getting-started) shows how to build them.
 
 ## Doing slow work off the eco thread
 
@@ -110,12 +110,12 @@ Each module of both libraries has an Elm wrapper with the public API, a C++ kern
 
 Every module is tested on Linux and macOS, where the end-to-end suite runs in continuous integration. Windows is not supported yet: the package builds there, but most IO functions report that they are not supported.
 
-> **Designs we didn't use.** Starting child processes with `fork` would copy the whole heap into a child that only wants to run another program, so Eco uses `posix_spawn`.
+> **Designs we didn't use.** Starting child processes with `fork` would copy the whole heap into a child that only wants to run another program, so eco uses `posix_spawn`.
 
 ## Further reading
 
 - [Kernels](/docs/kernels) — the kernel mechanism these libraries are built on.
 - [Scheduler and services](/docs/scheduler-and-services) — the event loop, tokens and holds the services plug into.
-- [Getting started](/docs/getting-started) — installing Eco and building the example programs.
+- [Getting started](/docs/getting-started) — installing eco and building the example programs.
 - The full design document: [System libraries theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/kernels/system-libraries.md)
 - Source: [`system-kernel-cpp`](https://github.com/eco-lang/eco-compiler/tree/master/system-kernel-cpp)

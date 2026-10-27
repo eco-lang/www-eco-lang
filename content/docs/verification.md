@@ -1,16 +1,16 @@
 ---
 title: "How we know it works"
-description: "How Eco is tested, from checkers that walk the compiler's intermediate forms to whole programs, hand-written MLIR fixtures, property tests on random heaps and weak-memory model checking, each layer aimed at the bugs the others cannot see."
+description: "How eco is tested, from checkers that walk the compiler's intermediate forms to whole programs, hand-written MLIR fixtures, property tests on random heaps and weak-memory model checking, each layer aimed at the bugs the others cannot see."
 section: "Getting it right"
 sectionOrder: 5
 order: 1
 ---
 
-A compiler bug is cheapest to find with the check closest to where it was made. A phase that breaks its contract can still produce a program that prints the right answer, a wrong lowering of one operation can hide among the hundreds a real program uses, and a race between collector threads may show up once in a million runs. Eco therefore has no single test suite. Each class of bug gets the cheapest check that can catch it, and no layer tries to catch everything.
+A compiler bug is cheapest to find with the check closest to where it was made. A phase that breaks its contract can still produce a program that prints the right answer, a wrong lowering of one operation can hide among the hundreds a real program uses, and a race between collector threads may show up once in a million runs. eco therefore has no single test suite. Each class of bug gets the cheapest check that can catch it, and no layer tries to catch everything.
 
 > **Background**
 >
-> - [MLIR](/docs/glossary#mlir): the compiler framework whose textual form sits between Eco's Elm-written front end and its C++ back end.
+> - [MLIR](/docs/glossary#mlir): the compiler framework whose textual form sits between eco's Elm-written front end and its C++ back end.
 > - [SSA](/docs/glossary#ssa): the form in which every value is defined exactly once and referred to by name.
 > - [JIT and AOT](/docs/glossary#jit-and-aot): running compiled code straight from memory, or producing a native executable first.
 > - [Fixed point](/docs/glossary#fixed-point): a compiler that, rebuilt with itself, produces itself again byte for byte.
@@ -86,7 +86,7 @@ main =
     text "done"
 ```
 
-A test from the language corpus. The file is the whole test: no C++ names it, and the runners find it by its directory. Because the expected output lives in the source, no reference implementation is needed and the same file runs unchanged on every back end. Programs that use Eco's system library can also state the exit status they must return and text to feed on standard input.
+A test from the language corpus. The file is the whole test: no C++ names it, and the runners find it by its directory. Because the expected output lives in the source, no reference implementation is needed and the same file runs unchanged on every back end. Programs that use eco's system library can also state the exit status they must return and text to feed on standard input.
 
 Several runners share this corpus and differ in what a pass proves. The JIT runner checks behaviour. The AOT runner compiles each program to a native executable and must pass what the JIT passes. A JavaScript runner runs the system-library programs under Node, because that library promises the same Elm interface on both back ends. A stress runner scales programs up with start-up flags for size and duration, so the collector runs for a long time under real code. Conformance scripts point the third-party Autobahn WebSocket and h2spec HTTP/2 suites at an example server built for both back ends; for h2spec the bar is a recorded baseline of passing cases that must not fall, because mature servers fail some strict cases on purpose.
 
@@ -117,7 +117,7 @@ A fixture is a small hand-written MLIR file fed straight into the back end, with
 // CHECK-NEXT: [eco.dbg] 0{{$}}
 ```
 
-From the fixture that divides the smallest 64-bit integer by −1 (trimmed: the constants and the marker print are omitted). In LLVM, signed division of `MIN_INT` by −1 is undefined behaviour, and on x86 it traps. The fixture exists because the lowering once guarded only against division by zero. The lesson is in why that went unseen: an older fixture already computed `MIN_INT // -1` and printed garbage, yet it passed. Its expected line was satisfied by an *earlier* output line, because plain `CHECK` lines match anywhere in the output. The new fixture chains its lines with `CHECK-NEXT` and anchors each one at the end of the line, so every result is checked where it is printed. The fix makes Eco's integer division total, with wrapping results; [The numbered invariants](/docs/invariants) follows that rule through the code.
+From the fixture that divides the smallest 64-bit integer by −1 (trimmed: the constants and the marker print are omitted). In LLVM, signed division of `MIN_INT` by −1 is undefined behaviour, and on x86 it traps. The fixture exists because the lowering once guarded only against division by zero. The lesson is in why that went unseen: an older fixture already computed `MIN_INT // -1` and printed garbage, yet it passed. Its expected line was satisfied by an *earlier* output line, because plain `CHECK` lines match anywhere in the output. The new fixture chains its lines with `CHECK-NEXT` and anchors each one at the end of the line, so every result is checked where it is printed. The fix makes eco's integer division total, with wrapping results; [The numbered invariants](/docs/invariants) follows that rule through the code.
 
 Fixtures reach what no Elm program can. The front end checks a program before it becomes MLIR, so no source can produce a record one field past the heap's limit, a closure with too many arguments, or a malformed operation the dialect's verifier must reject. Each limit has a fixture at the limit that must compile and a twin one past it that must be rejected. The cost is that a fixture says nothing about whether the compiler ever emits its MLIR, so a new lowering gets both a fixture and an Elm program that reaches it from source.
 
@@ -158,7 +158,7 @@ Property tests almost never produce a rare thread schedule, so three more tools 
 - **The [formal models](/docs/concurrency-models)** explore every interleaving of each collector protocol at small sizes, but they assume every thread sees writes in one global order.
 - **GenMC** closes that gap. It explores every execution of a small program that the C11 memory model allows, which matters on ARM, where a relaxed atomic can be seen out of order. Its drivers compile the real, unmodified allocator headers.
 
-GenMC's results are a useful calibration. Every driver written against the existing code passed: it found no new defect in Eco's code, and it confirmed two races that the models and code reading had already found. What it did find were four bugs or gaps in GenMC itself, among them an abort on a `memset` to a constant address and an error report that drops the text of the failed assertion. The drivers work around each one.
+GenMC's results are a useful calibration. Every driver written against the existing code passed: it found no new defect in eco's code, and it confirmed two races that the models and code reading had already found. What it did find were four bugs or gaps in GenMC itself, among them an abort on a `memset` to a constant address and an error report that drops the text of the failed assertion. The drivers work around each one.
 
 Every concurrency defect any tool finds goes into a register and gets a guard that replays it. While the defect is open the guard is an expected failure, and an expected failure that starts passing fails the run, so a defect cannot vanish unnoticed either. Each fix is checked by reverting it and watching the guard fail again.
 

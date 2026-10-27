@@ -1,12 +1,12 @@
 ---
 title: "Optimisations"
-description: "Every optimisation Eco performs, grouped by the stage of the compiler, backend or runtime that does it, with a short example of each."
+description: "Every optimisation eco performs, grouped by the stage of the compiler, backend or runtime that does it, with a short example of each."
 section: "Introduction"
 sectionOrder: 1
 order: 5
 ---
 
-An optimisation can only use what is known at the point it runs. Some facts are known within one module, some only once types are concrete, some only once the whole program is linked, and some only in the machine code. Each of Eco's optimisations therefore runs at the earliest stage that has the fact it needs, and this page lists them in that order, each with a sentence or two and a link to the article that explains it.
+An optimisation can only use what is known at the point it runs. Some facts are known within one module, some only once types are concrete, some only once the whole program is linked, and some only in the machine code. Each of eco's optimisations therefore runs at the earliest stage that has the fact it needs, and this page lists them in that order, each with a sentence or two and a link to the article that explains it.
 
 > **Background**
 > - [Monomorphization](/docs/glossary#monomorphization): making one copy of a generic function for each type it is used at.
@@ -17,7 +17,7 @@ An optimisation can only use what is known at the point it runs. Some facts are 
 
 One principle runs through all of them: we judge an optimisation by the work it removes, not by how clever it is. A copying collector makes short-lived objects almost free and copies only those that survive into the old generation, so an optimisation that saves allocations can still change nothing in run time unless it also reduces what is retained. That lesson took a few experiments to learn.
 
-The examples below are real output from Eco 0.2.0, with attributes trimmed. [A tour through the compiler](/docs/tour) shows several of them in the context of one whole program.
+The examples below are real output from eco 0.2.0, with attributes trimmed. [A tour through the compiler](/docs/tour) shows several of them in the context of one whole program.
 
 ## Before types are concrete
 
@@ -29,7 +29,7 @@ These run on each module by itself, before the whole program is known, and every
 
 **Operator rewrites.** `&&` and `||` become conditionals, so the right-hand side is only evaluated when needed, and `|>` and `<|` become plain calls with no function value in between.
 
-**Merging function boundaries.** `adder a = \b -> a + b` is written as a one-argument function that returns a function. Eco merges the two levels into one two-argument function, `Stage_adder_$_5 : (i64, i64) -> i64`, so a full call to `adder` builds no intermediate closure.
+**Merging function boundaries.** `adder a = \b -> a + b` is written as a one-argument function that returns a function. eco merges the two levels into one two-argument function, `Stage_adder_$_5 : (i64, i64) -> i64`, so a full call to `adder` builds no intermediate closure.
 
 ## Whole program
 
@@ -37,7 +37,7 @@ These need every module linked, starting from `main`. See [Global optimization](
 
 **Monomorphization and unboxing.** Every generic function is copied once per type it is used at, and in each copy `Int`, `Float` and `Char` values are held unboxed, in registers and in the fields of the objects that contain them. `add : number -> number -> number`, used only on `Int`, becomes `Main_add_$_1 : (i64, i64) -> i64`. See [Monomorphization](/docs/monomorphization).
 
-**Lambda-set specialization.** For every call through a function value, Eco works out which functions can arrive there. When only one can, the call goes straight to it. On the compiler compiling itself, it turns roughly three quarters of the generic closure applications into direct or fast calls, and raises the share of calls with a statically known target from about 84% to about 94%. See [Lambda-set specialization](/docs/lambda-set-specialization).
+**Lambda-set specialization.** For every call through a function value, eco works out which functions can arrive there. When only one can, the call goes straight to it. On the compiler compiling itself, it turns roughly three quarters of the generic closure applications into direct or fast calls, and raises the share of calls with a statically known target from about 84% to about 94%. See [Lambda-set specialization](/docs/lambda-set-specialization).
 
 **Alias forwarding and eta-expansion.** A definition that only names another, such as `dup = twice`, disappears, and references to it go to `twice` directly. A definition that is a partial application, such as `inc = adder 1`, is rewritten to take its missing argument, so `inc` becomes a one-argument function that calls `adder` directly:
 
@@ -102,7 +102,7 @@ See [The runtime](/docs/runtime), [The garbage collector](/docs/garbage-collecto
 ## Further reading
 
 - [A tour through the compiler](/docs/tour) — many of these optimisations, seen in one program's real output.
-- [Performance](/docs/performance) — what they add up to on the benchmark suite, including where Eco is slower.
+- [Performance](/docs/performance) — what they add up to on the benchmark suite, including where eco is slower.
 - [Global optimization](/docs/global-optimization) — the whole-program stage, where most of these run.
 - [The garbage collector](/docs/garbage-collector) — the generational collector and why it needs no write barrier.
 - The full design document: [Global optimization theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/compiler/global-optimization.md)

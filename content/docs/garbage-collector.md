@@ -1,12 +1,12 @@
 ---
 title: "The garbage collector"
-description: "How Eco's generational, concurrent garbage collector works without any write barrier, because in Elm an old object can never point at a younger one."
+description: "How eco's generational, concurrent garbage collector works without any write barrier, because in Elm an old object can never point at a younger one."
 section: "The runtime"
 sectionOrder: 4
 order: 5
 ---
 
-Most generational collectors, such as those in the JVM and V8, put a write barrier on every pointer store so they can track pointers from old objects to young ones. Eco's collector has none, because in Elm an old object can never point at a younger one. The same fact lets it mark the old generation and promote survivors on background threads while the program runs, again without barriers. On the compiler compiling itself, its worst pause is under a tenth of a second, against nearly three seconds for a single-threaded collector.
+Most generational collectors, such as those in the JVM and V8, put a write barrier on every pointer store so they can track pointers from old objects to young ones. eco's collector has none, because in Elm an old object can never point at a younger one. The same fact lets it mark the old generation and promote survivors on background threads while the program runs, again without barriers. On the compiler compiling itself, its worst pause is under a tenth of a second, against nearly three seconds for a single-threaded collector.
 
 > **Background**
 >
@@ -25,7 +25,7 @@ The same property removes the barriers a *concurrent* collector usually needs. N
 
 ## Keeping the heap frozen
 
-*Immutable values* are a property of the language; a *frozen heap* is a property of the runtime, and Eco needs both. The heap is written by compiled code and by C++ that could store anywhere, so each writer keeps its own rule:
+*Immutable values* are a property of the language; a *frozen heap* is a property of the runtime, and eco needs both. The heap is written by compiled code and by C++ that could store anywhere, so each writer keeps its own rule:
 
 1. Compiled code stores only into objects it allocated since its last safepoint. Such an object cannot have moved or aged.
 2. Recursive closures are wired up inside the same allocation, with no safepoint in between.

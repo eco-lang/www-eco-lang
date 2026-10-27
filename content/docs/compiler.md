@@ -1,17 +1,17 @@
 ---
 title: "The compiler"
-description: "An overview of Eco's compiler: a per-module half that checks and caches typed code, a whole-program half that specializes it, and the parts that make up each."
+description: "An overview of eco's compiler: a per-module half that checks and caches typed code, a whole-program half that specializes it, and the parts that make up each."
 section: "The compiler"
 sectionOrder: 2
 order: 1
 ---
 
-Eco's compiler works in two halves with a cache between them. The first half looks at one module at a time and keeps everything the type checker learned about it. The second half sees the whole program at once and uses those types to turn polymorphic, higher-order Elm into code where every value has one concrete layout and most calls go straight to a known function.
+eco's compiler works in two halves with a cache between them. The first half looks at one module at a time and keeps everything the type checker learned about it. The second half sees the whole program at once and uses those types to turn polymorphic, higher-order Elm into code where every value has one concrete layout and most calls go straight to a known function.
 
 > **Background**
 > - [Monomorphization](/docs/glossary#monomorphization): making one copy of a polymorphic function for each concrete type it is used at.
 > - [Lambda set](/docs/glossary#lambda-set): the set of functions that can reach a place that holds a function value.
-> - [MLIR](/docs/glossary#mlir): a compiler framework for building intermediate languages; Eco's own is the eco [dialect](/docs/glossary#dialect).
+> - [MLIR](/docs/glossary#mlir): a compiler framework for building intermediate languages; eco's own is the eco [dialect](/docs/glossary#dialect).
 
 ## Two halves
 
@@ -19,7 +19,7 @@ The per-module half parses a module, resolves its names, type checks it, runs El
 
 The whole-program half links the cached graphs into one typed program rooted at `main` and runs a fixed list of steps over it. It specializes every function to the concrete types it is used at, works out which functions can reach each call, inlines, removes what nothing reaches any more, settles how each call is made, and writes the result as eco-dialect MLIR for the C++ [backend](/docs/backend).
 
-![The parts of the Eco compiler and what passes between them](/images/docs/compiler-pipeline.svg)
+![The parts of the eco compiler and what passes between them](/images/docs/compiler-pipeline.svg)
 
 Two properties of Elm make the whole-program half safe. Elm has no side effects, so inlining, deleting unreachable code or copying a function for one type changes nothing a program can observe. And the whole program is known, so the second half can start from `main` and see every use of every function. Languages with separate compilation and mutable state, such as C++ or OCaml, have to be more conservative on both counts.
 
@@ -29,7 +29,7 @@ Each fact is computed once, at the step that can compute it, and passed forward 
 
 ## Typed or erased, chosen once per build
 
-Stock Elm's optimiser throws types away, because JavaScript does not need them. Eco's native path does need them. Rather than change Elm's optimiser, Eco keeps a typed form of the optimised program beside Elm's erased one. MLIR and native outputs take the typed path. JavaScript and HTML take the erased path, Elm's own optimiser and generator, so Eco's JavaScript is what Elm produces.
+Stock Elm's optimiser throws types away, because JavaScript does not need them. eco's native path does need them. Rather than change Elm's optimiser, eco keeps a typed form of the optimised program beside Elm's erased one. MLIR and native outputs take the typed path. JavaScript and HTML take the erased path, Elm's own optimiser and generator, so eco's JavaScript is what Elm produces.
 
 Both paths share one constraint generator, which records each expression's solver variable only in typed mode. In our view one generator with a mode is the only safe arrangement: two near-identical generators drift, and ours once drifted far enough to report the same record-update error at different places in the source.
 
@@ -42,7 +42,7 @@ The typed path has six parts, in the order a program passes through them.
 - **[Monomorphization](/docs/monomorphization)** starts from `main` and makes one specialization of each function for each concrete type it is used at, typing each one with the type checker's own unifier.
 - **[Lambda-set specialization](/docs/lambda-set-specialization)** works out which functions can reach each call. It is not a separate pass: it runs inside monomorphization, in the same solver.
 - **[Global optimization](/docs/global-optimization)** inlines, regroups curried functions by the arguments they take, and records how every call is made.
-- **[MLIR generation](/docs/mlir-generation)** writes the finished program out in the eco dialect. Everything has been decided by then, so it only reads decisions. [Bytes fusion](/docs/bytes-fusion) is a fast path inside it for `elm/bytes` encoders and decoders, and Eco's largest use of [reification](/docs/reification).
+- **[MLIR generation](/docs/mlir-generation)** writes the finished program out in the eco dialect. Everything has been decided by then, so it only reads decisions. [Bytes fusion](/docs/bytes-fusion) is a fast path inside it for `elm/bytes` encoders and decoders, and eco's largest use of [reification](/docs/reification).
 
 Beside them sit [JavaScript output](/docs/javascript-output), Elm's original generator, and [the build driver](/docs/build-driver), which runs everything over a project from the cache.
 

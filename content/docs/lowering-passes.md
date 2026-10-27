@@ -1,6 +1,6 @@
 ---
 title: "Lowering passes"
-description: "Eco lowers its eco dialect to LLVM through about twenty small MLIR passes, each placed at the first point where the fact it needs can be decided and nothing later can make it false."
+description: "eco lowers its eco dialect to LLVM through about twenty small MLIR passes, each placed at the first point where the fact it needs can be decided and nothing later can make it false."
 section: "The backend"
 sectionOrder: 3
 order: 3
@@ -11,7 +11,7 @@ Between the eco dialect and LLVM sit about twenty small passes, in a fixed order
 > **Background**
 >
 > - [Lowering](/docs/glossary#lowering) — rewriting operations into simpler ones closer to the machine; a *pass* is one such rewrite over the whole module.
-> - [Dialect](/docs/glossary#dialect) — a family of MLIR operations; Eco lowers from its own [eco dialect](/docs/eco-dialect) to MLIR's standard ones and then to LLVM's.
+> - [Dialect](/docs/glossary#dialect) — a family of MLIR operations; eco lowers from its own [eco dialect](/docs/eco-dialect) to MLIR's standard ones and then to LLVM's.
 > - [Safepoint](/docs/glossary#safepoint) — a call at which the collector may run; LLVM later turns each into a [statepoint](/docs/glossary#statepoint-and-stack-map).
 
 ## A first lowering
@@ -53,7 +53,7 @@ One unsigned comparison catches both special divisors: adding 1 maps −1 to 0 a
 
 ## The order, in three layers
 
-One function builds the pass list, and every tool that compiles Eco code calls it. The list has three nested layers, and a developer tool can stop after any of them and print the module. In outline, with validation-only checks in brackets:
+One function builds the pass list, and every tool that compiles eco code calls it. The list has three nested layers, and a developer tool can stop after any of them and print the module. In outline, with validation-only checks in brackets:
 
 ```text
 eco to eco:          reference-counting guard; [closure-capture check]

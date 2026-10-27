@@ -1,12 +1,12 @@
 ---
 title: "A tour through the compiler"
-description: "One small Elm program followed through every stage of Eco, from source and type checking through monomorphization, MLIR and lowering to a running native executable, with the real compiler output at each step."
+description: "One small Elm program followed through every stage of eco, from source and type checking through monomorphization, MLIR and lowering to a running native executable, with the real compiler output at each step."
 section: "Introduction"
 sectionOrder: 1
 order: 4
 ---
 
-This page follows one 49-line Elm program through every stage of Eco, from source text to a native executable, and shows what the compiler actually produces at each step. In our view, watching one program go through a compiler explains it faster than any description of the stages. By the end, a `case` over three shapes has become a three-way branch on a tag, an `Int` list has its numbers stored directly in the list cells, and a function passed as an argument is called directly.
+This page follows one 49-line Elm program through every stage of eco, from source text to a native executable, and shows what the compiler actually produces at each step. In our view, watching one program go through a compiler explains it faster than any description of the stages. By the end, a `case` over three shapes has become a three-way branch on a tag, an `Int` list has its numbers stored directly in the list cells, and a function passed as an argument is called directly.
 
 > **Background**
 > - [MLIR](/docs/glossary#mlir): a framework for writing compiler intermediate languages, each called a [dialect](/docs/glossary#dialect).
@@ -14,17 +14,17 @@ This page follows one 49-line Elm program through every stage of Eco, from sourc
 > - [Lambda set](/docs/glossary#lambda-set): the set of functions that can reach a particular call through a function value.
 > - [Lowering](/docs/glossary#lowering): rewriting operations of a high-level dialect into simpler ones, ending in LLVM's.
 
-![The stages of Eco, from Elm source to native code](/images/docs/overview-pipeline.svg)
+![The stages of eco, from Elm source to native code](/images/docs/overview-pipeline.svg)
 
 ## Following along
 
-Every listing of compiler output below comes from Eco 0.2.0. To reproduce it, put the program in `src/Main.elm` of an Elm project and run:
+Every listing of compiler output below comes from eco 0.2.0. To reproduce it, put the program in `src/Main.elm` of an Elm project and run:
 
 ```text
 eco make src/Main.elm --text-mlir --output=main.mlir
 ```
 
-The `.mlir` ending asks for the compiler's output just before the backend, and `--text-mlir` makes it readable text instead of bytecode. Setting `ECO_INLINE_THRESHOLD=0` in the environment stops the inliner absorbing small functions, which helps when you want to see every function survive. The listings omit the `_operand_types` attribute that Eco puts on every operation, and are marked "trimmed" where they do.
+The `.mlir` ending asks for the compiler's output just before the backend, and `--text-mlir` makes it readable text instead of bytecode. Setting `ECO_INLINE_THRESHOLD=0` in the environment stops the inliner absorbing small functions, which helps when you want to see every function survive. The listings omit the `_operand_types` attribute that eco puts on every operation, and are marked "trimmed" where they do.
 
 ## 1. The program
 
@@ -84,9 +84,9 @@ Three things in it are hard for a native compiler. `twice` and `add` do not say 
 
 ## 2. The front end: keeping the types
 
-Eco's front end is Elm's own, by way of Guida, a port of the Elm compiler to Elm. It parses the module, resolves every name to the module that defines it, and runs Elm's type checker, so a type error in this program would read exactly as it does under `elm make`.
+eco's front end is Elm's own, by way of Guida, a port of the Elm compiler to Elm. It parses the module, resolves every name to the module that defines it, and runs Elm's type checker, so a type error in this program would read exactly as it does under `elm make`.
 
-Stock Elm's type checker answers one question, whether the program is well typed, and throws away its working. Eco keeps the answers, because the stages that follow need the type of every expression, and it keeps them by number. While resolving names, the front end gives every expression and pattern a number, and after solving it fills a table indexed by that number:
+Stock Elm's type checker answers one question, whether the program is well typed, and throws away its working. eco keeps the answers, because the stages that follow need the type of every expression, and it keeps them by number. While resolving names, the front end gives every expression and pattern a number, and after solving it fills a table indexed by that number:
 
 ```elm
 type alias ExprInfo =
@@ -142,7 +142,7 @@ More in [Monomorphization](/docs/monomorphization).
 
 ## 5. Global optimization: deciding how every call is made
 
-With the whole program specialized, Eco decides, once for each call, how it will be made. Calling a known function with all its arguments is an ordinary call. A call through a function value is harder: the callee might need more arguments than it is given, or fewer, and in general the runtime has to look at the closure to find out. Global optimization records the answer on each call as a call kind, so code generation never has to work it out again.
+With the whole program specialized, eco decides, once for each call, how it will be made. Calling a known function with all its arguments is an ordinary call. A call through a function value is harder: the callee might need more arguments than it is given, or fewer, and in general the runtime has to look at the closure to find out. Global optimization records the answer on each call as a call kind, so code generation never has to work it out again.
 
 After inlining, `twice (add 1) 10` has become `f (f 10)` with `f = add 1`. Here is what the compiler made of it (trimmed):
 
@@ -162,7 +162,7 @@ More in [Global optimization](/docs/global-optimization) and [Lambda-set special
 
 ## 6. MLIR generation: writing down the decisions
 
-By this stage everything is decided, and code generation only writes the decisions down in Eco's own MLIR dialect, the contract between the Elm half of the compiler and the C++ half. The smallest function shows the format (trimmed):
+By this stage everything is decided, and code generation only writes the decisions down in eco's own MLIR dialect, the contract between the Elm half of the compiler and the C++ half. The smallest function shows the format (trimmed):
 
 ```mlir
 ^bb0(%a: i64, %b: i64):
@@ -279,7 +279,7 @@ More in [The backend](/docs/backend), [The runtime](/docs/runtime) and [System l
 
 ## Further reading
 
-- [Eco at a glance](/docs/theory) — the ideas behind the stages on this page.
+- [eco at a glance](/docs/theory) — the ideas behind the stages on this page.
 - [Optimisations](/docs/optimisations) — every optimisation at every stage.
 - [Value representation](/docs/value-representation) — how values like the list cell above are laid out.
 - [Closures and calls](/docs/closures-and-calls) — what happens to the calls that cannot be made direct.

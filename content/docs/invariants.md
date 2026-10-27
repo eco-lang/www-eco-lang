@@ -1,16 +1,16 @@
 ---
 title: "The numbered invariants"
-description: "Why Eco keeps a catalogue of 417 numbered rules linking its Elm-written compiler to its C++ back end and runtime, and how one rule, that integer division is total, is traced from its catalogue row to the lowering, the kernel and the tests that enforce it."
+description: "Why eco keeps a catalogue of 417 numbered rules linking its Elm-written compiler to its C++ back end and runtime, and how one rule, that integer division is total, is traced from its catalogue row to the lowering, the kernel and the tests that enforce it."
 section: "Getting it right"
 sectionOrder: 5
 order: 3
 ---
 
-Eco is two programs that must agree on everything: a compiler written in Elm that emits MLIR, and a back end, runtime and kernels written in C++ that consume it. No type system spans that boundary. If the compiler and the runtime disagree about how a closure stores a `Bool`, both sides still compile and the program fails at run time. We therefore write the agreements down as numbered rules, 417 of them at the time of writing, and every check that enforces a rule quotes its number.
+eco is two programs that must agree on everything: a compiler written in Elm that emits MLIR, and a back end, runtime and kernels written in C++ that consume it. No type system spans that boundary. If the compiler and the runtime disagree about how a closure stores a `Bool`, both sides still compile and the program fails at run time. We therefore write the agreements down as numbered rules, 417 of them at the time of writing, and every check that enforces a rule quotes its number.
 
 > **Background**
 >
-> - [Lowering](/docs/glossary#lowering): rewriting high-level operations into lower-level ones, here from Eco's own MLIR dialect towards LLVM.
+> - [Lowering](/docs/glossary#lowering): rewriting high-level operations into lower-level ones, here from eco's own MLIR dialect towards LLVM.
 > - [Kernel](/docs/glossary#kernel): a function with no Elm body, implemented in C++ by the runtime.
 
 ## One line per rule

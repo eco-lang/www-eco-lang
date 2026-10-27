@@ -1,12 +1,12 @@
 ---
 title: "Lambda-set specialization"
-description: "How Eco works out which functions can reach each call site, by attaching a set of functions to every function type during monomorphization, so that most calls through function values become direct calls."
+description: "How eco works out which functions can reach each call site, by attaching a set of functions to every function type during monomorphization, so that most calls through function values become direct calls."
 section: "The compiler"
 sectionOrder: 2
 order: 5
 ---
 
-In a higher-order language most calls go through a function value: `List.map f xs` calls whatever `f` happens to be. A call through an unknown closure has to read the closure at run time to find out what code to run and how many arguments it still wants. If the compiler can work out *which* functions can arrive at that call, and there is only one, it can call that function directly. Lambda-set specialization is how Eco works that out.
+In a higher-order language most calls go through a function value: `List.map f xs` calls whatever `f` happens to be. A call through an unknown closure has to read the closure at run time to find out what code to run and how many arguments it still wants. If the compiler can work out *which* functions can arrive at that call, and there is only one, it can call that function directly. Lambda-set specialization is how eco works that out.
 
 > **Background**
 > - [Closure](/docs/glossary#closure): a function value together with the values it has captured.
@@ -19,7 +19,7 @@ Two Elm values of type `Int -> Int` can come from different lambdas. The type ch
 
 The sets also become part of each specialization's key. A higher-order function gets one copy for each set of functions its callers pass, and inside each copy the calls through its function parameter know their target.
 
-Every consumer of the analysis asks one question: is this set a single known function? A set with one member can become a direct call. A set with two or more always uses the generic path, because Eco does not turn a function type into a sum over its members, as full defunctionalization in MLton or Roc does. The analysis is therefore judged on the single-member sets it finds, and on never claiming one falsely: a set that is missing a member looks smaller than it is, and a false singleton becomes a direct call to the wrong code.
+Every consumer of the analysis asks one question: is this set a single known function? A set with one member can become a direct call. A set with two or more always uses the generic path, because eco does not turn a function type into a sum over its members, as full defunctionalization in MLton or Roc does. The analysis is therefore judged on the single-member sets it finds, and on never claiming one falsely: a set that is missing a member looks smaller than it is, and a false singleton becomes a direct call to the wrong code.
 
 ## A direct call through a function parameter
 
@@ -102,17 +102,17 @@ The analysis is not free. It has been a large share of the compiler's own compil
 
 ## Demand-driven, where the paper is staged
 
-The design comes from Brandon and others, "Better Defunctionalization through Lambda Set Specialization" (PLDI 2023). Eco takes the paper's central idea, a set of functions on every arrow, solved by unification and used to specialize, but not its order of work.
+The design comes from Brandon and others, "Better Defunctionalization through Lambda Set Specialization" (PLDI 2023). eco takes the paper's central idea, a set of functions on every arrow, solved by unification and used to specialize, but not its order of work.
 
 The paper works in two passes. First it infers sets over the whole program, bottom-up in dependency order, and whatever a definition cannot know about its callers becomes a set *parameter* of that definition. Then a second pass runs top-down from the entry point and makes one copy of each definition for each set of concrete arguments its callers pass, filling the parameters in.
 
-Eco does both inside monomorphization's list of demands. When a call to a global function is translated, Eco looks up a summary of that function, computed once and memoised: how its arrows' sets relate to one another. That is the bottom-up half. It then reads back the callee's type with the sets the call's arguments carry and files that as a new demand. That is the top-down half: a different set gives a different key, and so a different copy. Because demands start from `main`, code that nothing reaches is never analysed at all.
+eco does both inside monomorphization's list of demands. When a call to a global function is translated, eco looks up a summary of that function, computed once and memoised: how its arrows' sets relate to one another. That is the bottom-up half. It then reads back the callee's type with the sets the call's arguments carry and files that as a new demand. That is the top-down half: a different set gives a different key, and so a different copy. Because demands start from `main`, code that nothing reaches is never analysed at all.
 
 We chose this order for three reasons. Elm is polymorphic and the paper's language is not, so an arrow inside a polymorphic type has no concrete set until a specialization fixes the type; specializing by type and by set is one decision. Monomorphization already has everything the analysis needs, a store per demand, a unifier, a worklist and a registry of keys. And not holding an annotated copy of the whole program matters when the compiler compiles itself on a JavaScript heap.
 
 The cost is that a summary is a fixed fact. A definition cannot hand an unknown to its callers to fill in, as the paper's parameters do. Where it cannot know, the set is recorded as "any function" or as unknown. Much of the lost precision comes back another way: the function's body is solved again in each specialization with the demand's concrete sets already in place, and two loads of the same annotation share their set slots.
 
-Demands also arrive one at a time, so a specialization built for an early demand can be invalidated by a later one with more members under the same key. Eco stores the union of every demand filed under a key and re-translates a specialization, in rounds once the list is empty, when that union grows. Sets only grow and come from a finite universe, so the rounds end.
+Demands also arrive one at a time, so a specialization built for an early demand can be invalidated by a later one with more members under the same key. eco stores the union of every demand filed under a key and re-translates a specialization, in rounds once the list is empty, when that union grows. Sets only grow and come from a finite universe, so the rounds end.
 
 ## Unknown is not empty
 
@@ -126,7 +126,7 @@ The analysis cannot see into the C++ [kernels](/docs/kernels), so every arrow th
 
 A wrong license is worse than none, because it produces a populated set that is missing members. Each row of the table records its audit evidence, the audited C++ files are pinned by hash, and the default build fails when a pinned file changes without the table being reviewed.
 
-> **Designs we didn't use.** Exporting unknowns as quantified set parameters is the paper's own answer, and we built a form of it, as inclusion constraints instantiated per caller. It gave byte-identical output on every program we measured, so Eco does not carry the extra machinery.
+> **Designs we didn't use.** Exporting unknowns as quantified set parameters is the paper's own answer, and we built a form of it, as inclusion constraints instantiated per caller. It gave byte-identical output on every program we measured, so eco does not carry the extra machinery.
 
 ## Further reading
 

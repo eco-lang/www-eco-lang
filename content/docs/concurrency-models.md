@@ -1,18 +1,18 @@
 ---
 title: "Model-checking the collector"
-description: "How Eco checks its concurrent garbage collector with small TLA+ models that a model checker explores exhaustively, deliberately broken mutants that prove each model can fail, and a hash canary that says when the code a model describes has changed."
+description: "How eco checks its concurrent garbage collector with small TLA+ models that a model checker explores exhaustively, deliberately broken mutants that prove each model can fail, and a hash canary that says when the code a model describes has changed."
 section: "Getting it right"
 sectionOrder: 5
 order: 2
 ---
 
-Eco's collector marks, copies and tenures objects on background threads while the program runs. Its worst bugs do not crash where the mistake is made: a lost mark bit frees a live object, and the damage shows up much later as a wrong result somewhere else. Ordinary tests rarely hit the schedule behind such a bug, so each concurrent protocol is also written as a small TLA+ model, a model checker tries every interleaving of it on a small heap, and a build step watches the code each model describes and says when the two may have drifted apart.
+eco's collector marks, copies and tenures objects on background threads while the program runs. Its worst bugs do not crash where the mistake is made: a lost mark bit frees a live object, and the damage shows up much later as a wrong result somewhere else. Ordinary tests rarely hit the schedule behind such a bug, so each concurrent protocol is also written as a small TLA+ model, a model checker tries every interleaving of it on a small heap, and a build step watches the code each model describes and says when the two may have drifted apart.
 
 > **Background**
 >
 > - [TLA+](/docs/glossary#tla): a language that describes a system as states and the atomic steps between them.
 > - [Model checking](/docs/glossary#model-checking): exploring every reachable state of a model and checking named properties in each.
-> - [Mutator](/docs/glossary#mutator): the thread that runs the Elm program and allocates; Eco has one per process.
+> - [Mutator](/docs/glossary#mutator): the thread that runs the Elm program and allocates; eco has one per process.
 > - [Nursery and eden](/docs/glossary#nursery-and-eden), [tenuring](/docs/glossary#tenuring): where young objects live, and how long-lived ones move to the old generation.
 
 ## A bug in four lines

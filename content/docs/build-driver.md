@@ -1,6 +1,6 @@
 ---
 title: "The build driver"
-description: "How Eco's build driver takes a project on disk to a finished compile — caching per module, recompiling only what an interface change forces, and handing the program to the JavaScript or native back end — while running unchanged on stock Elm, JavaScript and native hosts."
+description: "How eco's build driver takes a project on disk to a finished compile — caching per module, recompiling only what an interface change forces, and handing the program to the JavaScript or native back end — while running unchanged on stock Elm, JavaScript and native hosts."
 section: "The compiler"
 sectionOrder: 2
 order: 11
@@ -48,7 +48,7 @@ Every cached file lives under a directory named after the compiler version, so a
 
 ## Three hosts, one source
 
-The compiler is first built by stock Elm, then builds itself as JavaScript, then as native code, and fixed-point checks compare what successive compilers produce ([The compiler compiles itself](/docs/bootstrap)). All three hosts therefore have to behave alike, but stock Elm cannot touch files or start processes. Every host facility (files, processes, the console, HTTP, the garbage collector) is one Elm module that exists twice with the same exports. One version is a kernel module with JavaScript and C++ implementations. The other is plain Elm for the stock-Elm build, and sends each operation as an HTTP request to a local Node handler that performs it. A build picks one version through its source directories. Keeping two copies of each module in step is a real cost, but we think it is worth paying, because it means Eco can be rebuilt from source with nothing but Elm and Node.
+The compiler is first built by stock Elm, then builds itself as JavaScript, then as native code, and fixed-point checks compare what successive compilers produce ([The compiler compiles itself](/docs/bootstrap)). All three hosts therefore have to behave alike, but stock Elm cannot touch files or start processes. Every host facility (files, processes, the console, HTTP, the garbage collector) is one Elm module that exists twice with the same exports. One version is a kernel module with JavaScript and C++ implementations. The other is plain Elm for the stock-Elm build, and sends each operation as an HTTP request to a local Node handler that performs it. A build picks one version through its source directories. Keeping two copies of each module in step is a real cost, but we think it is worth paying, because it means eco can be rebuilt from source with nothing but Elm and Node.
 
 Errors cross that boundary as a plain triple of a tag, a path and a message, because neither the Node handler nor kernel code can build an Elm record whose layout the compiler decides.
 

@@ -1,6 +1,6 @@
 ---
 title: "Local optimization"
-description: "Before types are concrete, Eco rewrites each module on its own: pattern matches become decision trees, self-recursion becomes loops, operators become plain code, and some nested functions are merged, all while keeping every type."
+description: "Before types are concrete, eco rewrites each module on its own: pattern matches become decision trees, self-recursion becomes loops, operators become plain code, and some nested functions are merged, all while keeping every type."
 section: "The compiler"
 sectionOrder: 2
 order: 3
@@ -19,7 +19,7 @@ A rewrite belongs in this phase only if it passes three tests: it looks at one m
 
 Every expression in the phase's output carries two pieces of type information: its type in the type checker's terms, which may still contain variables such as `a` or `number`, and the solver variable the [front end](/docs/front-end) recorded for it. Any rewrite that builds a node has to supply both. Each rewrite reuses the type and variable of the node it replaces for the nodes it builds, and that discipline is what keeps the types right.
 
-The erased path, which produces JavaScript, runs Elm's own untyped copy of this phase instead, unchanged, so that Eco's JavaScript stays identical to Elm's. The typed copy mirrors the same algorithms. We accept the cost of that, which is that a fix to one copy must be made by hand in the other, because JavaScript output identical to Elm's is worth more to us than one shared implementation.
+The erased path, which produces JavaScript, runs Elm's own untyped copy of this phase instead, unchanged, so that eco's JavaScript stays identical to Elm's. The typed copy mirrors the same algorithms. We accept the cost of that, which is that a fix to one copy must be made by hand in the other, because JavaScript output identical to Elm's is worth more to us than one shared implementation.
 
 ## Pattern matches become decision trees
 
@@ -47,7 +47,7 @@ describe xs =
 
 Tried in order, the patterns would test the head of the list several times. The decision tree tests each part of the value at most once: is the list empty; if not, is the head `Just`; if so, is its content `0`; if not, is the tail empty. Each answer leads straight to a branch or to the next test. Informally, the tree has three kinds of node: a leaf that holds the branch to run, a chain of tests that all have to pass, and a fan-out that picks one of several subtrees by the value at one position. A branch reachable by several paths becomes a shared jump target instead of being copied.
 
-This is the top of the code Eco produces for `describe` (trimmed: attributes removed and the innermost tests elided):
+This is the top of the code eco produces for `describe` (trimmed: attributes removed and the innermost tests elided):
 
 ```mlir
 ^bb0(%xs: !eco.value):

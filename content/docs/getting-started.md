@@ -1,12 +1,12 @@
 ---
 title: "Getting started"
-description: "How to install the Eco 0.2.0 nightly release on Linux, macOS or Windows, build the hello world example, and write a first eco/system program."
+description: "How to install the eco 0.2.0 nightly release on Linux, macOS or Windows, build the hello world example, and write a first eco/system program."
 section: "Introduction"
 sectionOrder: 1
 order: 2
 ---
 
-Eco is distributed as one self-contained bundle per platform. The current release is 0.2.0, published as nightly builds. Expect bugs, and expect the IO libraries to change. This page installs it, builds hello world and introduces `eco/system`, the package for programs that run outside the browser.
+eco is distributed as one self-contained bundle per platform. The current release is 0.2.0, published as nightly builds. Expect bugs, and expect the IO libraries to change. This page installs it, builds hello world and introduces `eco/system`, the package for programs that run outside the browser.
 
 ## Download
 
@@ -62,7 +62,7 @@ eco make src/Hello.elm --output=hello
 
 ## What `--output` produces
 
-The extension of the output name chooses what Eco builds:
+The extension of the output name chooses what eco builds:
 
 | Output name | Result |
 |---|---|
@@ -84,7 +84,7 @@ eco make src/Hello.elm --text-mlir --output=hello.mlir
 
 `eco/system` is the package for command-line and server programs: files and directories, child processes, standard input, output and error as streams, the terminal, TCP, UDP, TLS and Unix sockets, an HTTP server (with HTTPS, HTTP/2 and WebSockets), and streaming HTTP bodies on top of `elm/http`. It is resolved from the bundle automatically, and `eco install eco/system` adds it to a project's `elm.json`.
 
-A program's `main` is a `Platform.Program` whose flags are a `System.Environment`, which Eco builds when the program starts. `System.simpleProgram` makes a one-shot program that runs a task:
+A program's `main` is a `Platform.Program` whose flags are a `System.Environment`, which eco builds when the program starts. `System.simpleProgram` makes a one-shot program that runs a task:
 
 ```elm
 module Hello exposing (main)
@@ -122,11 +122,11 @@ eco make src/Bench.elm --output=bench
 ./bench            # all workloads; ./bench --list shows them
 ```
 
-With the official `elm` compiler and `node` also installed, `node run.mjs` in the same folder builds every workload with both compilers and prints a table comparing official Elm, Eco's JavaScript output and Eco native. See [Performance](/docs/performance) for our own results.
+With the official `elm` compiler and `node` also installed, `node run.mjs` in the same folder builds every workload with both compilers and prints a table comparing official Elm, eco's JavaScript output and eco native. See [Performance](/docs/performance) for our own results.
 
 ## Further reading
 
-- [Why Eco](/docs/why-eco) — what Eco is for and why Elm suits native compilation.
+- [Why eco](/docs/why-eco) — what eco is for and why Elm suits native compilation.
 - [A tour through the compiler](/docs/tour) — what happens to a program between `eco make` and the executable.
 - [System libraries](/docs/system-libraries) — what `eco/system` provides and how it is built.
 - The full design document: [System libraries theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/kernels/system-libraries.md)

@@ -1,12 +1,12 @@
 ---
 title: "The front end"
-description: "Eco's front end is Elm's own parser, name resolution, type checker and pattern checks, with one addition: it keeps the type of every expression for the native compiler."
+description: "eco's front end is Elm's own parser, name resolution, type checker and pattern checks, with one addition: it keeps the type of every expression for the native compiler."
 section: "The compiler"
 sectionOrder: 2
 order: 2
 ---
 
-Eco uses Elm's front end rather than one of its own: the parser, name resolution, type checker and pattern checks come from Guida, a port of the stock Elm compiler from Haskell to Elm, so Eco accepts the same programs and reports the same errors in the same words. The one thing Eco adds is that the type checker keeps its answers. Stock Elm asks only whether a program is well typed and then throws the working away; Eco records the type of every expression, because the native compiler needs it.
+eco uses Elm's front end rather than one of its own: the parser, name resolution, type checker and pattern checks come from Guida, a port of the stock Elm compiler from Haskell to Elm, so eco accepts the same programs and reports the same errors in the same words. The one thing eco adds is that the type checker keeps its answers. Stock Elm asks only whether a program is well typed and then throws the working away; eco records the type of every expression, because the native compiler needs it.
 
 > **Background**
 > - Canonical program: the program after name resolution, where every name points at the module that defines it.
@@ -15,7 +15,7 @@ Eco uses Elm's front end rather than one of its own: the parser, name resolution
 
 ## Faithful to Elm
 
-Starting from Guida gives Eco Elm's grammar, scoping rules, type system and error messages without writing them again, and those are what let Eco compile existing Elm packages unchanged. Here is a small mistake:
+Starting from Guida gives eco Elm's grammar, scoping rules, type system and error messages without writing them again, and those are what let eco compile existing Elm packages unchanged. Here is a small mistake:
 
 ```elm
 area : Float -> Float
@@ -27,7 +27,7 @@ main =
     text (String.fromInt (area 2))
 ```
 
-Eco 0.2.0 reports it exactly as Elm 0.19.1 does:
+eco 0.2.0 reports it exactly as Elm 0.19.1 does:
 
 ```text
 -- TYPE MISMATCH --------------------------------------------------- src/Err.elm
@@ -45,19 +45,19 @@ But `fromInt` needs the 1st argument to be:
     Int
 ```
 
-Guida accepts some syntax of its own, such as underscores in number literals and tuples of more than three elements. Eco does not. We keep one grammar, the standard one, because the point is to compile the Elm that already exists. Projects may declare any Elm 0.19 release, since the language is the same across the 0.19 patch releases.
+Guida accepts some syntax of its own, such as underscores in number literals and tuples of more than three elements. eco does not. We keep one grammar, the standard one, because the point is to compile the Elm that already exists. Projects may declare any Elm 0.19 release, since the language is the same across the 0.19 patch releases.
 
-The errors follow Elm's model too. Each phase collects every problem it finds rather than stopping at the first, and each is rendered as a report that quotes the source. Anything Eco adds to the front end that can fail reports through the same channel, so a user cannot tell Eco's errors from Elm's.
+The errors follow Elm's model too. Each phase collects every problem it finds rather than stopping at the first, and each is rendered as a report that quotes the source. Anything eco adds to the front end that can fail reports through the same channel, so a user cannot tell eco's errors from Elm's.
 
 ## The five phases
 
 A module passes through five phases:
 
 1. The **parser** turns text into a syntax tree. It keeps Elm's design of small hand-written combinators, each of which records whether it consumed input; an alternative is tried only if the previous one failed without consuming anything.
-2. **Name resolution** ties every name to its home module, reports duplicate definitions and sorts definitions into groups that refer to one another. In Eco it also gives every expression and pattern a number.
-3. **Constraint generation** walks the module and emits the type equations the solver must satisfy. In Eco it also notes which solver variable stands for each numbered node.
+2. **Name resolution** ties every name to its home module, reports duplicate definitions and sorts definitions into groups that refer to one another. In eco it also gives every expression and pattern a number.
+3. **Constraint generation** walks the module and emits the type equations the solver must satisfy. In eco it also notes which solver variable stands for each numbered node.
 4. The **solver** runs Hindley-Milner inference over a union-find store, in which variables proved equal are merged into one set with a single representative, its root.
-5. A **repair step**, new in Eco, completes and normalises the recorded types.
+5. A **repair step**, new in eco, completes and normalises the recorded types.
 
 Elm's pattern checks run beside these, using Maranget's algorithm to reject `case` expressions that miss a possible value or have a branch that can never match. Later phases rely on this: every decision tree they build is complete.
 
@@ -83,7 +83,7 @@ The solver leaves two kinds of gap, and the repair step fills them without chang
 
 Literal strings, characters, floats and the unit value get no useful constraint, because their type is fixed by their shape, so the repair step writes those types in directly. Number literals are the exception left open on purpose. A literal such as `1` keeps the type `number`, because until the whole program is specialized it is not known which uses of `number` become `Int` and which become `Float`. Monomorphization decides that at the end.
 
-Kernel functions are the second gap. A kernel is a built-in implemented in the host language, JavaScript for stock Elm and C++ for Eco's native build ([Kernels](/docs/kernels)). It has no Elm declaration, so it produces no constraint of its own. The repair step gives each kernel reference the type implied by how the code uses it. Where that is not enough, a table of intrinsic annotations gives a kernel a declared type that the solver enforces. Each row states the contract of the C++ kernel, which can be narrower than the type the JavaScript package declares. Rows are added one at a time, because a wrong row turns correct package code into a type error.
+Kernel functions are the second gap. A kernel is a built-in implemented in the host language, JavaScript for stock Elm and C++ for eco's native build ([Kernels](/docs/kernels)). It has no Elm declaration, so it produces no constraint of its own. The repair step gives each kernel reference the type implied by how the code uses it. Where that is not enough, a table of intrinsic annotations gives a kernel a declared type that the solver enforces. Each row states the contract of the C++ kernel, which can be narrower than the type the JavaScript package declares. Rows are added one at a time, because a wrong row turns correct package code into a type error.
 
 ## Identity comes from the solver
 

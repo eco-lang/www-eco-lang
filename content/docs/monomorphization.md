@@ -1,12 +1,12 @@
 ---
 title: "Monomorphization"
-description: "How Eco turns polymorphic Elm into one specialized copy of each function per concrete type, by re-running the type checker's unifier for every use, so that native code can store numbers unboxed."
+description: "How eco turns polymorphic Elm into one specialized copy of each function per concrete type, by re-running the type checker's unifier for every use, so that native code can store numbers unboxed."
 section: "The compiler"
 sectionOrder: 2
 order: 4
 ---
 
-A function that works for any type has to become one copy per type, because native code needs to know how big a value is and where its bits live. Elm's `identity : a -> a` is one function in JavaScript, where every value is a reference. In Eco an `Int` is a 64-bit integer passed in a register and a `String` is a pointer to the heap, so `identity` at `Int` and `identity` at `String` are different machine code. Monomorphization makes those copies, and it does it by running the type checker's own unifier again, once for each use.
+A function that works for any type has to become one copy per type, because native code needs to know how big a value is and where its bits live. Elm's `identity : a -> a` is one function in JavaScript, where every value is a reference. In eco an `Int` is a 64-bit integer passed in a register and a `String` is a pointer to the heap, so `identity` at `Int` and `identity` at `String` are different machine code. Monomorphization makes those copies, and it does it by running the type checker's own unifier again, once for each use.
 
 > **Background**
 > - [Specialization](/docs/glossary#specialization): one copy of a function for one concrete type.
@@ -40,7 +40,7 @@ main =
     ...
 ```
 
-With inlining switched off, so that every copy stays visible, Eco produces these function signatures (trimmed to the name and type):
+With inlining switched off, so that every copy stays visible, eco produces these function signatures (trimmed to the name and type):
 
 ```mlir
 Poly_identity2_$_1 : (!eco.value) -> (!eco.value)
@@ -61,7 +61,7 @@ This is the approach of MLton and of Rust generics and C++ templates, and the op
 
 ## Specialization is type inference, run again
 
-The type checker has proved the program well typed, but it has not said what each type variable inside a polymorphic body becomes at one particular use. Eco answers that question with the type checker's own machinery. Each request to specialize one function at one concrete type is a demand. For each demand, Eco loads the function's definition into a fresh, empty store, states the demanded type as the first fact, and runs the unifier over the body. Every function the body mentions becomes a further demand, at whatever concrete type the unifier worked out for it. The process starts from `main` and ends when no demand is left.
+The type checker has proved the program well typed, but it has not said what each type variable inside a polymorphic body becomes at one particular use. eco answers that question with the type checker's own machinery. Each request to specialize one function at one concrete type is a demand. For each demand, eco loads the function's definition into a fresh, empty store, states the demanded type as the first fact, and runs the unifier over the body. Every function the body mentions becomes a further demand, at whatever concrete type the unifier worked out for it. The process starts from `main` and ends when no demand is left.
 
 The store is a union-find structure. Each type variable is one point; unifying two types merges their points into one group; and a group can be bound to a concrete type. Because every occurrence of a variable is the same point, a fact learned anywhere in the body reaches every place that variable appears, whatever order the facts arrive in. That matters in Elm, where concreteness often flows backwards, from a consumer to its producer: a list built in one place learns that it holds `Float`s only where it is later summed into a `Float`. A merging store handles that direction with no extra machinery.
 
@@ -71,7 +71,7 @@ The order in which demands are processed does not change the result. Each store 
 
 ## `number` stays open until the end
 
-Elm's `number` can be `Int` or `Float`, and the right answer often appears late. Eco therefore decides it in exactly one place: the prune that runs once the demand list is empty. Until then a `number` that nothing has fixed stays open, and the prune turns every one still open into `Int`, which is Elm's own default. Deciding at the end is what makes `Float` uses come out right, because an early guess of `Int` would be wrong exactly where a later consumer needs a `Float`.
+Elm's `number` can be `Int` or `Float`, and the right answer often appears late. eco therefore decides it in exactly one place: the prune that runs once the demand list is empty. Until then a `number` that nothing has fixed stays open, and the prune turns every one still open into `Int`, which is Elm's own default. Deciding at the end is what makes `Float` uses come out right, because an early guess of `Int` would be wrong exactly where a later consumer needs a `Float`.
 
 This program exercises it:
 

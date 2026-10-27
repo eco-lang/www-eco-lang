@@ -1,12 +1,12 @@
 ---
 title: "Value representation"
-description: "How Eco stores every Elm value as a 64-bit word that is either a raw machine number, a heap address, or a constant embedded in the word, and how one value can take different forms in different places."
+description: "How eco stores every Elm value as a 64-bit word that is either a raw machine number, a heap address, or a constant embedded in the word, and how one value can take different forms in different places."
 section: "The runtime"
 sectionOrder: 4
 order: 2
 ---
 
-An Elm `Bool` is a single bit inside a function, a 64-bit word when it is passed to an unknown closure, and the same word again when it is stored in a list. Eco keeps four separate models of every value (inside a function, across a call, in the heap, and its Elm meaning) and converts at a small number of fixed points. Most of the design follows from making those conversions cheap, and from making a heap pointer nothing more than the object's address.
+An Elm `Bool` is a single bit inside a function, a 64-bit word when it is passed to an unknown closure, and the same word again when it is stored in a list. eco keeps four separate models of every value (inside a function, across a call, in the heap, and its Elm meaning) and converts at a small number of fixed points. Most of the design follows from making those conversions cheap, and from making a heap pointer nothing more than the object's address.
 
 > **Background**
 >
@@ -54,7 +54,7 @@ typedef struct {
 } HPointer;
 ```
 
-The design rests on the low three bits. Every heap object is 8-byte aligned, so the low three bits of its address are always zero, and Eco puts the constant code and the pointer indicator exactly there. For a heap pointer those bits are zero, and the 40-bit `ptr` field starting at bit 3 holds the rest of the address. The low 43 bits of the word therefore *are* the raw address: dereferencing needs no base register, no add and no shift. The heap is reserved below 2^43 bytes (8 TB) so that every address fits.
+The design rests on the low three bits. Every heap object is 8-byte aligned, so the low three bits of its address are always zero, and eco puts the constant code and the pointer indicator exactly there. For a heap pointer those bits are zero, and the 40-bit `ptr` field starting at bit 3 holds the rest of the address. The low 43 bits of the word therefore *are* the raw address: dereferencing needs no base register, no add and no shift. The heap is reserved below 2^43 bytes (8 TB) so that every address fits.
 
 A word with bit 2 set is a constant embedded in the word. It is never allocated and never traced by the collector. The fixed words are:
 
@@ -80,7 +80,7 @@ The merge also means an embedded value must exist *only* in its embedded form. E
 
 ## A real example
 
-Here is the list `[ 1, 2, 3 ]` and the value `Rect 2 3` as Eco's compiler emits them for the shapes program used in [A tour through the compiler](/docs/tour) (trimmed: type annotations on operands removed):
+Here is the list `[ 1, 2, 3 ]` and the value `Rect 2 3` as eco's compiler emits them for the shapes program used in [A tour through the compiler](/docs/tour) (trimmed: type annotations on operands removed):
 
 ```mlir
 %30 = "eco.constant"() {kind = 2 : i32} : () -> !eco.value

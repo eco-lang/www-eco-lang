@@ -20,7 +20,7 @@ import UrlPath
 -}
 pageTitle : Author -> String
 pageTitle author =
-    "About " ++ author.name ++ ", creator of the Eco compiler for Elm"
+    "About " ++ author.name ++ ", creator of the eco compiler for Elm"
 
 
 {-| The About page's head tags. Link previews show a 1200 by 630 card with the author's portrait, drawn to match the
@@ -33,14 +33,14 @@ seoHeaders author =
         , siteName = Settings.title
         , image =
             { url = [ "images", "about-card.jpg" ] |> UrlPath.join |> Pages.Url.fromPath
-            , alt = author.name ++ ", creator of Eco"
+            , alt = author.name ++ ", creator of eco"
             , dimensions = Just { width = 1200, height = 630 }
             , mimeType = Just (MimeType.Image MimeType.Jpeg)
             }
         , description =
             "I'm "
                 ++ author.name
-                ++ ", creator of Eco, an optimising compiler for Elm written in Elm."
+                ++ ", creator of eco, an optimising compiler for Elm written in Elm."
         , locale = Settings.locale
         , title = pageTitle author
         }

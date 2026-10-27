@@ -1,12 +1,12 @@
 ---
 title: "The eco dialect"
-description: "The eco dialect is the set of typed MLIR operations in which Eco's Elm-written compiler hands a program to its C++ backend, and its verifier is the check made on that hand-over."
+description: "The eco dialect is the set of typed MLIR operations in which eco's Elm-written compiler hands a program to its C++ backend, and its verifier is the check made on that hand-over."
 section: "The backend"
 sectionOrder: 3
 order: 2
 ---
 
-Eco is written in two languages: the compiler in Elm, the backend and runtime in C++. No type system spans the gap between them. The eco dialect is the contract that does: a set of typed operations in which the compiler describes the program, and a verifier the backend runs every time it reads one. The compiler describes values; only the backend decides how they sit in memory.
+eco is written in two languages: the compiler in Elm, the backend and runtime in C++. No type system spans the gap between them. The eco dialect is the contract that does: a set of typed operations in which the compiler describes the program, and a verifier the backend runs every time it reads one. The compiler describes values; only the backend decides how they sit in memory.
 
 > **Background**
 >
@@ -157,7 +157,7 @@ Purity in the dialect is narrow on purpose. Two permissions are easy to confuse 
 
 A call declares its memory effects explicitly. A direct call may carry a marker, `eco.cse_safe`, that lets it be merged or deleted, but never moved ahead of the condition that guards it. The pass that prepares for garbage collection strips the marker, so no later pass can act on it.
 
-Folds rely on immutability. A projection from a construction earlier in the same function folds to the operand that was stored, and a tag read folds to the constant tag. Eco heap objects are written once, so the field read back is always the one written. Reads such as string length and structural equality are marked pure for the same reason.
+Folds rely on immutability. A projection from a construction earlier in the same function folds to the operand that was stored, and a tag read folds to the constant tag. eco heap objects are written once, so the field read back is always the one written. Reads such as string length and structural equality are marked pure for the same reason.
 
 There are no root operands. No operation lists the boxed values live across it; LLVM finds the collector's roots from liveness, as [the backend](/docs/backend) explains. Roots could not be computed in the lowering anyway: by then boxed values have become plain integers, and liveness cannot tell pointers from numbers.
 

@@ -1,16 +1,16 @@
 ---
 title: "Runtime data structures"
-description: "Why an Eco String, List or Bytes value can take one of several heap forms, such as ropes, slices, ASCII strings and chunked lists, how the runtime chooses between them, and what the choice is worth."
+description: "Why an eco String, List or Bytes value can take one of several heap forms, such as ropes, slices, ASCII strings and chunked lists, how the runtime chooses between them, and what the choice is worth."
 section: "The runtime"
 sectionOrder: 4
 order: 4
 ---
 
-An Elm `String` has one meaning but, in Eco's heap, several layouts. It may be a flat array, a slice of another string, a rope joining two strings, or a compact all-ASCII form, and a `List` may mix single cons cells with views over dense arrays. The runtime picks a form for every value it builds, choosing between sharing and copying, and the choice only ever changes speed and memory, never results. Kernels and compiled code never see which form they hold, which is what lets the runtime add a form without rewriting the code that uses the type.
+An Elm `String` has one meaning but, in eco's heap, several layouts. It may be a flat array, a slice of another string, a rope joining two strings, or a compact all-ASCII form, and a `List` may mix single cons cells with views over dense arrays. The runtime picks a form for every value it builds, choosing between sharing and copying, and the choice only ever changes speed and memory, never results. Kernels and compiled code never see which form they hold, which is what lets the runtime add a form without rewriting the code that uses the type.
 
 > **Background**
 >
-> - A [kernel](/docs/glossary#kernel) is one of Elm's built-in functions, such as `String.append`; Eco's are written in C++.
+> - A [kernel](/docs/glossary#kernel) is one of Elm's built-in functions, such as `String.append`; eco's are written in C++.
 > - [Boxed and unboxed](/docs/glossary#boxed-and-unboxed): a list of `Int` can hold its numbers raw, with no pointer per element.
 > - A rope is a tree whose leaves are pieces of a string; appending two ropes allocates one node instead of copying.
 

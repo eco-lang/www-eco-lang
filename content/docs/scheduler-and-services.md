@@ -1,23 +1,23 @@
 ---
 title: "Scheduler and services"
-description: "How Eco runs Elm's tasks, processes, effect managers and ports natively: an event loop on one thread that owns the heap, with timers, HTTP and child processes waiting on worker threads that only ever see plain data."
+description: "How eco runs Elm's tasks, processes, effect managers and ports natively: an event loop on one thread that owns the heap, with timers, HTTP and child processes waiting on worker threads that only ever see plain data."
 section: "The runtime"
 sectionOrder: 4
 order: 6
 ---
 
-When an Elm program calls `Process.sleep 500`, something has to wait half a second without stopping every other task. In Eco that wait happens on a timer thread, but the timer thread never sees an Elm value: it holds a deadline and a 64-bit token, and nothing else. Only the eco thread touches the heap. This article follows that one sleep through the scheduler, then shows that HTTP, child processes, sockets and ports all work the same way.
+When an Elm program calls `Process.sleep 500`, something has to wait half a second without stopping every other task. In eco that wait happens on a timer thread, but the timer thread never sees an Elm value: it holds a deadline and a 64-bit token, and nothing else. Only the eco thread touches the heap. This article follows that one sleep through the scheduler, then shows that HTTP, child processes, sockets and ports all work the same way.
 
 > **Background**
 >
-> - [Eco thread](/docs/glossary#eco-thread): the one thread that runs Elm code and owns the heap.
-> - [Mutator](/docs/glossary#mutator): the code that allocates and builds objects, as opposed to the collector. Eco has one per heap.
+> - [eco thread](/docs/glossary#eco-thread): the one thread that runs Elm code and owns the heap.
+> - [Mutator](/docs/glossary#mutator): the code that allocates and builds objects, as opposed to the collector. eco has one per heap.
 > - [Kernel](/docs/glossary#kernel): a built-in function implemented in C++ rather than in Elm, such as `Process.sleep`.
 > - A *task* is a description of work; a *process* is a task that is running.
 
 ## Why only one thread touches the heap
 
-Eco's [garbage collector](/docs/garbage-collector) allows one mutator per heap, and it needs no write barrier because no object changes once the program can see it. A second thread that ran Elm code, or a worker that allocated its own result, would break both assumptions: an allocation on the worker could trigger a collection that moves an object the eco thread is reading.
+eco's [garbage collector](/docs/garbage-collector) allows one mutator per heap, and it needs no write barrier because no object changes once the program can see it. A second thread that ran Elm code, or a worker that allocated its own result, would break both assumptions: an allocation on the worker could trigger a collection that moves an object the eco thread is reading.
 
 The scheduler is therefore an event loop on the eco thread, and every service that blocks has the same shape. A plain request goes in, a token comes out, and all heap work happens later, back on the eco thread. Timers show what goes wrong otherwise. A thread per sleep that resumed the Elm task from its own thread would allocate off the eco thread and corrupt the collector's state.
 
@@ -124,7 +124,7 @@ The run queue, the latest-process table and the pending resumes live in C++ cont
 
 ## Holds: why a program is still running
 
-An Elm worker has no obvious end. Eco's rule is that a program runs exactly while it is waiting for something it asked for. Each such wait takes one hold, and the scheduler's count of holds changes only through one small interface. A listener nobody is waiting on holds nothing.
+An Elm worker has no obvious end. eco's rule is that a program runs exactly while it is waiting for something it asked for. Each such wait takes one hold, and the scheduler's count of holds changes only through one small interface. A listener nobody is waiting on holds nothing.
 
 We prefer this to deciding liveness resource by resource, with counters spread through the code. Such counts disagree about lifetimes and cancellation, and a program that never exits has no way to say why. With one interface, debug builds abort on a release of an unknown hold or a second release of the same one, and a diagnostic report lists the holds still open by the code that took them.
 
@@ -140,7 +140,7 @@ Anything else joins the loop by registering a pair of functions: a drain that do
 
 ## Effect managers and ports
 
-An effect manager turns commands and subscriptions into work: Time, Http and Task from elm/*, the system library's managers, and one pseudo-manager per port. After each `update`, Eco gathers the commands and subscriptions, hands each leaf to its manager, and runs every manager's handler, even one with nothing to do, so that a manager whose subscription list became empty can drop its timers. This dispatch finishes inside the same drain that ran the update. That matters for holds: every hold a new subscription takes exists before the run queue can empty, so the loop never sees a false moment with nothing to do.
+An effect manager turns commands and subscriptions into work: Time, Http and Task from elm/*, the system library's managers, and one pseudo-manager per port. After each `update`, eco gathers the commands and subscriptions, hands each leaf to its manager, and runs every manager's handler, even one with nothing to do, so that a manager whose subscription list became empty can drop its timers. This dispatch finishes inside the same drain that ran the update. That matters for holds: every hold a new subscription takes exists before the run queue can empty, so the loop never sees a false moment with nothing to do.
 
 A port is a manager keyed by its name, as in elm/core's JavaScript. Outgoing values reach the host as JSON strings. A host may send an incoming value from any thread: the bytes are copied into a queue, take a hold and wake the loop, and the eco thread decodes them.
 
@@ -148,7 +148,7 @@ A port is a manager keyed by its name, as in elm/core's JavaScript. Outgoing val
 
 The program's entry point does no Elm work. It starts one thread with a 64 MB stack and waits for it. That thread becomes the eco thread: it sets up the heap, registers the elm/* managers and calls the compiled program, which ends in the event loop. The stack is large because compiled Elm recurses deeply, most of all when the compiler compiles itself; the size matches what the JavaScript build gets under Node.
 
-Child processes are started with a spawn call, never a fork. A fork would copy the whole Eco heap and the collector's helper threads' state, only to throw it away when the child starts its program.
+Child processes are started with a spawn call, never a fork. A fork would copy the whole eco heap and the collector's helper threads' state, only to throw it away when the child starts its program.
 
 > **Designs we didn't use.** We rejected parallel Elm by locking the stepper, so that several threads share one heap, because the collector and every service assume one mutator per heap. A heap per thread is the direction we would take instead. It is not built.
 

@@ -1,16 +1,16 @@
 ---
 title: "Bytes fusion"
-description: "How Eco compiles elm/bytes encoders and decoders whose shape it can read at compile time into code that writes or reads the buffer directly, and falls back to the elm/bytes kernel for everything else."
+description: "How eco compiles elm/bytes encoders and decoders whose shape it can read at compile time into code that writes or reads the buffer directly, and falls back to the elm/bytes kernel for everything else."
 section: "The compiler"
 sectionOrder: 2
 order: 9
 ---
 
-In elm/bytes an encoder is a value: a tree that describes what to write. The library builds that tree, walks it once to find the total size, and walks it again to write the bytes. When Eco can read the shape of an encoder from the program, it skips the tree: it works out the exact size, allocates the buffer once, and writes each value straight into it. Decoders get the same treatment. Anything Eco cannot read stays a call to the elm/bytes kernel, which is always correct.
+In elm/bytes an encoder is a value: a tree that describes what to write. The library builds that tree, walks it once to find the total size, and walks it again to write the bytes. When eco can read the shape of an encoder from the program, it skips the tree: it works out the exact size, allocates the buffer once, and writes each value straight into it. Decoders get the same treatment. Anything eco cannot read stays a call to the elm/bytes kernel, which is always correct.
 
 > **Background**
 >
-> - [Reification](/docs/glossary#reification) is implementing a library's opaque type in a different way from the library itself. Bytes fusion is Eco's largest example ([Reification](/docs/reification)).
+> - [Reification](/docs/glossary#reification) is implementing a library's opaque type in a different way from the library itself. Bytes fusion is eco's largest example ([Reification](/docs/reification)).
 > - A [kernel](/docs/glossary#kernel) is a built-in library function implemented in C++ rather than Elm; elm/bytes' encode and decode are kernels on the native path ([Kernels](/docs/kernels)).
 > - A [dialect](/docs/glossary#dialect) is a family of MLIR operations. Fused code is written in a small dialect of its own, `bf`.
 > - [Lowering](/docs/glossary#lowering) turns operations of one dialect into lower-level ones, here into loads, stores and calls to runtime helpers.
@@ -23,7 +23,7 @@ encodeRgb r g b =
     E.encode (E.sequence [ E.unsignedInt8 r, E.unsignedInt8 g, E.unsignedInt8 b ])
 ```
 
-This is the MLIR Eco emits for it. The listing is trimmed: operand types are removed, and so are the seven lines before it that still build the `Encoder` value (three `U8` constructors and a list), which nothing uses:
+This is the MLIR eco emits for it. The listing is trimmed: operand types are removed, and so are the seven lines before it that still build the `Encoder` value (three `U8` constructors and a list), which nothing uses:
 
 ```mlir
       ^bb0(%r: i64, %g: i64, %b: i64):
@@ -143,15 +143,15 @@ In the common case none of this costs anything. A fused decode loop builds a lis
 
 ## What it is worth
 
-Our benchmark suite has a pair of workloads that do the same work: encode a list of bytes, then decode it with a count loop over `unsignedInt8`. In `bytes-static` the decoder is known at compile time and fuses. In `bytes-dynamic` the item decoder is chosen at run time, so it does not. On Eco native, `bytes-static` takes 27 ms and `bytes-dynamic` 71 ms, so decoder fusion is worth 2.6x. Stock Elm's JavaScript takes about 245 ms and 240 ms for the two, because it treats them alike.
+Our benchmark suite has a pair of workloads that do the same work: encode a list of bytes, then decode it with a count loop over `unsignedInt8`. In `bytes-static` the decoder is known at compile time and fuses. In `bytes-dynamic` the item decoder is chosen at run time, so it does not. On eco native, `bytes-static` takes 27 ms and `bytes-dynamic` 71 ms, so decoder fusion is worth 2.6x. Stock Elm's JavaScript takes about 245 ms and 240 ms for the two, because it treats them alike.
 
-These are medians of 11 runs after 3 warm-ups, from a development build of the native compiler. Eco's times come from a 1 ms `Time.now`, so small figures are coarse. Both workloads also generate and encode the data, so the fused decoder's own speed-up is larger than the ratio of the totals.
+These are medians of 11 runs after 3 warm-ups, from a development build of the native compiler. eco's times come from a 1 ms `Time.now`, so small figures are coarse. Both workloads also generate and encode the data, so the fused decoder's own speed-up is larger than the ratio of the totals.
 
 > **Designs we didn't use.** Matching a project's own helpers by name, such as the compiler's list encoder, would fuse more of the compiler at once, but it would tie fusion to one codebase. We inline the helpers instead, and fusion matches what they unfold into.
 
 ## Further reading
 
-- [Reification](/docs/reification) — the general technique, and Eco's other uses of it.
+- [Reification](/docs/reification) — the general technique, and eco's other uses of it.
 - [MLIR generation](/docs/mlir-generation) — fusion is one of the specialised emitters layered on the core generator.
 - [Lowering passes](/docs/lowering-passes) — where the `bf` lowering runs among the other passes.
 - [Kernels](/docs/kernels) — the elm/bytes kernel that fusion falls back on.
