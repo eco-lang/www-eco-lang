@@ -249,6 +249,7 @@ pageStyles =
     [ Css.Global.class "eco-page"
         [ minScreenHeight
         , column
+        , Css.property "isolation" "isolate"
         , Css.property "background-color" colors.bg
         , Css.property "font-family" fontBody
         ]
@@ -1058,12 +1059,25 @@ aboutStyles =
         , Css.property "padding-top" "8px"
         , mobile [ alignSelf "center" ]
         ]
+    , Css.Global.class "eco-avatar-wrap"
+        [ Css.property "position" "relative"
+        , Css.property "margin-bottom" "16px"
+        ]
+
+    -- Centred on the 140px portrait, and behind everything else on the page: `eco-page` isolates its stacking, so
+    -- z-index -1 puts the circles above the page's background but below its content.
+    , Css.Global.class "eco-avatar-circles"
+        [ Css.property "position" "absolute"
+        , Css.property "left" "-60px"
+        , Css.property "top" "-75px"
+        , Css.property "z-index" "-1"
+        , Css.property "pointer-events" "none"
+        ]
     , Css.Global.class "eco-avatar"
         [ Css.property "width" "140px"
         , Css.property "height" "140px"
         , Css.property "border-radius" "70px"
         , Css.property "overflow" "hidden"
-        , Css.property "margin-bottom" "16px"
         ]
     , Css.Global.class "eco-avatar-img"
         [ Css.property "width" "100%"

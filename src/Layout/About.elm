@@ -1,4 +1,4 @@
-module Layout.About exposing (seoHeaders, view)
+module Layout.About exposing (pageTitle, seoHeaders, view)
 
 import Content.About exposing (Author)
 import Head
@@ -16,27 +16,33 @@ import Svg.Attributes as SvgAttrs
 import UrlPath
 
 
+{-| The About page's title, for the browser tab and for search results.
+-}
+pageTitle : Author -> String
+pageTitle author =
+    "About " ++ author.name ++ ", creator of the Eco compiler for Elm"
+
+
+{-| The About page's head tags. Link previews show a 1200 by 630 card with the author's portrait, drawn to match the
+site's banners.
+-}
 seoHeaders : Author -> List Head.Tag
 seoHeaders author =
-    let
-        imageUrl =
-            author.avatar
-                |> Maybe.map (\authorAvatar -> Pages.Url.fromPath <| UrlPath.fromString authorAvatar)
-                |> Maybe.withDefault
-                    ([ "images", "site-image.png" ] |> UrlPath.join |> Pages.Url.fromPath)
-    in
-    Seo.summary
+    Seo.summaryLarge
         { canonicalUrlOverride = Nothing
         , siteName = Settings.title
         , image =
-            { url = imageUrl
-            , alt = author.name
-            , dimensions = Just { width = 300, height = 300 }
-            , mimeType = Just (MimeType.Image MimeType.Png)
+            { url = [ "images", "about-card.jpg" ] |> UrlPath.join |> Pages.Url.fromPath
+            , alt = author.name ++ ", creator of Eco"
+            , dimensions = Just { width = 1200, height = 630 }
+            , mimeType = Just (MimeType.Image MimeType.Jpeg)
             }
-        , description = author.name ++ " - " ++ (author.occupation |> Maybe.withDefault ("Author of " ++ Settings.title))
+        , description =
+            "I'm "
+                ++ author.name
+                ++ ", creator of Eco, an optimising compiler for Elm written in Elm. I studied Computer Science at Cambridge and AI at Edinburgh."
         , locale = Settings.locale
-        , title = author.name
+        , title = pageTitle author
         }
         |> Seo.website
 
@@ -76,16 +82,19 @@ viewProfileCard author =
     Html.div
         [ Attrs.class "eco-profile-card"
         ]
-        [ Html.div
-            [ Attrs.class "eco-avatar"
-            ]
-            [ Html.img
-                [ Attrs.src "/images/authors/default.png"
-                , Attrs.alt author.name
-                , Attrs.attribute "loading" "lazy"
-                , Attrs.class "eco-avatar-img"
+        [ Html.div [ Attrs.class "eco-avatar-wrap" ]
+            [ avatarCircles
+            , Html.div
+                [ Attrs.class "eco-avatar"
                 ]
-                []
+                [ Html.img
+                    [ Attrs.src "/images/authors/default.png"
+                    , Attrs.alt author.name
+                    , Attrs.attribute "loading" "lazy"
+                    , Attrs.class "eco-avatar-img"
+                    ]
+                    []
+                ]
             ]
         , Html.div
             [ Attrs.class "eco-profile-name"
@@ -112,6 +121,25 @@ viewProfileCard author =
             ]
             []
         , viewSocials author.socials
+        ]
+
+
+{-| The three soft circles of the site's banners, behind the portrait, placed around it as they are around the
+portrait on the About page's link preview card (`public/images/about-card.jpg`), scaled from its 400px portrait to
+this 140px one. The portrait's centre is the origin. They sit behind the whole page and run across its lines.
+-}
+avatarCircles : Html msg
+avatarCircles =
+    Svg.svg
+        [ SvgAttrs.class "eco-avatar-circles"
+        , SvgAttrs.width "260"
+        , SvgAttrs.height "310"
+        , SvgAttrs.viewBox "-130 -145 260 310"
+        , Attrs.attribute "aria-hidden" "true"
+        ]
+        [ Svg.circle [ SvgAttrs.cx "0", SvgAttrs.cy "0", SvgAttrs.r "94.5", SvgAttrs.fill "#A7D6A2", SvgAttrs.fillOpacity "0.22" ] []
+        , Svg.circle [ SvgAttrs.cx "-63", SvgAttrs.cy "-85.75", SvgAttrs.r "52.5", SvgAttrs.fill "#A7D6A2", SvgAttrs.fillOpacity "0.2" ] []
+        , Svg.circle [ SvgAttrs.cx "63", SvgAttrs.cy "99.75", SvgAttrs.r "59.5", SvgAttrs.fill "#A7D6A2", SvgAttrs.fillOpacity "0.16" ] []
         ]
 
 
