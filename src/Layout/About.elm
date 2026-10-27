@@ -40,7 +40,7 @@ seoHeaders author =
         , description =
             "I'm "
                 ++ author.name
-                ++ ", creator of Eco, an optimising compiler for Elm written in Elm. I studied Computer Science at Cambridge and AI at Edinburgh."
+                ++ ", creator of Eco, an optimising compiler for Elm written in Elm."
         , locale = Settings.locale
         , title = pageTitle author
         }
