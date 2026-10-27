@@ -11,6 +11,7 @@ import Process
 import Route exposing (Route)
 import SharedTemplate exposing (SharedTemplate)
 import Style
+import Style.Packages
 import Task
 import UrlPath exposing (UrlPath)
 import View exposing (View)
@@ -109,9 +110,30 @@ view :
     -> (Msg -> msg)
     -> View msg
     -> { body : List (Html msg), title : String }
-view _ _ _ _ pageView =
+view _ page _ _ pageView =
     -- Every route draws its own layout. The stylesheets go here, once, at the same place on every page, so that
-    -- navigating between layouts does not recreate them.
-    { body = Style.styleNode :: Style.highlightTheme :: pageView.body
+    -- navigating between layouts does not recreate them. The packages pages have stylesheets of their own.
+    { body =
+        if isPackagesPage page.route then
+            Style.Packages.styleNode :: Style.Packages.highlightTheme :: pageView.body
+
+        else
+            Style.styleNode :: Style.highlightTheme :: pageView.body
     , title = pageView.title
     }
+
+
+isPackagesPage : Maybe Route -> Bool
+isPackagesPage route =
+    case route of
+        Just Route.Packages ->
+            True
+
+        Just (Route.Packages__Author___Name_ _) ->
+            True
+
+        Just (Route.Packages__Author___Name___ModuleName_ _) ->
+            True
+
+        _ ->
+            False

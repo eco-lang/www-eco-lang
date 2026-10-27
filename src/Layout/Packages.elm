@@ -1,7 +1,12 @@
 module Layout.Packages exposing (moduleDescription, seo, viewIndexPage, viewModulePage, viewPackagePage)
 
 {-| The pages of the packages section: the list of packages, each package's overview (its README and what its
-`elm.json` says), and the docs of each exposed module, laid out like package.elm-lang.org in the site's style.
+`elm.json` says), and the docs of each exposed module.
+
+They are laid out as a site of their own, modelled on package.elm-lang.org, because they will move to one: a band of
+colour across the top, the content on the left and the package's menu on the right. Their styles are in
+`Style.Packages`.
+
 -}
 
 import Code.ElmSignature as Signature
@@ -11,14 +16,13 @@ import Head
 import Head.Seo as Seo
 import Html exposing (Html)
 import Html.Attributes as Attrs
-import Layout.Markdown as Markdown
-import Layout.Site
+import Html.Keyed
+import Layout.PackageMarkdown as Markdown
 import Markdown.Block as Block exposing (Block)
 import MimeType
 import Pages.Url
 import Route
 import Settings
-import Style
 import Svg
 import Svg.Attributes as SvgAttrs
 import UrlPath
@@ -34,41 +38,28 @@ viewIndexPage : List PackageInfo -> List (Html msg)
 viewIndexPage packages =
     page
         { path = Route.toString Route.Packages
-        , contents = List.map (\info -> menuSection Nothing info) packages
-        , sidebar = indexSidebar packages
+        , crumbs = []
+        , nav = indexNav
         , main =
-            [ Html.div [ Attrs.class "eco-page-header" ]
-                [ Html.h1 [ Attrs.class "eco-page-title" ] [ Html.text "Packages" ]
-                , Html.p [ Attrs.class "eco-page-desc" ]
-                    [ Html.text "API documentation for the packages that come with eco." ]
-                ]
-            , divider
-            , Html.div [ Attrs.class "eco-pkg-list" ] (List.map viewPackageCard packages)
+            [ Html.h1 [ Attrs.class "pkg-title" ] [ Html.text "Packages" ]
+            , Html.p [ Attrs.class "pkg-subtitle" ] [ Html.text "API documentation for the packages that come with eco." ]
+            , Html.div [] (List.map viewSummary packages)
             ]
         }
 
 
-{-| `/packages/author/name`: the package's README and its details.
+{-| `/packages/author/name`: the package's README and its dependencies.
 -}
 viewPackagePage : List String -> PackageInfo -> List Block -> List (Html msg)
 viewPackagePage hosted info readme =
     page
         { path = packageHref info
-        , contents = [ menuSection (Just Overview) info ]
-        , sidebar = packageSidebar (Just Overview) info
+        , crumbs = packageCrumbs info
+        , nav = packageNav Overview info
         , main =
-            [ breadcrumb [ ( "Packages", Just (Route.toString Route.Packages) ) ] (packageName info)
-            , Html.div [ Attrs.class "eco-page-header" ]
-                [ Html.h1 [ Attrs.class "eco-page-title" ] [ Html.text (packageName info) ]
-                , Html.p [ Attrs.class "eco-page-desc" ] [ Html.text info.summary ]
-                ]
-            , viewFacts info
-            , divider
-            , Html.article [ Attrs.class "eco-article-body" ]
-                (Markdown.packageBlocksToHtml (linkConfig hosted info) (dropTitle info readme)
-                    ++ viewDependencies info
-                )
-            ]
+            Html.h1 [ Attrs.class "pkg-title" ] [ Html.text (packageName info) ]
+                :: Markdown.blocksToHtml (linkConfig hosted info) (dropTitle info readme)
+                ++ viewDependencies info
         }
 
 
@@ -76,69 +67,94 @@ viewPackagePage hosted info readme =
 -}
 viewModulePage : List String -> PackageInfo -> ModuleDocs -> List (Html msg)
 viewModulePage hosted info docs =
-    let
-        ( previous, next ) =
-            neighbours docs.name (exposedModules info)
-    in
     page
         { path = moduleHref info docs.name
-        , contents = [ menuSection (Just (Module docs.name)) info ]
-        , sidebar = packageSidebar (Just (Module docs.name)) info
+        , crumbs = packageCrumbs info
+        , nav = packageNav (Module docs.name) info
         , main =
-            [ breadcrumb
-                [ ( "Packages", Just (Route.toString Route.Packages) )
-                , ( packageName info, Just (packageHref info) )
-                ]
-                docs.name
-            , Html.div [ Attrs.class "eco-page-header" ]
-                [ Html.h1 [ Attrs.class "eco-page-title" ] [ Html.text docs.name ] ]
-            , divider
-            , Html.article [ Attrs.class "eco-article-body" ]
-                (List.map (viewSection (linkConfig hosted info) info docs.name) docs.sections)
-            , divider
-            , viewPageNav info previous next
-            ]
+            Html.h1 [ Attrs.class "pkg-title" ] [ Html.text docs.name ]
+                :: List.concatMap (viewSection (linkConfig hosted info) info docs.name) docs.sections
         }
 
 
-{-| The modules before and after a module in the package's list.
+{-| A page: the band, the content with the menu on its right, and the footer. On a phone the menu moves into the
+band, as a menu that opens. `path` keys that menu, so that navigating to another page renders it closed.
 -}
-neighbours : String -> List String -> ( Maybe String, Maybe String )
-neighbours name modules =
-    case modules of
-        first :: second :: rest ->
-            if first == name then
-                ( Nothing, Just second )
-
-            else if second == name then
-                ( Just first, List.head rest )
-
-            else
-                neighbours name (second :: rest)
-
-        _ ->
-            ( Nothing, Nothing )
-
-
 page :
     { path : String
-    , contents : List Layout.Site.MenuSection
-    , sidebar : Html msg
+    , crumbs : List Crumb
+    , nav : List (Html msg)
     , main : List (Html msg)
     }
     -> List (Html msg)
-page { path, contents, sidebar, main } =
-    [ Html.div [ Attrs.class "eco-page" ]
-        [ Layout.Site.viewHeader { active = Just Layout.Site.Packages, path = path, contents = contents }
-        , Html.div [ Attrs.class "eco-page-body" ]
-            [ sidebar
-            , Html.main_ [ Attrs.class "eco-content-area" ] main
+page { path, crumbs, nav, main } =
+    [ Html.div [ Attrs.class "pkg-page" ]
+        [ Html.header [ Attrs.class "pkg-band" ]
+            [ Html.div [ Attrs.class "pkg-band-inner" ]
+                [ Html.div [ Attrs.class "pkg-band-start" ]
+                    [ Html.a [ Attrs.href (Route.toString Route.Packages), Attrs.class "pkg-logo" ]
+                        [ Html.span [ Attrs.class "pkg-logo-mark" ] [ Html.text "eco" ]
+                        , Html.span [ Attrs.class "pkg-logo-word" ] [ Html.text "packages" ]
+                        ]
+                    , Html.div [ Attrs.class "pkg-crumbs" ] (List.concatMap viewCrumb crumbs)
+                    ]
+                , Html.div [ Attrs.class "pkg-band-end" ]
+                    [ Html.a [ Attrs.href "/", Attrs.class "pkg-band-home" ] [ Html.text "eco-lang.org", arrowIcon ]
+                    , Html.Keyed.node "div"
+                        []
+                        [ ( path
+                          , Html.node "details"
+                                [ Attrs.class "pkg-menu" ]
+                                [ Html.node "summary"
+                                    [ Attrs.class "pkg-menu-button", Attrs.attribute "aria-label" "Menu" ]
+                                    [ menuIcon, closeIcon ]
+                                , Html.nav [ Attrs.class "pkg-menu-panel" ] [ Html.div [ Attrs.class "pkg-nav" ] nav ]
+                                ]
+                          )
+                        ]
+                    ]
+                ]
             ]
-        , Layout.Site.viewFooterDivider
-        , Layout.Site.viewFooter
+        , Html.div [ Attrs.class "pkg-body" ]
+            [ Html.main_ [ Attrs.class "pkg-main" ] main
+            , Html.aside [ Attrs.class "pkg-side" ] [ Html.nav [ Attrs.class "pkg-nav" ] nav ]
+            ]
+        , Html.footer [ Attrs.class "pkg-footer" ]
+            [ Html.span [] [ Html.text ("eco packages \u{2014} release " ++ Settings.version) ]
+            , Html.a [ Attrs.href "/", Attrs.class "pkg-footer-link" ] [ Html.text "eco-lang.org" ]
+            , Html.a [ Attrs.href "/docs", Attrs.class "pkg-footer-link" ] [ Html.text "Documentation" ]
+            , Html.a [ Attrs.href githubUrl, Attrs.class "pkg-footer-link" ] [ Html.text "GitHub" ]
+            ]
         ]
     ]
 
+
+type alias Crumb =
+    { label : String, href : Maybe String }
+
+
+packageCrumbs : PackageInfo -> List Crumb
+packageCrumbs info =
+    [ { label = packageName info, href = Just (packageHref info) }
+    , { label = info.version, href = Nothing }
+    ]
+
+
+viewCrumb : Crumb -> List (Html msg)
+viewCrumb crumb =
+    [ Html.span [ Attrs.class "pkg-crumb-sep" ] [ Html.text "/" ]
+    , case crumb.href of
+        Just href ->
+            Html.a [ Attrs.href href, Attrs.class "pkg-crumb" ] [ Html.text crumb.label ]
+
+        Nothing ->
+            Html.span [ Attrs.class "pkg-crumb-current" ] [ Html.text crumb.label ]
+    ]
+
+
+githubUrl : String
+githubUrl =
+    "https://github.com/eco-lang/eco-compiler"
 
 
 -- HEAD
@@ -239,7 +255,7 @@ exposedModules info =
 
 
 
--- NAVIGATION
+-- MENU
 
 
 type Current
@@ -247,170 +263,123 @@ type Current
     | Module String
 
 
-menuSection : Maybe Current -> PackageInfo -> Layout.Site.MenuSection
-menuSection current info =
-    { title = packageName info
-    , links =
-        { label = "Overview", href = packageHref info, current = current == Just Overview }
-            :: List.map
-                (\moduleName ->
-                    { label = moduleName
-                    , href = moduleHref info moduleName
-                    , current = current == Just (Module moduleName)
-                    }
-                )
-                (exposedModules info)
-    }
-
-
-indexSidebar : List PackageInfo -> Html msg
-indexSidebar packages =
-    Html.aside [ Attrs.class "eco-sidebar" ]
-        [ Html.span [ Attrs.class "eco-sidebar-title" ] [ Html.text "Packages" ]
-        , Html.div [ Attrs.class "eco-sidebar-spacer" ] []
-        , Html.div [ Attrs.class "eco-toc-items" ]
-            (List.map (\info -> tocLink False (packageHref info) (packageName info)) packages)
+indexNav : List (Html msg)
+indexNav =
+    [ heading "Resources"
+    , Html.div [ Attrs.class "pkg-nav-list" ]
+        [ navLink False "/docs" "eco documentation"
+        , navLink False "/" "eco-lang.org"
+        , navLink False "https://package.elm-lang.org" "Elm packages"
+        , navLink False githubUrl "GitHub"
         ]
+    ]
 
 
-packageSidebar : Maybe Current -> PackageInfo -> Html msg
-packageSidebar current info =
-    Html.aside [ Attrs.class "eco-sidebar" ]
-        (Html.span [ Attrs.class "eco-sidebar-title" ] [ Html.text (packageName info) ]
-            :: Html.div [ Attrs.class "eco-sidebar-spacer" ] []
-            :: Html.div [ Attrs.class "eco-toc-items" ]
-                [ tocLink (current == Just Overview) (packageHref info) "Overview" ]
-            :: Html.div [ Attrs.class "eco-toc-gap" ] []
-            :: List.concatMap
-                (\group ->
-                    [ Html.div [ Attrs.class "eco-toc-section" ]
-                        [ Html.span [ Attrs.class "eco-toc-section-name" ]
-                            [ Html.text (Maybe.withDefault "Modules" group.title) ]
-                        ]
-                    , Html.div [ Attrs.class "eco-toc-items" ]
-                        (List.map
-                            (\moduleName ->
-                                tocLink (current == Just (Module moduleName)) (moduleHref info moduleName) moduleName
-                            )
-                            group.modules
-                        )
-                    , Html.div [ Attrs.class "eco-toc-gap" ] []
-                    ]
-                )
-                info.modules
-        )
-
-
-tocLink : Bool -> String -> String -> Html msg
-tocLink isActive href label =
-    Html.a
-        [ Attrs.href href
-        , Attrs.class
-            (if isActive then
-                "eco-toc-item-active"
-
-             else
-                "eco-toc-item"
-            )
-        ]
-        [ Html.text label ]
-
-
-breadcrumb : List ( String, Maybe String ) -> String -> Html msg
-breadcrumb trail active =
-    Html.nav [ Attrs.class "eco-breadcrumb" ]
-        (List.concatMap
-            (\( label, href ) ->
-                [ case href of
-                    Just url ->
-                        Html.a [ Attrs.href url, Attrs.class "eco-breadcrumb-link" ] [ Html.text label ]
-
-                    Nothing ->
-                        Html.span [ Attrs.class "eco-breadcrumb-text" ] [ Html.text label ]
-                , Html.span [ Attrs.class "eco-breadcrumb-sep" ] [ Html.text "/" ]
+{-| The menu of a package's pages: its overview, what its `elm.json` says, and its modules, with the current one
+marked.
+-}
+packageNav : Current -> PackageInfo -> List (Html msg)
+packageNav current info =
+    Html.h2 [ Attrs.class "pkg-nav-heading" ]
+        [ navLink (current == Overview) (packageHref info) "Overview" ]
+        :: heading "About"
+        :: Html.div [ Attrs.class "pkg-about" ]
+            [ aboutRow "Version" info.version
+            , aboutRow "License" info.license
+            , Html.span [ Attrs.class "pkg-about-label" ] [ Html.text "Install" ]
+            , Html.code [ Attrs.class "pkg-about-code" ] [ Html.text ("eco install " ++ packageName info) ]
+            ]
+        :: List.concatMap
+            (\group ->
+                [ heading (Maybe.withDefault "Modules" group.title)
+                , Html.div [ Attrs.class "pkg-nav-list" ] (List.map (navModule current info) group.modules)
                 ]
             )
-            trail
-            ++ [ Html.span [ Attrs.class "eco-breadcrumb-active" ] [ Html.text active ] ]
-        )
+            info.modules
 
 
-divider : Html msg
-divider =
-    Html.div [ Attrs.class "eco-content-divider" ] []
+navModule : Current -> PackageInfo -> String -> Html msg
+navModule current info moduleName =
+    if current == Module moduleName then
+        Html.a
+            [ Attrs.href (moduleHref info moduleName)
+            , Attrs.class "pkg-nav-module-current"
+            , Attrs.attribute "aria-current" "page"
+            ]
+            [ Html.text moduleName ]
+
+    else
+        Html.a [ Attrs.href (moduleHref info moduleName), Attrs.class "pkg-nav-module" ] [ Html.text moduleName ]
 
 
-viewPageNav : PackageInfo -> Maybe String -> Maybe String -> Html msg
-viewPageNav info previous next =
-    let
-        link className label moduleName icons =
-            Html.a [ Attrs.href (moduleHref info moduleName), Attrs.class className ]
-                [ Html.span [ Attrs.class "eco-page-nav-label" ] [ Html.text label ]
-                , Html.div [ Attrs.class "eco-page-nav-link-row" ] (icons (Html.span [ Attrs.class "eco-page-nav-title" ] [ Html.text moduleName ]))
-                ]
-    in
-    Html.div [ Attrs.class "eco-page-nav" ]
-        [ case previous of
-            Just moduleName ->
-                link "eco-page-nav-prev" "Previous" moduleName (\title -> [ arrowIcon "m12 19-7-7 7-7" "M19 12H5", title ])
+heading : String -> Html msg
+heading text =
+    Html.h2 [ Attrs.class "pkg-nav-heading" ] [ Html.text text ]
 
-            Nothing ->
-                Html.div [] []
-        , case next of
-            Just moduleName ->
-                link "eco-page-nav-next" "Next" moduleName (\title -> [ title, arrowIcon "m12 5 7 7-7 7" "M5 12h14" ])
 
-            Nothing ->
-                Html.div [] []
+aboutRow : String -> String -> Html msg
+aboutRow label value =
+    Html.div [ Attrs.class "pkg-about-row" ]
+        [ Html.span [ Attrs.class "pkg-about-label" ] [ Html.text label ]
+        , Html.span [] [ Html.text value ]
         ]
 
 
-arrowIcon : String -> String -> Html msg
-arrowIcon head shaft =
+navLink : Bool -> String -> String -> Html msg
+navLink isCurrent href label =
+    if isCurrent then
+        Html.a [ Attrs.href href, Attrs.class "pkg-nav-link-current", Attrs.attribute "aria-current" "page" ]
+            [ Html.text label ]
+
+    else
+        Html.a [ Attrs.href href, Attrs.class "pkg-nav-link" ] [ Html.text label ]
+
+
+menuIcon : Html msg
+menuIcon =
+    icon "pkg-menu-icon-open" 22 "M4 6h16M4 12h16M4 18h16"
+
+
+closeIcon : Html msg
+closeIcon =
+    icon "pkg-menu-icon-close" 22 "M6 6l12 12M18 6L6 18"
+
+
+{-| Marks the link back to the main site as a link to another site.
+-}
+arrowIcon : Html msg
+arrowIcon =
+    icon "" 14 "M7 17 17 7M8 7h9v9"
+
+
+icon : String -> Int -> String -> Html msg
+icon className size path =
     Svg.svg
-        [ SvgAttrs.width "14"
-        , SvgAttrs.height "14"
+        [ SvgAttrs.class className
+        , SvgAttrs.width (String.fromInt size)
+        , SvgAttrs.height (String.fromInt size)
         , SvgAttrs.viewBox "0 0 24 24"
         , SvgAttrs.fill "none"
-        , SvgAttrs.stroke Style.colors.accent
+        , SvgAttrs.stroke "currentColor"
         , SvgAttrs.strokeWidth "2"
         , SvgAttrs.strokeLinecap "round"
         , SvgAttrs.strokeLinejoin "round"
         ]
-        [ Svg.path [ SvgAttrs.d head ] []
-        , Svg.path [ SvgAttrs.d shaft ] []
-        ]
+        [ Svg.path [ SvgAttrs.d path ] [] ]
 
 
 
 -- PACKAGE LIST AND OVERVIEW
 
 
-viewPackageCard : PackageInfo -> Html msg
-viewPackageCard info =
-    Html.a [ Attrs.href (packageHref info), Attrs.class "eco-pkg-card" ]
-        [ Html.div [ Attrs.class "eco-pkg-card-head" ]
-            [ Html.span [ Attrs.class "eco-pkg-card-name" ] [ Html.text (packageName info) ]
-            , Html.span [ Attrs.class "eco-pkg-card-version" ] [ Html.text info.version ]
+viewSummary : PackageInfo -> Html msg
+viewSummary info =
+    Html.div [ Attrs.class "pkg-summary" ]
+        [ Html.div [ Attrs.class "pkg-summary-head" ]
+            [ Html.a [ Attrs.href (packageHref info), Attrs.class "pkg-summary-name" ] [ Html.text (packageName info) ]
+            , Html.span [ Attrs.class "pkg-summary-version" ] [ Html.text info.version ]
             ]
-        , Html.p [ Attrs.class "eco-pkg-card-summary" ] [ Html.text info.summary ]
-        ]
-
-
-viewFacts : PackageInfo -> Html msg
-viewFacts info =
-    let
-        fact label content =
-            Html.div [ Attrs.class "eco-pkg-fact" ]
-                [ Html.span [ Attrs.class "eco-pkg-fact-label" ] [ Html.text label ]
-                , Html.span [ Attrs.class "eco-pkg-fact-value" ] content
-                ]
-    in
-    Html.div [ Attrs.class "eco-pkg-facts" ]
-        [ fact "Version" [ Html.text info.version ]
-        , fact "License" [ Html.text info.license ]
-        , fact "Install"
-            [ Html.code [ Attrs.class "eco-doc-code-inline" ] [ Html.text ("eco install " ++ packageName info) ] ]
+        , Html.p [ Attrs.class "pkg-summary-desc" ] [ Html.text info.summary ]
         ]
 
 
@@ -436,20 +405,17 @@ viewDependencies info =
         []
 
     else
-        [ Html.h2 [ Attrs.id "dependencies", Attrs.class "eco-doc-h2" ] [ Html.text "Dependencies" ]
-        , Html.ul [ Attrs.class "eco-doc-ul" ]
+        [ Html.h2 [ Attrs.id "dependencies", Attrs.class "pkg-md-h2" ] [ Html.text "Dependencies" ]
+        , Html.ul [ Attrs.class "pkg-md-ul" ]
             (List.map
                 (\( name, constraint ) ->
-                    Html.li [ Attrs.class "eco-doc-li" ]
-                        [ Html.span [ Attrs.class "eco-doc-bullet" ] []
-                        , Html.span [ Attrs.class "eco-doc-bullet-text" ]
-                            [ Html.a
-                                [ Attrs.href ("https://package.elm-lang.org/packages/" ++ name ++ "/latest/")
-                                , Attrs.class "eco-doc-link"
-                                ]
-                                [ Html.text name ]
-                            , Html.span [ Attrs.class "eco-pkg-constraint" ] [ Html.text constraint ]
+                    Html.li [ Attrs.class "pkg-md-li" ]
+                        [ Html.a
+                            [ Attrs.href ("https://package.elm-lang.org/packages/" ++ name ++ "/latest/")
+                            , Attrs.class "pkg-md-link"
                             ]
+                            [ Html.text name ]
+                        , Html.span [ Attrs.class "pkg-dependency-version" ] [ Html.text constraint ]
                         ]
                 )
                 info.dependencies
@@ -461,16 +427,19 @@ viewDependencies info =
 -- MODULE DOCS
 
 
-viewSection : { base : String, hosted : List String } -> PackageInfo -> String -> Section -> Html msg
+viewSection : { base : String, hosted : List String } -> PackageInfo -> String -> Section -> List (Html msg)
 viewSection config info moduleName section =
     case section of
         Prose blocks ->
-            Html.div [] (Markdown.packageBlocksToHtml config blocks)
+            Markdown.blocksToHtml config blocks
 
         DeclarationSection declaration ->
-            viewDeclaration config info moduleName declaration
+            [ viewDeclaration config info moduleName declaration ]
 
 
+{-| A declaration: its header on the left edge of the page, the name linking to the declaration itself, and its doc
+comment inset below.
+-}
 viewDeclaration : { base : String, hosted : List String } -> PackageInfo -> String -> Declaration -> Html msg
 viewDeclaration config info moduleName declaration =
     let
@@ -491,15 +460,15 @@ viewDeclaration config info moduleName declaration =
                 UnknownKind ->
                     [ [ Signature.Name declaration.name ] ]
     in
-    Html.div [ Attrs.id declaration.name, Attrs.class "eco-pkg-decl" ]
-        [ Html.pre [ Attrs.class "eco-pkg-sig" ]
+    Html.div [ Attrs.id declaration.name, Attrs.class "pkg-decl" ]
+        [ Html.pre [ Attrs.class "pkg-decl-header" ]
             [ Html.code []
                 (List.intersperse [ Html.text "\n" ]
                     (List.map (List.map (viewPiece info moduleName declaration.name)) lines)
                     |> List.concat
                 )
             ]
-        , Html.div [ Attrs.class "eco-pkg-decl-doc" ] (Markdown.packageBlocksToHtml config declaration.comment)
+        , Html.div [ Attrs.class "pkg-decl-comment" ] (Markdown.blocksToHtml config declaration.comment)
         ]
 
 
@@ -507,15 +476,15 @@ viewPiece : PackageInfo -> String -> String -> Signature.Piece -> Html msg
 viewPiece info moduleName declarationName piece =
     case piece of
         Signature.Name name ->
-            Html.a [ Attrs.href ("#" ++ declarationName), Attrs.class "eco-pkg-sig-name" ] [ Html.text name ]
+            Html.a [ Attrs.href ("#" ++ declarationName), Attrs.class "pkg-decl-name" ] [ Html.text name ]
 
         Signature.Keyword text ->
-            Html.span [ Attrs.class "eco-pkg-sig-keyword" ] [ Html.text text ]
+            Html.span [ Attrs.class "pkg-decl-keyword" ] [ Html.text text ]
 
         Signature.TypeRef { label, qualified } ->
             case typeHref info moduleName qualified of
                 Just href ->
-                    Html.a [ Attrs.href href, Attrs.class "eco-pkg-sig-type" ] [ Html.text label ]
+                    Html.a [ Attrs.href href, Attrs.class "pkg-decl-type" ] [ Html.text label ]
 
                 Nothing ->
                     Html.text label

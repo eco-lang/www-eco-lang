@@ -1,4 +1,4 @@
-module Layout.Markdown exposing (docsBlocksToHtml, docsSyntaxHighlight, packageBlocksToHtml)
+module Layout.Markdown exposing (docsBlocksToHtml, docsSyntaxHighlight)
 
 import Code.Cpp
 import Code.Highlight
@@ -250,74 +250,3 @@ docsBlocksToHtml blocks =
     Markdown.Renderer.render docsRenderer blocks
         |> Result.withDefault [ Html.text "failed to render markdown" ]
 
-
-
--- PACKAGE DOCS RENDERER
-
-
-{-| Render a package's README or doc comments. These are written for package.elm-lang.org, so the renderer reads them
-as that site does: a code block with no language is Elm, a relative link such as `Stream#pipe` names a module of the
-same package, and a link to `/packages/...` names a package on package.elm-lang.org, unless it is one this site hosts.
--}
-packageBlocksToHtml : { base : String, hosted : List String } -> List Block.Block -> List (Html msg)
-packageBlocksToHtml config blocks =
-    Markdown.Renderer.render (packageRenderer config) blocks
-        |> Result.withDefault [ Html.text "failed to render markdown" ]
-
-
-packageRenderer : { base : String, hosted : List String } -> Markdown.Renderer.Renderer (Html msg)
-packageRenderer config =
-    { docsRenderer
-        | codeBlock =
-            \block ->
-                docsSyntaxHighlight
-                    { body = trimTrailingLines block.body
-                    , language =
-                        if block.language == Nothing || block.language == Just "" then
-                            Just "elm"
-
-                        else
-                            block.language
-                    }
-        , link =
-            \link content ->
-                docsRenderer.link { link | destination = packageLink config link.destination } content
-    }
-
-
-{-| An indented code block keeps the blank lines after it, which would show as empty numbered lines.
--}
-trimTrailingLines : String -> String
-trimTrailingLines body =
-    String.trimRight body ++ "\n"
-
-
-{-| Where a link in package docs points on this site. `base` is the package's path, such as `/packages/eco/system/`,
-and `hosted` lists the packages this site hosts, such as `eco/system`.
--}
-packageLink : { base : String, hosted : List String } -> String -> String
-packageLink config destination =
-    if
-        String.startsWith "#" destination
-            || String.contains "://" destination
-            || String.startsWith "mailto:" destination
-    then
-        destination
-
-    else if String.startsWith "/packages/" destination then
-        case String.split "/" destination of
-            "" :: "packages" :: author :: name :: _ ->
-                if List.member (author ++ "/" ++ name) config.hosted then
-                    destination
-
-                else
-                    "https://package.elm-lang.org" ++ destination
-
-            _ ->
-                destination
-
-    else if String.startsWith "/" destination then
-        destination
-
-    else
-        config.base ++ destination

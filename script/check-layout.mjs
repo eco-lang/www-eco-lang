@@ -361,7 +361,7 @@ async function checkMenu(cdp) {
   })()`);
   if (!opened.open) fail("menu does not open on click");
   const hrefs = opened.links.map((l) => l.href);
-  for (const href of ["/", "/docs", "/articles", "/roadmap", "/about", "/docs/bytes-fusion", "/docs/glossary"])
+  for (const href of ["/docs", "/packages", "/articles", "/roadmap", "/about", "/docs/bytes-fusion", "/docs/glossary"])
     if (!hrefs.includes(href)) fail(`menu has no link to ${href}`);
   if (!opened.links.some((l) => l.href === "/docs/reification" && l.current === "page"))
     fail("current page is not marked with aria-current");

@@ -9,8 +9,7 @@ import Svg.Attributes as SvgAttrs
 
 
 type NavItem
-    = Home
-    | Docs
+    = Docs
     | Packages
     | Articles
     | Roadmap
@@ -36,8 +35,7 @@ type alias MenuLink =
 
 siteLinks : List ( NavItem, String, String )
 siteLinks =
-    [ ( Home, "/", "Home" )
-    , ( Docs, "/docs", "Docs" )
+    [ ( Docs, "/docs", "Docs" )
     , ( Packages, "/packages", "Packages" )
     , ( Articles, "/articles", "Articles" )
     , ( Roadmap, "/roadmap", "Roadmap" )
@@ -63,8 +61,10 @@ viewHeader { active, path, contents } =
         [ Attrs.class "eco-header"
         ]
         [ Html.div [ Attrs.class "eco-header-brand" ]
-            [ Html.span
-                [ Attrs.class "eco-header-logo"
+            [ Html.a
+                [ Attrs.href "/"
+                , Attrs.class "eco-header-logo"
+                , Attrs.attribute "aria-label" "eco home"
                 ]
                 [ Html.text "eco" ]
             , Html.span
@@ -73,7 +73,7 @@ viewHeader { active, path, contents } =
                 [ Html.text Settings.version ]
             ]
         , Html.div [ Attrs.class "eco-header-nav" ]
-            (List.map (\( item, href, label ) -> viewNavLink href label (active == Just item)) siteLinks
+            (List.map (\( item, href, label ) -> viewNavLink href (navLabel item label) (active == Just item)) siteLinks
                 ++ [ Html.a
                         [ Attrs.href githubUrl
                         , Attrs.target "_blank"
@@ -119,7 +119,7 @@ viewMenu active contents =
                                     "eco-menu-site-link"
                                 )
                             ]
-                            [ Html.text label ]
+                            (navLabel item label)
                     )
                     siteLinks
                     ++ [ Html.a
@@ -190,7 +190,35 @@ closeIcon =
         [ Svg.path [ SvgAttrs.d "M6 6l12 12M18 6L6 18" ] [] ]
 
 
-viewNavLink : String -> String -> Bool -> Html msg
+{-| A site link's label. Packages is marked as a link to another site: its pages have their own layout, and will move
+to a site of their own.
+-}
+navLabel : NavItem -> String -> List (Html msg)
+navLabel item label =
+    if item == Packages then
+        [ Html.text label, externalIcon ]
+
+    else
+        [ Html.text label ]
+
+
+externalIcon : Html msg
+externalIcon =
+    Svg.svg
+        [ SvgAttrs.class "eco-nav-external"
+        , SvgAttrs.width "12"
+        , SvgAttrs.height "12"
+        , SvgAttrs.viewBox "0 0 24 24"
+        , SvgAttrs.fill "none"
+        , SvgAttrs.stroke "currentColor"
+        , SvgAttrs.strokeWidth "2.5"
+        , SvgAttrs.strokeLinecap "round"
+        , SvgAttrs.strokeLinejoin "round"
+        ]
+        [ Svg.path [ SvgAttrs.d "M7 17 17 7M8 7h9v9" ] [] ]
+
+
+viewNavLink : String -> List (Html msg) -> Bool -> Html msg
 viewNavLink href label isActive =
     Html.a
         [ Attrs.href href
@@ -200,7 +228,7 @@ viewNavLink href label isActive =
           else
             Attrs.class "eco-nav-link"
         ]
-        [ Html.text label ]
+        label
 
 
 githubIcon : Html msg

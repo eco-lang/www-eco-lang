@@ -14,7 +14,7 @@ This is the Eco Compiler website built with elm-pages v3. Eco is a reimagined El
 - `content/blog/` - Markdown blog posts with frontmatter
 - `content/authors/` - Author profiles in markdown
 - `public/` - Static assets (copied to dist/)
-- `content/packages/<author>/<name>/` - API docs for a hosted package: its `docs.json` (from `elm make --docs`), `elm.json` and `README.md`, copied from the package. Rendered at `/packages`, `/packages/<author>/<name>` and `/packages/<author>/<name>/<Module-Name>` (`src/Content/Packages.elm`, `src/Layout/Packages.elm`, `src/Code/ElmSignature.elm`)
+- `content/packages/<author>/<name>/` - API docs for a hosted package: its `docs.json` (from `elm make --docs`), `elm.json` and `README.md`, copied from the package. Rendered at `/packages`, `/packages/<author>/<name>` and `/packages/<author>/<name>/<Module-Name>` (`src/Content/Packages.elm`, `src/Layout/Packages.elm`, `src/Layout/PackageMarkdown.elm`, `src/Code/ElmSignature.elm`). These pages are laid out as a separate site modelled on package.elm-lang.org (green band, menu on the right) with their own stylesheet, `src/Style/Packages.elm` (`pkg-*` classes); `Shared.view` picks the stylesheet by route
 - `src/Style.elm` - the whole stylesheet, written with elm-css `Css.Global` as `eco-*` classes; phone rules sit inside each class as `mobile [ … ]` (below 768px). `src/Style/Layout.elm` has the layout functions (`row`, `gap 7`, `padX 4`, …) and the CSS reset. There is no Tailwind and no CSS file.
 - `script/check-layout.mjs` - after `npm run build`: `fit` checks every page fits 390–1440px and the phone menu works; `snapshot`/`compare` (with `--by-box`) detect layout changes
 

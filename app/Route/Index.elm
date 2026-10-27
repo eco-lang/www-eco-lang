@@ -89,7 +89,7 @@ view _ _ =
         [ Html.div
             [ Attrs.class "eco-page"
             ]
-            [ Layout.Site.viewHeader { active = Just Layout.Site.Home, path = "/", contents = [] }
+            [ Layout.Site.viewHeader { active = Nothing, path = "/", contents = [] }
             , viewHero
             , viewHowItWorks
             , viewComparison
