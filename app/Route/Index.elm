@@ -209,8 +209,8 @@ viewHowItWorks =
             [ Html.text "How it works" ]
         , Html.div [ Attrs.class "eco-home-steps" ]
             [ viewStep "1" "Write Elm" "Write standard Elm code using the types and patterns you already know and love."
-            , viewStep "2" "Compile with eco" "eco analyses, optimises, and compiles your code through MLIR and LLVM to high performance native."
-            , viewStep "3" "Ship anywhere" "Deploy native binaries, or web apps, all from a single codebase."
+            , viewStep "2" "Compile with eco" "eco analyses, optimises, and compiles your code through MLIR and LLVM to fast native code."
+            , viewStep "3" "Run it" "A native executable for your server or terminal, or JavaScript for the browser, whichever the job needs."
             ]
         ]
 
