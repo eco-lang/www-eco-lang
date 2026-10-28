@@ -303,6 +303,15 @@ viewCommunity =
             [ Html.text "Join the community" ]
         , Html.p [ Attrs.class "eco-home-section-sub" ]
             [ Html.text "eco is open source and community-driven. Contributors, testers, and feedback are all welcome." ]
+        , Html.p [ Attrs.class "eco-home-section-sub" ]
+            [ Html.text "You'll find the Elm community on "
+            , communityLink "https://elm-lang.org/community/slack" "Elm Slack"
+            , Html.text ", the "
+            , communityLink "https://incrementalelm.com/chat" "Incremental Elm Discord"
+            , Html.text " and the "
+            , communityLink "https://discourse.elm-lang.org" "Elm Discourse forum"
+            , Html.text "."
+            ]
         , Html.div [ Attrs.class "eco-home-comm-cards" ]
             [ viewCommunityCard
                 { icon = githubIcon
@@ -314,6 +323,16 @@ viewCommunity =
                 }
             ]
         ]
+
+
+communityLink : String -> String -> Html msg
+communityLink href label =
+    Html.a
+        [ Attrs.href href
+        , Attrs.target "_blank"
+        , Attrs.class "eco-home-section-sub-link"
+        ]
+        [ Html.text label ]
 
 
 viewCommunityCard :

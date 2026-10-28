@@ -2003,6 +2003,12 @@ homepageStyles =
         , Css.property "max-width" "600px"
         , mobile [ Css.property "font-size" "16px" ]
         ]
+    , Css.Global.class "eco-home-section-sub-link"
+        [ Css.property "color" sageStone.number
+        , Css.property "font-weight" "500"
+        , Css.property "text-decoration" "none"
+        , Css.hover [ Css.property "text-decoration" "underline" ]
+        ]
     ]
 
 
