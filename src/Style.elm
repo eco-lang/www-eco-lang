@@ -1440,7 +1440,7 @@ heroDark =
     , link = "#A5D6A7"
     , buttonText = "#0B160E"
     , editorBg = "#08110B"
-    , editorBar = "#13241A"
+    , editorBar = "#24492F"
     , editorBorder = "#234030"
     , editorFilename = "#9DB8A3"
     }
@@ -1605,7 +1605,7 @@ homepageStyles =
         [ Css.property "background-color" heroDark.editorBg
         , Css.property "border" ("1px solid " ++ heroDark.editorBorder)
         , Css.property "border-radius" "10px"
-        , Css.property "box-shadow" "0 16px 40px rgba(0, 0, 0, 0.45)"
+        , Css.property "box-shadow" "0 24px 56px rgba(0, 0, 0, 0.7), 0 6px 16px rgba(0, 0, 0, 0.5)"
         , Css.property "overflow" "hidden"
         ]
     , Css.Global.class "eco-home-editor-bar"
