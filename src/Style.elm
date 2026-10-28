@@ -1456,7 +1456,6 @@ sageStone :
     , body : String
     , muted : String
     , border : String
-    , tableHeader : String
     , tableRule : String
     , command : String
     , number : String
@@ -1472,7 +1471,6 @@ sageStone =
     , body = "#454C46"
     , muted = "#6B726C"
     , border = "#D9DCD5"
-    , tableHeader = "#ECEEE9"
     , tableRule = "#EEF0EC"
     , command = "#E6EBE4"
     , number = "#43A047"
@@ -1698,7 +1696,7 @@ homepageStyles =
         , Css.property "pointer-events" "none"
         , Css.property "z-index" "0"
         ]
-    , Css.Global.class "eco-home-step-halo-1" [ halo 504 ]
+    , Css.Global.class "eco-home-step-halo-1" [ halo 1088 ]
     , Css.Global.class "eco-home-step-halo-2" [ halo 948 ]
     , Css.Global.class "eco-home-step-halo-3" [ halo 605 ]
     , Css.Global.selector ".eco-home-step-title, .eco-home-step-command, .eco-home-step-desc"
@@ -1789,7 +1787,7 @@ homepageStyles =
         ]
     , Css.Global.class "eco-home-table-header"
         [ row
-        , Css.property "background-color" sageStone.tableHeader
+        , Css.property "background-color" colors.releasedGreenBg
         , Css.property "border-bottom" ("1px solid " ++ sageStone.border)
         , mobile [ hidden ]
         ]
@@ -1817,7 +1815,7 @@ homepageStyles =
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
         , Css.property "font-weight" "600"
-        , Css.property "color" colors.accent
+        , Css.property "color" sageStone.number
         ]
     , Css.Global.class "eco-home-table-row"
         [ row
