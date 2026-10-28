@@ -1630,6 +1630,15 @@ homepageStyles =
         , Css.property "font-weight" "600"
         , Css.property "color" colors.text
         ]
+    , Css.Global.class "eco-home-step-command"
+        [ Css.property "font-family" fontCode
+        , Css.property "font-size" "13px"
+        , Css.property "color" colors.text
+        , Css.property "background-color" "rgba(76, 175, 80, 0.08)"
+        , Css.property "border-radius" "4px"
+        , Css.property "padding" "4px 10px"
+        , Css.property "text-align" "center"
+        ]
     , Css.Global.class "eco-home-step-desc"
         [ Css.property "font-family" fontBody
         , Css.property "font-size" "15px"
@@ -1643,6 +1652,9 @@ homepageStyles =
         , gap 12
         , padY 16
         , padX 30
+
+        -- Three columns between 768px and 1024px need the room, or the command lines wrap mid-word.
+        , Css.Media.withMediaQuery [ "(min-width: 768px) and (max-width: 1023.98px)" ] [ padX 8 ]
         , mobile [ padX 4, padY 12, gap 8 ]
         ]
     , Css.Global.class "eco-home-steps"
@@ -1656,6 +1668,10 @@ homepageStyles =
         , alignItems "center"
         , gap 4
         , grow
+
+        -- Equal thirds, whatever the length of each card's command line.
+        , Css.property "flex-basis" "0"
+        , Css.property "min-width" "0"
         , padX 4
         , mobile [ padX 0 ]
         ]
@@ -1692,8 +1708,18 @@ homepageStyles =
         , Css.property "border-bottom" ("1px solid " ++ colors.border)
         , mobile [ hidden ]
         ]
+
+    -- The three columns share the width in fixed proportions, so every row lines up with the header whatever its text.
     , Css.Global.class "eco-home-table-th"
-        [ grow
+        [ Css.property "flex" "1 1 0"
+        , Css.property "padding" "14px 20px"
+        , Css.property "font-family" fontBody
+        , Css.property "font-size" "13px"
+        , Css.property "font-weight" "600"
+        , Css.property "color" colors.muted
+        ]
+    , Css.Global.class "eco-home-table-th-elm"
+        [ Css.property "flex" "1.3 1 0"
         , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
@@ -1701,7 +1727,7 @@ homepageStyles =
         , Css.property "color" colors.muted
         ]
     , Css.Global.class "eco-home-table-th-eco"
-        [ grow
+        [ Css.property "flex" "1.7 1 0"
         , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
@@ -1718,7 +1744,8 @@ homepageStyles =
         , mobile [ Css.property "flex-direction" "column", padY 3 ]
         ]
     , Css.Global.class "eco-home-table-cell"
-        [ grow
+        [ Css.property "flex" "1 1 0"
+        , Css.property "font-weight" "600"
         , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
@@ -1727,21 +1754,20 @@ homepageStyles =
         , mobile [ Css.property "font-weight" "600", Css.property "padding-bottom" "6px" ]
         ]
     , Css.Global.class "eco-home-table-cell-dim"
-        [ grow
+        [ Css.property "flex" "1.3 1 0"
         , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
-        , Css.property "color" colors.heading
+        , Css.property "color" colors.text
         , mobile [ Css.property "padding" "2px 16px" ]
-        , mobile [ Css.before [ Css.property "content" "\"Elm compiler: \"", Css.property "color" colors.muted ] ]
+        , mobile [ Css.before [ Css.property "content" "\"Elm 0.19: \"", Css.property "color" colors.muted ] ]
         ]
     , Css.Global.class "eco-home-table-cell-eco"
-        [ grow
+        [ Css.property "flex" "1.7 1 0"
         , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
-        , Css.property "font-weight" "600"
-        , Css.property "color" colors.accent
+        , Css.property "color" colors.text
         , mobile [ Css.property "padding" "2px 16px" ]
         , mobile [ Css.before [ Css.property "content" "\"eco: \"", Css.property "color" colors.muted, Css.property "font-weight" "400" ] ]
         ]

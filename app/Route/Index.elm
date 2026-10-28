@@ -203,7 +203,7 @@ viewEditorMockup =
 
 
 
--- HOW IT WORKS
+-- OUTPUTS
 
 
 viewHowItWorks : Html msg
@@ -212,22 +212,23 @@ viewHowItWorks =
         [ Attrs.class "eco-home-steps-section"
         ]
         [ Html.h2 [ Attrs.class "eco-home-section-title" ]
-            [ Html.text "How it works" ]
+            [ Html.text "One command, three outputs" ]
         , Html.div [ Attrs.class "eco-home-steps" ]
-            [ viewStep "1" "Write Elm" "Write standard Elm code using the types and patterns you already know and love."
-            , viewStep "2" "Compile with eco" "eco analyses, optimises, and compiles your code through MLIR and LLVM to fast native code."
-            , viewStep "3" "Run it" "A native executable for your server or terminal, or JavaScript for the browser, whichever the job needs."
+            [ viewStep "1" "Executable" "--output=main" "A native program for the command line, a server or a batch job. It needs no Node or npm on the machine where it runs."
+            , viewStep "2" "Embed" "--output=main.so" "A shared library or Node addon. A C, C++ or Node program starts your Elm program and talks to it through its ports."
+            , viewStep "3" "Web" "--output=main.js" "For the browser, the same JavaScript and HTML that elm make produces, from the same code generator."
             ]
         ]
 
 
-viewStep : String -> String -> String -> Html msg
-viewStep number title description =
+viewStep : String -> String -> String -> String -> Html msg
+viewStep number title output description =
     Html.div
         [ Attrs.class "eco-home-step"
         ]
         [ Html.div [ Attrs.class "eco-home-step-number" ] [ Html.text number ]
         , Html.div [ Attrs.class "eco-home-step-title" ] [ Html.text title ]
+        , Html.code [ Attrs.class "eco-home-step-command" ] [ Html.text ("eco make src/Main.elm " ++ output) ]
         , Html.p [ Attrs.class "eco-home-step-desc" ] [ Html.text description ]
         ]
 
@@ -242,13 +243,21 @@ viewComparison =
         [ Attrs.class "eco-home-comp-section"
         ]
         [ Html.h2 [ Attrs.class "eco-home-comp-title" ]
-            [ Html.text "eco vs. the official Elm compiler" ]
+            [ Html.text "Elm and eco compared" ]
         , Html.div [ Attrs.class "eco-home-table" ]
             [ viewTableHeader
-            , viewTableRow True "Written in" "Haskell" "Elm, C++ ✓"
-            , viewTableRow True "Output targets" "JavaScript only" "Native, JavaScript ✓"
-            , viewTableRow True "Build dependency" "GHC required" "Self-hosted ✓"
-            , viewTableRow False "Community contributions" "Requires Haskell knowledge" "Elm devs welcome ✓"
+            , viewTableRow True "Language" "Elm 0.19" "Elm 0.19, unchanged"
+            , viewTableRow True "Error messages" "Elm's" "The same messages"
+            , viewTableRow True "Packages" "The Elm package ecosystem" "The same packages; built-ins rewritten in C++"
+            , viewTableRow True "Browser output" "JavaScript and HTML" "The same generator, the same output"
+            , viewTableRow True "Native executables" "—" "Linux, macOS, Windows"
+            , viewTableRow True "Files and processes" "Through ports, in Node" "eco/system (Linux and macOS)"
+            , viewTableRow True "Sockets" "Through ports, in Node" "TCP, UDP, TLS, Unix sockets"
+            , viewTableRow True "HTTP server" "Through ports, in Node" "Built in: HTTPS, HTTP/2, WebSockets"
+            , viewTableRow True "Deployment" "Node and its dependencies" "One binary (static on Linux)"
+            , viewTableRow True "Embedding" "—" "Shared libraries, Node addons"
+            , viewTableRow True "Builds itself" "—" "Yes, byte for byte on every build"
+            , viewTableRow False "Compile speed" "Famously fast" "Native builds go through LLVM and are slower"
             ]
         ]
 
@@ -256,8 +265,8 @@ viewComparison =
 viewTableHeader : Html msg
 viewTableHeader =
     Html.div [ Attrs.class "eco-home-table-header" ]
-        [ Html.div [ Attrs.class "eco-home-table-th" ] [ Html.text "Feature" ]
-        , Html.div [ Attrs.class "eco-home-table-th" ] [ Html.text "Elm Compiler" ]
+        [ Html.div [ Attrs.class "eco-home-table-th" ] []
+        , Html.div [ Attrs.class "eco-home-table-th-elm" ] [ Html.text "Elm 0.19" ]
         , Html.div [ Attrs.class "eco-home-table-th-eco" ] [ Html.text "eco" ]
         ]
 
