@@ -258,7 +258,8 @@ viewComparison =
             , viewTableRow True "Deployment" "Node and its dependencies" "One binary (static on Linux)"
             , viewTableRow True "Embedding" "—" "Shared libraries, Node addons"
             , viewTableRow True "Builds itself" "—" "Yes, byte for byte on every build"
-            , viewTableRow False "Compile speed" "Famously fast" "Native builds go through LLVM and are slower"
+            , viewTableRow True "Compiler threads" "Multi-threaded, in Haskell" "Single-threaded, in Elm"
+            , viewTableRow False "Compile speed" "Famously fast" "Slower: one thread, and native builds go through LLVM"
             ]
         ]
 
@@ -306,7 +307,7 @@ viewCommunity =
             [ viewCommunityCard
                 { icon = githubIcon
                 , title = "Contribute on GitHub"
-                , description = "Browse issues, submit PRs, or fork the project. The compiler is written in Elm, so no Haskell is required."
+                , description = "Browse issues, submit PRs, or fork the project. The compiler is written in Elm, so no Haskell is required. The backend does use C++, though."
                 , buttonText = "View Repository →"
                 , buttonClass = "eco-home-btn-dark"
                 , buttonHref = "https://github.com/eco-lang/eco-compiler"
