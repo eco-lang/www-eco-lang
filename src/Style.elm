@@ -1,4 +1,4 @@
-module Style exposing (Colors, colors, heroDark, styleNode, highlightTheme)
+module Style exposing (Colors, colors, heroDark, sageStone, styleNode, highlightTheme)
 
 import Css
 import Css.Global
@@ -1446,10 +1446,62 @@ heroDark =
     }
 
 
+{-| Below the hero the home page uses cool grey-green neutrals rather than the site's warm cream, so the light sections
+sit with the forest hero, and its call to action is forest too.
+-}
+sageStone :
+    { ground : String
+    , surface : String
+    , text : String
+    , body : String
+    , muted : String
+    , border : String
+    , tableHeader : String
+    , tableRule : String
+    , command : String
+    , number : String
+    , ctaGround : String
+    , ctaSubtitle : String
+    , ctaGhostBorder : String
+    }
+sageStone =
+    { ground = "#F3F4F1"
+    , surface = "#FAFBF9"
+    , text = "#1A1F1B"
+    , body = "#454C46"
+    , muted = "#6B726C"
+    , border = "#D9DCD5"
+    , tableHeader = "#ECEEE9"
+    , tableRule = "#EEF0EC"
+    , command = "#E6EBE4"
+    , number = "#43A047"
+    , ctaGround = "#1B3A26"
+    , ctaSubtitle = "#B9D3BE"
+    , ctaGhostBorder = "#3B6B4A"
+    }
+
+
 homepageStyles : List Css.Global.Snippet
 homepageStyles =
-    [ -- Split hero on a deep green ground, with the three circles behind the editor
-      Css.Global.class "eco-home-hero"
+    [ -- The page ground, header and footer in the home page's neutrals; `eco-home` sits on the page root beside `eco-page`
+      Css.Global.selector ".eco-page.eco-home"
+        [ Css.property "background-color" sageStone.ground
+        ]
+    , Css.Global.selector ".eco-home .eco-header"
+        [ Css.property "background-color" sageStone.ground
+        ]
+    , Css.Global.selector ".eco-home .eco-nav-link, .eco-home .eco-header-github"
+        [ Css.property "color" sageStone.body
+        ]
+    , Css.Global.selector ".eco-home .eco-divider"
+        [ Css.property "background-color" sageStone.border
+        ]
+    , Css.Global.selector ".eco-home .eco-footer-note, .eco-home .eco-footer-link"
+        [ Css.property "color" sageStone.muted
+        ]
+
+    -- Split hero on a deep green ground, with the three circles behind the editor
+    , Css.Global.class "eco-home-hero"
         [ Css.property "position" "relative"
         , Css.property "overflow" "hidden"
         , Css.property "height" "440px"
@@ -1614,7 +1666,7 @@ homepageStyles =
         [ Css.property "width" "48px"
         , Css.property "height" "48px"
         , Css.property "border-radius" "24px"
-        , Css.property "background-color" colors.accent
+        , Css.property "background-color" sageStone.number
         , Css.property "font-family" fontHeading
         , Css.property "font-size" "20px"
         , Css.property "font-weight" "700"
@@ -1628,13 +1680,13 @@ homepageStyles =
         [ Css.property "font-family" fontHeading
         , Css.property "font-size" "18px"
         , Css.property "font-weight" "600"
-        , Css.property "color" colors.text
+        , Css.property "color" sageStone.text
         ]
     , Css.Global.class "eco-home-step-command"
         [ Css.property "font-family" fontCode
         , Css.property "font-size" "13px"
-        , Css.property "color" colors.text
-        , Css.property "background-color" "rgba(76, 175, 80, 0.08)"
+        , Css.property "color" sageStone.text
+        , Css.property "background-color" sageStone.command
         , Css.property "border-radius" "4px"
         , Css.property "padding" "4px 10px"
         , Css.property "text-align" "center"
@@ -1642,7 +1694,7 @@ homepageStyles =
     , Css.Global.class "eco-home-step-desc"
         [ Css.property "font-family" fontBody
         , Css.property "font-size" "15px"
-        , Css.property "color" colors.heading
+        , Css.property "color" sageStone.body
         , Css.property "line-height" "1.7"
         , Css.property "text-align" "center"
         ]
@@ -1683,29 +1735,30 @@ homepageStyles =
         , gap 10
         , padY 16
         , padX 40
-        , Css.property "background-color" colors.bgWhite
-        , Css.property "border-top" ("1px solid " ++ colors.border)
-        , Css.property "border-bottom" ("1px solid " ++ colors.border)
+        , Css.property "background-color" sageStone.surface
+        , Css.property "border-top" ("1px solid " ++ sageStone.border)
+        , Css.property "border-bottom" ("1px solid " ++ sageStone.border)
         , mobile [ padX 4, padY 12, gap 8 ]
         ]
     , Css.Global.class "eco-home-comp-title"
         [ Css.property "font-family" fontHeading
         , Css.property "font-size" "32px"
         , Css.property "font-weight" "600"
-        , Css.property "color" colors.text
+        , Css.property "color" sageStone.text
         , Css.property "letter-spacing" "-0.5px"
         , mobile [ Css.property "font-size" "26px", Css.property "text-align" "center" ]
         ]
     , Css.Global.class "eco-home-table"
         [ fullWidth
         , Css.property "border-radius" "8px"
-        , Css.property "border" ("1px solid " ++ colors.border)
+        , Css.property "border" ("1px solid " ++ sageStone.border)
         , Css.property "overflow" "hidden"
+        , Css.property "background-color" colors.bgWhite
         ]
     , Css.Global.class "eco-home-table-header"
         [ row
-        , Css.property "background-color" colors.tableHeaderBg
-        , Css.property "border-bottom" ("1px solid " ++ colors.border)
+        , Css.property "background-color" sageStone.tableHeader
+        , Css.property "border-bottom" ("1px solid " ++ sageStone.border)
         , mobile [ hidden ]
         ]
 
@@ -1716,7 +1769,7 @@ homepageStyles =
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
         , Css.property "font-weight" "600"
-        , Css.property "color" colors.muted
+        , Css.property "color" sageStone.muted
         ]
     , Css.Global.class "eco-home-table-th-elm"
         [ Css.property "flex" "1.3 1 0"
@@ -1724,7 +1777,7 @@ homepageStyles =
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
         , Css.property "font-weight" "600"
-        , Css.property "color" colors.muted
+        , Css.property "color" sageStone.muted
         ]
     , Css.Global.class "eco-home-table-th-eco"
         [ Css.property "flex" "1.7 1 0"
@@ -1736,7 +1789,7 @@ homepageStyles =
         ]
     , Css.Global.class "eco-home-table-row"
         [ row
-        , Css.property "border-bottom" "1px solid #F0F0F0"
+        , Css.property "border-bottom" ("1px solid " ++ sageStone.tableRule)
         , mobile [ Css.property "flex-direction" "column", padY 3 ]
         ]
     , Css.Global.class "eco-home-table-row-last"
@@ -1749,7 +1802,7 @@ homepageStyles =
         , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
-        , Css.property "color" colors.text
+        , Css.property "color" sageStone.text
         , mobile [ Css.property "padding" "2px 16px" ]
         , mobile [ Css.property "font-weight" "600", Css.property "padding-bottom" "6px" ]
         ]
@@ -1758,18 +1811,18 @@ homepageStyles =
         , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
-        , Css.property "color" colors.text
+        , Css.property "color" sageStone.text
         , mobile [ Css.property "padding" "2px 16px" ]
-        , mobile [ Css.before [ Css.property "content" "\"Elm 0.19: \"", Css.property "color" colors.muted ] ]
+        , mobile [ Css.before [ Css.property "content" "\"Elm 0.19: \"", Css.property "color" sageStone.muted ] ]
         ]
     , Css.Global.class "eco-home-table-cell-eco"
         [ Css.property "flex" "1.7 1 0"
         , Css.property "padding" "14px 20px"
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
-        , Css.property "color" colors.text
+        , Css.property "color" sageStone.text
         , mobile [ Css.property "padding" "2px 16px" ]
-        , mobile [ Css.before [ Css.property "content" "\"eco: \"", Css.property "color" colors.muted, Css.property "font-weight" "400" ] ]
+        , mobile [ Css.before [ Css.property "content" "\"eco: \"", Css.property "color" sageStone.muted, Css.property "font-weight" "400" ] ]
         ]
 
     -- Community cards
@@ -1780,7 +1833,7 @@ homepageStyles =
         , grow
         , Css.property "border-radius" "8px"
         , Css.property "background-color" colors.bgWhite
-        , Css.property "border" ("1px solid " ++ colors.border)
+        , Css.property "border" ("1px solid " ++ sageStone.border)
         , Css.property "padding" "32px"
         , mobile [ Css.property "padding" "24px" ]
         ]
@@ -1788,12 +1841,12 @@ homepageStyles =
         [ Css.property "font-family" fontHeading
         , Css.property "font-size" "16px"
         , Css.property "font-weight" "600"
-        , Css.property "color" colors.text
+        , Css.property "color" sageStone.text
         ]
     , Css.Global.class "eco-home-comm-desc"
         [ Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
-        , Css.property "color" colors.heading
+        , Css.property "color" sageStone.body
         , Css.property "line-height" "1.7"
         , Css.property "text-align" "center"
         ]
@@ -1812,7 +1865,7 @@ homepageStyles =
         , mobile [ Css.property "flex-direction" "column", gap 4 ]
         ]
     , Css.Global.class "eco-home-btn-dark"
-        [ Css.property "background-color" colors.text
+        [ Css.property "background-color" sageStone.text
         , Css.property "color" colors.bgWhite
         , Css.property "font-family" fontBody
         , Css.property "font-size" "13px"
@@ -1835,7 +1888,7 @@ homepageStyles =
         [ row
         , alignItems "center"
         , spaceBetween
-        , Css.property "background-color" colors.accent
+        , Css.property "background-color" sageStone.ctaGround
         , Css.property "padding" "48px 120px"
         , mobile [ Css.property "flex-direction" "column", alignItems "flex-start", gap 6, Css.property "padding" "32px 16px" ]
         ]
@@ -1843,12 +1896,12 @@ homepageStyles =
         [ Css.property "font-family" fontHeading
         , Css.property "font-size" "24px"
         , Css.property "font-weight" "700"
-        , Css.property "color" colors.bgWhite
+        , Css.property "color" heroDark.text
         ]
     , Css.Global.class "eco-home-cta-sub"
         [ Css.property "font-family" fontBody
         , Css.property "font-size" "15px"
-        , Css.property "color" "rgba(255, 255, 255, 0.8)"
+        , Css.property "color" sageStone.ctaSubtitle
         ]
     , Css.Global.class "eco-home-cta-text"
         [ column
@@ -1864,8 +1917,8 @@ homepageStyles =
         [ row
         , alignItems "center"
         , gap 2
-        , Css.property "background-color" colors.bgWhite
-        , Css.property "color" colors.accent
+        , Css.property "background-color" heroDark.accent
+        , Css.property "color" heroDark.buttonText
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
         , Css.property "font-weight" "600"
@@ -1873,9 +1926,8 @@ homepageStyles =
         , Css.property "padding" "12px 24px"
         ]
     , Css.Global.class "eco-home-cta-btn-ghost"
-        [ Css.property "background-color" "rgba(255, 255, 255, 0.13)"
-        , Css.property "border" "1px solid rgba(255, 255, 255, 0.27)"
-        , Css.property "color" colors.bgWhite
+        [ Css.property "border" ("1px solid " ++ sageStone.ctaGhostBorder)
+        , Css.property "color" heroDark.link
         , Css.property "font-family" fontBody
         , Css.property "font-size" "14px"
         , Css.property "font-weight" "600"
@@ -1906,14 +1958,14 @@ homepageStyles =
         [ Css.property "font-family" fontHeading
         , Css.property "font-size" "36px"
         , Css.property "font-weight" "600"
-        , Css.property "color" colors.text
+        , Css.property "color" sageStone.text
         , Css.property "letter-spacing" "-0.5px"
         , mobile [ Css.property "font-size" "28px", Css.property "text-align" "center" ]
         ]
     , Css.Global.class "eco-home-section-sub"
         [ Css.property "font-family" fontBody
         , Css.property "font-size" "17px"
-        , Css.property "color" colors.muted
+        , Css.property "color" sageStone.muted
         , Css.property "line-height" "1.7"
         , Css.property "text-align" "center"
         , Css.property "max-width" "600px"

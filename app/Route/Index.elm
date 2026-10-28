@@ -87,7 +87,7 @@ view _ _ =
     { title = Settings.title ++ " - " ++ Settings.subtitle
     , body =
         [ Html.div
-            [ Attrs.class "eco-page"
+            [ Attrs.class "eco-page eco-home"
             ]
             [ Layout.Site.viewHeader { active = Nothing, path = "/", contents = [] }
             , viewHero
@@ -359,7 +359,7 @@ viewCtaBand =
                 [ Attrs.href "/docs/getting-started"
                 , Attrs.class "eco-home-cta-btn-white"
                 ]
-                [ terminalIcon 16 Style.colors.accent
+                [ terminalIcon 16 Style.heroDark.buttonText
                 , Html.text "Install eco"
                 ]
             , Html.a
@@ -399,7 +399,7 @@ githubIcon =
         , SvgAttrs.height "32"
         , SvgAttrs.viewBox "0 0 24 24"
         , SvgAttrs.fill "none"
-        , SvgAttrs.stroke Style.colors.text
+        , SvgAttrs.stroke Style.sageStone.text
         , SvgAttrs.strokeWidth "1.5"
         , SvgAttrs.strokeLinecap "round"
         , SvgAttrs.strokeLinejoin "round"
