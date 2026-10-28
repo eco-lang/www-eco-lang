@@ -1463,6 +1463,7 @@ sageStone :
     , ctaGround : String
     , ctaSubtitle : String
     , ctaGhostBorder : String
+    , halo : String
     }
 sageStone =
     { ground = "#F3F4F1"
@@ -1478,6 +1479,7 @@ sageStone =
     , ctaGround = "#1B3A26"
     , ctaSubtitle = "#B9D3BE"
     , ctaGhostBorder = "#3B6B4A"
+    , halo = "#EAF3E8"
     }
 
 
@@ -1492,6 +1494,10 @@ homepageStyles =
         ]
     , Css.Global.selector ".eco-home .eco-nav-link, .eco-home .eco-header-github"
         [ Css.property "color" sageStone.body
+        ]
+    , Css.Global.selector ".eco-page.eco-home"
+        [ -- The step circles run past the page edge at some widths
+          Css.property "overflow-x" "clip"
         ]
     , Css.Global.selector ".eco-home .eco-divider"
         [ Css.property "background-color" sageStone.border
@@ -1663,7 +1669,9 @@ homepageStyles =
 
     -- How It Works steps
     , Css.Global.class "eco-home-step-number"
-        [ Css.property "width" "48px"
+        [ Css.property "position" "relative"
+        , Css.property "z-index" "1"
+        , Css.property "width" "48px"
         , Css.property "height" "48px"
         , Css.property "border-radius" "24px"
         , Css.property "background-color" sageStone.number
@@ -1675,6 +1683,27 @@ homepageStyles =
         , Css.property "align-items" "center"
         , Css.property "justify-content" "center"
         , Css.property "flex-shrink" "0"
+        ]
+    -- A pale circle centred on each number, sized like the three behind the hero (small, large, small).
+    -- The section clips it, and it multiplies so it tints whatever it overlaps;
+    -- the cards' own text sits above it.
+    , Css.Global.class "eco-home-step-halo"
+        [ Css.property "position" "absolute"
+        , Css.property "top" "24px"
+        , Css.property "left" "50%"
+        , Css.property "transform" "translate(-50%, -50%)"
+        , Css.property "border-radius" "50%"
+        , Css.property "background-color" sageStone.halo
+        , Css.property "mix-blend-mode" "multiply"
+        , Css.property "pointer-events" "none"
+        , Css.property "z-index" "0"
+        ]
+    , Css.Global.class "eco-home-step-halo-1" [ halo 504 ]
+    , Css.Global.class "eco-home-step-halo-2" [ halo 948 ]
+    , Css.Global.class "eco-home-step-halo-3" [ halo 605 ]
+    , Css.Global.selector ".eco-home-step-title, .eco-home-step-command, .eco-home-step-desc"
+        [ Css.property "position" "relative"
+        , Css.property "z-index" "1"
         ]
     , Css.Global.class "eco-home-step-title"
         [ Css.property "font-family" fontHeading
@@ -1699,7 +1728,9 @@ homepageStyles =
         , Css.property "text-align" "center"
         ]
     , Css.Global.class "eco-home-steps-section"
-        [ column
+        [ -- Keeps the step circles inside this section, off the comparison below
+          Css.property "overflow" "clip"
+        , column
         , alignItems "center"
         , gap 12
         , padY 16
@@ -1716,7 +1747,8 @@ homepageStyles =
         , mobile [ Css.property "flex-direction" "column", gap 10 ]
         ]
     , Css.Global.class "eco-home-step"
-        [ column
+        [ Css.property "position" "relative"
+        , column
         , alignItems "center"
         , gap 4
         , grow
@@ -1972,3 +2004,16 @@ homepageStyles =
         , mobile [ Css.property "font-size" "16px" ]
         ]
     ]
+
+
+{-| A step circle of the given diameter, at 60% on phones where the steps stack.
+-}
+halo : Float -> Css.Style
+halo diameter =
+    let
+        size d =
+            [ Css.property "width" (String.fromFloat d ++ "px")
+            , Css.property "height" (String.fromFloat d ++ "px")
+            ]
+    in
+    Css.batch (size diameter ++ [ mobile (size (diameter * 0.6)) ])

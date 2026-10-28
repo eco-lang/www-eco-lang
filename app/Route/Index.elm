@@ -226,7 +226,8 @@ viewStep number title output description =
     Html.div
         [ Attrs.class "eco-home-step"
         ]
-        [ Html.div [ Attrs.class "eco-home-step-number" ] [ Html.text number ]
+        [ Html.div [ Attrs.class ("eco-home-step-halo eco-home-step-halo-" ++ number) ] []
+        , Html.div [ Attrs.class "eco-home-step-number" ] [ Html.text number ]
         , Html.div [ Attrs.class "eco-home-step-title" ] [ Html.text title ]
         , Html.code [ Attrs.class "eco-home-step-command" ] [ Html.text ("eco make src/Main.elm " ++ output) ]
         , Html.p [ Attrs.class "eco-home-step-desc" ] [ Html.text description ]
