@@ -1,4 +1,4 @@
-module Style exposing (Colors, colors, heroDark, sageStone, styleNode, highlightTheme)
+module Style exposing (Colors, colors, heroDark, highlightTheme, sageStone, styleNode)
 
 import Css
 import Css.Global
@@ -238,6 +238,7 @@ style =
         , aboutStyles
         , roadmapStyles
         , homepageStyles
+        , atlasStyles
         ]
 
 
@@ -1189,6 +1190,7 @@ roadmapStyles =
         , gap 3
         , mobile [ Css.property "flex-wrap" "wrap", gap 2 ]
         ]
+
     -- A milestone's text is indented one step from its heading, and its lists one step further.
     , Css.Global.class "eco-roadmap-details"
         [ Css.property "padding-left" "24px"
@@ -1292,6 +1294,7 @@ roadmapStyles =
         , Css.property "border" "2px solid #CCCCCC"
         , Css.property "flex-shrink" "0"
         ]
+
     -- Version badges
     , Css.Global.class "eco-roadmap-badge-released"
         [ Css.property "font-family" fontCode
@@ -1682,6 +1685,7 @@ homepageStyles =
         , Css.property "justify-content" "center"
         , Css.property "flex-shrink" "0"
         ]
+
     -- A pale circle centred on each number, sized like the three behind the hero (small, large, small).
     -- The section clips it, and it multiplies so it tints whatever it overlaps;
     -- the cards' own text sits above it.
@@ -2021,3 +2025,428 @@ halo diameter =
             ]
     in
     Css.batch (size diameter ++ [ mobile (size (diameter * 0.6)) ])
+
+
+
+-- ATLAS
+
+
+{-| The compiler atlas at `/atlas`. It fills the window below the site header. The diagram itself is drawn by the
+`Diagram` engine with SVG presentation attributes, so nothing here changes how it looks; these style the controls
+around it.
+-}
+atlasStyles : List Css.Global.Snippet
+atlasStyles =
+    [ Css.Global.class "eco-atlas"
+        [ Css.property "height" "100vh"
+        , Css.property "display" "flex"
+        , Css.property "flex-direction" "column"
+        , Css.property "overflow" "hidden"
+        , Css.property "background-color" "#F8F8F8"
+        , Css.property "font-family" "Inter, sans-serif"
+        , Css.property "color" "#242424"
+        ]
+    , Css.Global.class "eco-atlas-main"
+        [ Css.property "flex" "1"
+        , Css.property "min-height" "0"
+        , Css.property "display" "flex"
+        , Css.property "flex-direction" "column"
+        ]
+    , Css.Global.class "eco-atlas-bar"
+        [ Css.property "height" "56px"
+        , Css.property "flex" "none"
+        , Css.property "box-sizing" "border-box"
+        , Css.property "display" "flex"
+        , Css.property "align-items" "center"
+        , Css.property "gap" "16px"
+        , Css.property "padding" "0 20px"
+        , Css.property "background" "#FFFFFF"
+        , Css.property "border-top" "1px solid #E0E0E0"
+        , Css.property "border-bottom" "1px solid #E0E0E0"
+        , mobile [ Css.property "gap" "8px", Css.property "padding" "0 12px" ]
+        ]
+    , Css.Global.class "eco-atlas-title"
+        [ Css.property "flex" "none"
+        , Css.property "margin" "0"
+        , Css.property "font" "600 16px/1 Montserrat, sans-serif"
+        , Css.property "color" "#646464"
+        , Css.property "white-space" "nowrap"
+        , mobile [ Css.property "display" "none" ]
+        ]
+    , Css.Global.class "eco-atlas-search"
+        [ Css.property "position" "relative"
+        , Css.property "display" "flex"
+        , Css.property "align-items" "center"
+        , Css.property "gap" "8px"
+        , Css.property "flex" "0 1 340px"
+        , Css.property "min-width" "120px"
+        , Css.property "height" "36px"
+        , Css.property "box-sizing" "border-box"
+        , Css.property "padding" "0 10px"
+        , Css.property "border" "1px solid #E0E0E0"
+        , Css.property "border-radius" "6px"
+        , Css.property "background" "#F8F8F8"
+        , Css.property "color" "#646464"
+        , mobile [ Css.property "flex" "1 1 auto" ]
+        ]
+    , Css.Global.class "eco-atlas-search-input"
+        [ Css.property "flex" "1"
+        , Css.property "min-width" "0"
+        , Css.property "border" "0"
+        , Css.property "outline" "none"
+        , Css.property "background" "transparent"
+        , Css.property "font" "400 14px Inter, sans-serif"
+        , Css.property "color" "#242424"
+        ]
+    , Css.Global.class "eco-atlas-toggle"
+        [ Css.property "height" "36px"
+        , Css.property "display" "flex"
+        , Css.property "align-items" "center"
+        , Css.property "gap" "8px"
+        , Css.property "flex" "none"
+        , Css.property "padding" "0 12px"
+        , Css.property "border-radius" "6px"
+        , Css.property "font" "500 13px Inter, sans-serif"
+        , Css.property "cursor" "pointer"
+        , Css.property "white-space" "nowrap"
+        , Css.property "border" "1px solid #E0E0E0"
+        , Css.property "background" "#FFFFFF"
+        , Css.property "color" "#242424"
+        , mobile [ Css.property "display" "none" ]
+        ]
+    , Css.Global.class "eco-atlas-toggle-on"
+        [ Css.property "height" "36px"
+        , Css.property "display" "flex"
+        , Css.property "align-items" "center"
+        , Css.property "gap" "8px"
+        , Css.property "flex" "none"
+        , Css.property "padding" "0 12px"
+        , Css.property "border-radius" "6px"
+        , Css.property "font" "500 13px Inter, sans-serif"
+        , Css.property "cursor" "pointer"
+        , Css.property "white-space" "nowrap"
+        , Css.property "border" "1px solid #2E7D32"
+        , Css.property "background" "#E8F5E9"
+        , Css.property "color" "#1B5E20"
+        , mobile [ Css.property "display" "none" ]
+        ]
+    , Css.Global.selector ".eco-atlas-toggle:hover, .eco-atlas-ctl:hover, .eco-atlas-ctl-fit:hover, .eco-atlas-close:hover, .eco-atlas-chip:hover"
+        [ Css.property "background" "#F0F0F0"
+        ]
+    , Css.Global.class "eco-atlas-note"
+        [ Css.property "font" "500 13px Inter, sans-serif"
+        , Css.property "color" "#5E5E5E"
+        , Css.property "white-space" "nowrap"
+        , mobile [ Css.property "display" "none" ]
+        ]
+    , Css.Global.class "eco-atlas-summary"
+        [ Css.property "margin-left" "auto"
+        , Css.property "font" "400 13px Inter, sans-serif"
+        , Css.property "color" "#5E5E5E"
+        , Css.property "white-space" "nowrap"
+        , mobile [ Css.property "display" "none" ]
+        ]
+    , Css.Global.class "eco-atlas-stage"
+        [ Css.property "position" "relative"
+        , Css.property "flex" "1"
+        , Css.property "min-height" "0"
+        , Css.property "overflow" "hidden"
+        ]
+    , Css.Global.class "eco-atlas-ruler"
+        [ Css.property "position" "absolute"
+        , Css.property "left" "0"
+        , Css.property "right" "0"
+        , Css.property "top" "0"
+        , Css.property "height" "48px"
+        , Css.property "overflow" "hidden"
+        , Css.property "background" "#FFFFFF"
+        , Css.property "border-bottom" "1px solid #E0E0E0"
+        , Css.property "box-sizing" "border-box"
+        , Css.property "z-index" "1"
+        ]
+    , Css.Global.class "eco-atlas-tab"
+        [ Css.property "position" "absolute"
+        , Css.property "box-sizing" "border-box"
+        , Css.property "display" "flex"
+        , Css.property "align-items" "center"
+        , Css.property "justify-content" "center"
+        , Css.property "padding" "0 6px"
+        , Css.property "border-right" "1px solid #E0E0E0"
+        , Css.property "border-bottom" "1px solid #E0E0E0"
+        , Css.property "font" "600 12px/1 Montserrat, sans-serif"
+        , Css.property "color" "#242424"
+        , Css.property "white-space" "nowrap"
+        , Css.property "overflow" "hidden"
+        , Css.property "background" "#F3F8F3"
+        ]
+    , Css.Global.class "eco-atlas-tab-cpp"
+        [ Css.property "position" "absolute"
+        , Css.property "box-sizing" "border-box"
+        , Css.property "display" "flex"
+        , Css.property "align-items" "center"
+        , Css.property "justify-content" "center"
+        , Css.property "padding" "0 6px"
+        , Css.property "border-right" "1px solid #E0E0E0"
+        , Css.property "border-bottom" "1px solid #E0E0E0"
+        , Css.property "font" "600 12px/1 Montserrat, sans-serif"
+        , Css.property "color" "#242424"
+        , Css.property "white-space" "nowrap"
+        , Css.property "overflow" "hidden"
+        , Css.property "background" "#EAF0F7"
+        ]
+    , Css.Global.selector ".eco-atlas-tab span, .eco-atlas-tab-cpp span"
+        [ Css.property "overflow" "hidden"
+        , Css.property "text-overflow" "ellipsis"
+        ]
+    , Css.Global.class "eco-atlas-viewport"
+        [ Css.property "position" "absolute"
+        , Css.property "left" "0"
+        , Css.property "right" "0"
+        , Css.property "top" "48px"
+        , Css.property "bottom" "0"
+        , Css.property "overflow" "hidden"
+        , Css.property "touch-action" "none"
+        , Css.property "cursor" "grab"
+        ]
+    , Css.Global.class "eco-atlas-viewport-dragging"
+        [ Css.property "position" "absolute"
+        , Css.property "left" "0"
+        , Css.property "right" "0"
+        , Css.property "top" "48px"
+        , Css.property "bottom" "0"
+        , Css.property "overflow" "hidden"
+        , Css.property "touch-action" "none"
+        , Css.property "cursor" "grabbing"
+        ]
+    , Css.Global.class "eco-atlas-svg"
+        [ Css.property "display" "block"
+        , Css.property "width" "100%"
+        , Css.property "height" "100%"
+        , Css.property "user-select" "none"
+        , Css.property "-webkit-user-select" "none"
+        ]
+    , Css.Global.class "eco-atlas-node"
+        [ Css.property "cursor" "pointer"
+        ]
+    , Css.Global.class "eco-atlas-legend"
+        [ Css.property "position" "absolute"
+        , Css.property "left" "16px"
+        , Css.property "bottom" "16px"
+        , Css.property "z-index" "2"
+        , Css.property "display" "flex"
+        , Css.property "flex-direction" "column"
+        , Css.property "gap" "8px"
+        , Css.property "padding" "14px 16px"
+        , Css.property "max-width" "320px"
+        , Css.property "box-sizing" "border-box"
+        , Css.property "background" "#FFFFFF"
+        , Css.property "border" "1px solid #E0E0E0"
+        , Css.property "border-radius" "8px"
+        , Css.property "box-shadow" "0 2px 10px rgba(0,0,0,0.06)"
+        , Css.property "font" "400 12px/1.4 Inter, sans-serif"
+        , Css.property "color" "#444444"
+        , mobile [ Css.property "display" "none" ]
+        ]
+    , Css.Global.class "eco-atlas-legend-row"
+        [ Css.property "display" "flex"
+        , Css.property "flex-wrap" "wrap"
+        , Css.property "gap" "6px 16px"
+        ]
+    , Css.Global.class "eco-atlas-legend-item"
+        [ Css.property "display" "flex"
+        , Css.property "align-items" "center"
+        , Css.property "gap" "6px"
+        ]
+    , Css.Global.class "eco-atlas-legend-hint"
+        [ Css.property "color" "#5E5E5E"
+        ]
+    , Css.Global.class "eco-atlas-swatch"
+        [ Css.property "width" "18px"
+        , Css.property "height" "12px"
+        , Css.property "box-sizing" "border-box"
+        , Css.property "border-radius" "2px"
+        , Css.property "flex" "none"
+        , Css.property "border" "1px solid #CFCFCF"
+        , Css.property "background" "#FFFFFF"
+        ]
+    , Css.Global.class "eco-atlas-swatch-cpp"
+        [ Css.property "width" "18px"
+        , Css.property "height" "12px"
+        , Css.property "box-sizing" "border-box"
+        , Css.property "border-radius" "2px"
+        , Css.property "flex" "none"
+        , Css.property "border" "1px solid #B8C6D8"
+        , Css.property "background" "#F2F6FB"
+        ]
+    , Css.Global.class "eco-atlas-line-blue"
+        [ Css.property "width" "22px"
+        , Css.property "height" "2px"
+        , Css.property "flex" "none"
+        , Css.property "background" "#1F6FB2"
+        ]
+    , Css.Global.class "eco-atlas-line-red"
+        [ Css.property "width" "22px"
+        , Css.property "height" "2px"
+        , Css.property "flex" "none"
+        , Css.property "background" "#C95200"
+        ]
+    , Css.Global.class "eco-atlas-line-grid-text"
+        [ Css.property "width" "22px"
+        , Css.property "height" "2px"
+        , Css.property "flex" "none"
+        , Css.property "background" "rgba(214,69,65,0.7)"
+        ]
+    , Css.Global.class "eco-atlas-line-grid-frame"
+        [ Css.property "width" "22px"
+        , Css.property "height" "2px"
+        , Css.property "flex" "none"
+        , Css.property "background" "rgba(31,111,178,0.7)"
+        ]
+    , Css.Global.class "eco-atlas-zoom"
+        [ Css.property "position" "absolute"
+        , Css.property "right" "16px"
+        , Css.property "bottom" "16px"
+        , Css.property "z-index" "2"
+        , Css.property "display" "flex"
+        , Css.property "flex-direction" "column"
+        , Css.property "background" "#FFFFFF"
+        , Css.property "border" "1px solid #E0E0E0"
+        , Css.property "border-radius" "8px"
+        , Css.property "overflow" "hidden"
+        , Css.property "box-shadow" "0 2px 10px rgba(0,0,0,0.06)"
+        ]
+    , Css.Global.class "eco-atlas-ctl"
+        [ Css.property "width" "44px"
+        , Css.property "height" "44px"
+        , Css.property "display" "flex"
+        , Css.property "align-items" "center"
+        , Css.property "justify-content" "center"
+        , Css.property "border" "0"
+        , Css.property "background" "#FFFFFF"
+        , Css.property "color" "#242424"
+        , Css.property "cursor" "pointer"
+        ]
+    , Css.Global.class "eco-atlas-ctl-fit"
+        [ Css.property "width" "44px"
+        , Css.property "height" "44px"
+        , Css.property "display" "flex"
+        , Css.property "align-items" "center"
+        , Css.property "justify-content" "center"
+        , Css.property "border" "0"
+        , Css.property "background" "#FFFFFF"
+        , Css.property "color" "#242424"
+        , Css.property "cursor" "pointer"
+        , Css.property "border-top" "1px solid #E0E0E0"
+        ]
+    , Css.Global.class "eco-atlas-zoom-pct"
+        [ Css.property "padding" "4px 0"
+        , Css.property "text-align" "center"
+        , Css.property "border-top" "1px solid #E0E0E0"
+        , Css.property "border-bottom" "1px solid #E0E0E0"
+        , Css.property "font" "500 11px 'Roboto Mono', monospace"
+        , Css.property "color" "#5E5E5E"
+        ]
+    , Css.Global.class "eco-atlas-panel"
+        [ Css.property "position" "absolute"
+        , Css.property "right" "16px"
+        , Css.property "top" "64px"
+        , Css.property "z-index" "3"
+        , Css.property "width" "340px"
+        , Css.property "max-width" "calc(100% - 32px)"
+        , Css.property "max-height" "calc(100% - 200px)"
+        , Css.property "min-height" "200px"
+        , Css.property "box-sizing" "border-box"
+        , Css.property "display" "flex"
+        , Css.property "flex-direction" "column"
+        , Css.property "background" "#FFFFFF"
+        , Css.property "border" "1px solid #E0E0E0"
+        , Css.property "border-radius" "8px"
+        , Css.property "box-shadow" "0 4px 18px rgba(0,0,0,0.08)"
+        ]
+    , Css.Global.class "eco-atlas-panel-head"
+        [ Css.property "display" "flex"
+        , Css.property "align-items" "flex-start"
+        , Css.property "gap" "8px"
+        , Css.property "padding" "16px 12px 12px 18px"
+        , Css.property "border-bottom" "1px solid #E0E0E0"
+        ]
+    , Css.Global.class "eco-atlas-panel-titles"
+        [ Css.property "flex" "1"
+        , Css.property "min-width" "0"
+        ]
+    , Css.Global.class "eco-atlas-panel-stage"
+        [ Css.property "font" "600 11px/1.2 Inter, sans-serif"
+        , Css.property "letter-spacing" "0.06em"
+        , Css.property "text-transform" "uppercase"
+        , Css.property "color" "#2E7D32"
+        ]
+    , Css.Global.class "eco-atlas-panel-title"
+        [ Css.property "margin" "6px 0 4px"
+        , Css.property "font" "700 18px/1.25 Montserrat, sans-serif"
+        , Css.property "color" "#242424"
+        , Css.property "overflow-wrap" "anywhere"
+        ]
+    , Css.Global.class "eco-atlas-panel-path"
+        [ Css.property "font" "400 11px/1.4 'Roboto Mono', monospace"
+        , Css.property "color" "#5E5E5E"
+        , Css.property "overflow-wrap" "anywhere"
+        ]
+    , Css.Global.class "eco-atlas-close"
+        [ Css.property "width" "36px"
+        , Css.property "height" "36px"
+        , Css.property "display" "flex"
+        , Css.property "align-items" "center"
+        , Css.property "justify-content" "center"
+        , Css.property "flex" "none"
+        , Css.property "border" "0"
+        , Css.property "border-radius" "6px"
+        , Css.property "background" "#FFFFFF"
+        , Css.property "color" "#242424"
+        , Css.property "cursor" "pointer"
+        ]
+    , Css.Global.class "eco-atlas-panel-body"
+        [ Css.property "flex" "1"
+        , Css.property "min-height" "0"
+        , Css.property "overflow-y" "auto"
+        , Css.property "padding" "8px 10px 14px"
+        ]
+    , Css.Global.class "eco-atlas-panel-uses"
+        [ Css.property "padding" "8px 8px 4px"
+        , Css.property "font" "600 12px Inter, sans-serif"
+        , Css.property "color" "#1F6FB2"
+        ]
+    , Css.Global.class "eco-atlas-panel-used-by"
+        [ Css.property "padding" "12px 8px 4px"
+        , Css.property "font" "600 12px Inter, sans-serif"
+        , Css.property "color" "#C95200"
+        ]
+    , Css.Global.class "eco-atlas-chip"
+        [ Css.property "display" "flex"
+        , Css.property "align-items" "center"
+        , Css.property "gap" "8px"
+        , Css.property "width" "100%"
+        , Css.property "box-sizing" "border-box"
+        , Css.property "padding" "6px 8px"
+        , Css.property "border" "0"
+        , Css.property "border-radius" "4px"
+        , Css.property "background" "transparent"
+        , Css.property "font" "400 12px/1.3 'Roboto Mono', monospace"
+        , Css.property "color" "#242424"
+        , Css.property "text-align" "left"
+        , Css.property "cursor" "pointer"
+        ]
+    , Css.Global.class "eco-atlas-dot"
+        [ Css.property "width" "7px"
+        , Css.property "height" "7px"
+        , Css.property "border-radius" "50%"
+        , Css.property "flex" "none"
+        , Css.property "background" "#4CAF50"
+        ]
+    , Css.Global.class "eco-atlas-dot-cpp"
+        [ Css.property "width" "7px"
+        , Css.property "height" "7px"
+        , Css.property "border-radius" "50%"
+        , Css.property "flex" "none"
+        , Css.property "background" "#3D6FA8"
+        ]
+    ]

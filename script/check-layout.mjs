@@ -26,6 +26,7 @@ const PAGES = [
   "/articles",
   "/articles/introduction",
   "/roadmap",
+  "/atlas",
   "/about",
   "/packages",
   "/packages/eco/system",

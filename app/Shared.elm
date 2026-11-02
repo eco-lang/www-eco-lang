@@ -5,6 +5,7 @@ import Browser.Dom
 import Effect exposing (Effect)
 import FatalError exposing (FatalError)
 import Html exposing (Html)
+import Json.Decode as Decode
 import Pages.Flags
 import Pages.PageUrl exposing (PageUrl)
 import Process
@@ -41,8 +42,12 @@ type SharedMsg
     = NoOp
 
 
+{-| `pixelRatio` is the number of device pixels to a CSS pixel, from the browser when the site loads. It is 1 when
+pages are pre-rendered.
+-}
 type alias Model =
-    {}
+    { pixelRatio : Float
+    }
 
 
 init :
@@ -58,8 +63,16 @@ init :
             , pageUrl : Maybe PageUrl
             }
     -> ( Model, Effect Msg )
-init _ _ =
-    ( {}
+init flags _ =
+    ( { pixelRatio =
+            case flags of
+                Pages.Flags.BrowserFlags value ->
+                    Decode.decodeValue (Decode.field "pixelRatio" Decode.float) value
+                        |> Result.withDefault 1
+
+                Pages.Flags.PreRenderFlags ->
+                    1
+      }
     , Effect.none
     )
 

@@ -7,8 +7,9 @@ const config: ElmPagesInit = {
   load: async function (elmLoaded) {
     await elmLoaded;
   },
+  // Shared.elm decodes these. The atlas aligns its drawing to device pixels.
   flags: function () {
-    return "You can decode this in Shared.elm using Json.Decode.string!";
+    return { pixelRatio: window.devicePixelRatio || 1 };
   },
 };
 
