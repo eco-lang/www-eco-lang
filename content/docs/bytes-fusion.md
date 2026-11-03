@@ -158,4 +158,4 @@ These are medians of 11 runs after 3 warm-ups, from a development build of the n
 - [The garbage collector](/docs/garbage-collector) — the nursery and the tenuring that the cursor has to survive.
 - [Performance](/docs/performance) — the rest of the benchmark suite, wins and losses.
 - The full design document: [Bytes fusion theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/compiler/bytes-fusion.md)
-- Source: [`compiler/src/Compiler/Generate/MLIR/BytesFusion`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/Generate/MLIR/BytesFusion) and [`runtime/src/codegen/BF`](https://github.com/eco-lang/eco-compiler/tree/master/runtime/src/codegen/BF)
+- Source: [`compiler/src/Compiler/GenerateMlir/BytesFusion`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/GenerateMlir/BytesFusion) and [`runtime/src/codegen/BF`](https://github.com/eco-lang/eco-compiler/tree/master/runtime/src/codegen/BF)

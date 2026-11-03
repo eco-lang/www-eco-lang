@@ -69,4 +69,4 @@ The technique applies wherever a library hides its representation behind a custo
 - [Bytes fusion](/docs/bytes-fusion) — the compiler's largest reification, in full.
 - [Runtime data structures](/docs/data-structures) — the string and list forms, and how the runtime chooses between them.
 - [Kernels](/docs/kernels) — the C++ implementations that reified code falls back on.
-- Source: [`compiler/src/Compiler/Generate/MLIR/BytesFusion/Reify.elm`](https://github.com/eco-lang/eco-compiler/blob/master/compiler/src/Compiler/Generate/MLIR/BytesFusion/Reify.elm)
+- Source: [`compiler/src/Compiler/GenerateMlir/BytesFusion/Reify.elm`](https://github.com/eco-lang/eco-compiler/blob/master/compiler/src/Compiler/GenerateMlir/BytesFusion/Reify.elm)

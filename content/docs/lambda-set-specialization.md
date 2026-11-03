@@ -134,4 +134,4 @@ A wrong license is worse than none, because it produces a populated set that is 
 - [Global optimization](/docs/global-optimization) — where single-member sets become direct and fast calls.
 - [Closures and calls](/docs/closures-and-calls) — what the generic path costs at run time.
 - The full design document: [Lambda-set specialization theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/compiler/lambda-set-specialization.md)
-- Source: [`compiler/src/Compiler/MonoSolver`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/MonoSolver)
+- Source: [`compiler/src/Compiler/Monomorphize/Solver`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/Monomorphize/Solver)

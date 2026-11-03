@@ -137,4 +137,4 @@ Reachability is exact only after inlining, which orphans more specializations, s
 - [Global optimization](/docs/global-optimization) — inlining, pruning and call kinds after specialization.
 - [Value representation](/docs/value-representation) — why `Int`, `Float` and `Char` can be stored unboxed.
 - The full design document: [Monomorphization theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/compiler/monomorphization.md)
-- Source: [`compiler/src/Compiler/MonoSolver`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/MonoSolver)
+- Source: [`compiler/src/Compiler/Monomorphize`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/Monomorphize)

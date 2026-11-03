@@ -65,4 +65,4 @@ The generator reads the erased program because that is stock Elm's design. JavaS
 - [The build driver](/docs/build-driver) — the shared driver that hands each back end its program.
 - [The compiler compiles itself](/docs/bootstrap) — the bootstrap chain that runs through this generator.
 - The full design document: [JavaScript output theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/compiler/javascript-output.md)
-- Source: [`compiler/src/Compiler/Generate`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/Generate)
+- Source: [`compiler/src/Compiler/GenerateJs`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/GenerateJs)

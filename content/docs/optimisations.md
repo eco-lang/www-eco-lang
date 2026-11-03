@@ -106,4 +106,4 @@ See [The runtime](/docs/runtime), [The garbage collector](/docs/garbage-collecto
 - [Global optimization](/docs/global-optimization) — the whole-program stage, where most of these run.
 - [The garbage collector](/docs/garbage-collector) — the generational collector and why it needs no write barrier.
 - The full design document: [Global optimization theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/compiler/global-optimization.md)
-- Source: [`compiler/src/Compiler/GlobalOpt`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/GlobalOpt)
+- Source: [`compiler/src/Compiler/PreMono`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/PreMono) (before monomorphization) and [`compiler/src/Compiler/MonoOpt`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/MonoOpt) (after it)

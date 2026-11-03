@@ -148,4 +148,4 @@ Neither writer checks anything. Correctness rests on the dialect's verifiers in 
 - [Value representation](/docs/value-representation) — the ABI, SSA and heap forms in full.
 - [Lowering passes](/docs/lowering-passes) — what happens to this output next.
 - The full design document: [MLIR generation theory](https://github.com/eco-lang/eco-compiler/blob/master/design_docs/theory/compiler/mlir-generation.md)
-- Source: [`compiler/src/Compiler/Generate/MLIR`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/Generate/MLIR)
+- Source: [`compiler/src/Compiler/GenerateMlir`](https://github.com/eco-lang/eco-compiler/tree/master/compiler/src/Compiler/GenerateMlir)
