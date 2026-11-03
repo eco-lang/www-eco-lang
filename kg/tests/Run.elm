@@ -277,6 +277,13 @@ elmTests =
                     ElmX.extract "x.elm" "module X exposing (..)\nimport A.B\nimport C\nthis is not elm ="
             in
             T.equal ( [ "A.B", "C" ], True ) ( List.map .name f.imports, f.parseError /= Nothing )
+    , T.pure "elm: a module with a GLSL shader parses, with no crash" <|
+        \_ ->
+            let
+                f =
+                    ElmX.extract "x.elm" "module A exposing (s)\n\nimport B\n\n\ns =\n    [glsl|\nuniform mat4 m;\nvoid main () {\n    gl_Position = m * vec4(1.0);\n}\n|]\n"
+            in
+            T.equal ( Nothing, [ "B" ] ) ( f.parseError, List.map .name f.imports )
     , T.pure "elm: an import inside a string is not an import" <|
         \_ ->
             T.equal [ "B" ] (ElmX.extract "x.elm" "module A exposing (x)\n\nimport B\n\n\nx =\n    \"\"\"\nimport C\n\"\"\"\n" |> .imports |> List.map .name)

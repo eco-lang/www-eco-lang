@@ -5,7 +5,7 @@
     "postinstall": "elm-tooling install",
     "start": "INCLUDE_DRAFTS=true elm-pages dev",
     "build": "elm-pages build",
-    "kg": "cd kg && scripts/vendor-compiler.sh ${ECO_COMPILER:-../../eco-compiler} && eco make src/Main.elm --output=bin/kg",
+    "kg": "cd kg && eco make src/Main.elm --output=bin/kg",
     "atlas": "npm run kg && kg/bin/kg export --worktree ${ECO_COMPILER:-../eco-compiler} --atlas content/atlas/history.json"
   },
   "devDependencies": {

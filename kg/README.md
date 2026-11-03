@@ -2,20 +2,21 @@
 
 kg reads eco-compiler's history and files, and answers questions about its
 structure, history and documentation through an MCP server for Claude Code.
-It is written in Elm and built with eco. The design, the measurements and the
+It is written in Elm and built with eco, on `eco/system` and packages
+from the Elm registry only. It reads Elm with a copy of eco's parser, in
+[`parser/`](parser/README.md); it does not build on eco-compiler's sources. The design, the measurements and the
 results are in [`../plans/compiler-knowledge-graph.md`](../plans/compiler-knowledge-graph.md).
 
 ## Build
 
 ```sh
-npm run kg            # from the repository root: vendor the parser, then eco make
+npm run kg            # from the repository root
 ```
 
 or by hand:
 
 ```sh
 cd kg
-scripts/vendor-compiler.sh ~/sc/gitlab/eco-compiler   # the compiler sources at vendor/COMMIT
 eco make src/Main.elm --output=bin/kg
 cd tests && eco make Run.elm --output=../bin/kg-test && ../bin/kg-test
 ```

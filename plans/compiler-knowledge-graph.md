@@ -38,7 +38,7 @@ under `kg/`.
 **Dogfooding.** Everything is Elm built with eco, except:
 - `git` itself;
 - the embedding model server;
-- one shell script that vendors the compiler's parser (§6.2).
+- nothing else: the parser is a copy checked into `kg/parser/` (§6.2).
 
 The MCP server is 100% Elm, an `eco/system` program. What the prototype needs
 from eco, and every eco bug it finds, is a result in itself (§21).
@@ -69,7 +69,7 @@ These four, and twelve more like them, are the benchmark (§18).
 | D1 | Everything in Elm, built with `eco make`, apart from the three exceptions in §1 | dogfooding; eco/system has what is needed (§5) |
 | D2 | No database. An in-memory graph, content-addressed fact and vector caches, and per-worktree snapshots, all as `elm/bytes` files | small data (§13.6); one view per worktree; no service to run |
 | D3 | All queries go through `Kg.Query` | the storage can change behind it; fallback thresholds in §11.5 |
-| D4 | Elm sources are parsed with eco's own parser, from a vendored, pinned copy of `compiler/src` and `compiler/src-xhr` | exact AST with doc comments; dogfood; pinned so master's churn cannot break the build (§6.2) |
+| D4 | Elm sources are parsed with eco's own parser, from a copy checked into `kg/parser/` (changed 2026-11-03 from a vendored archive of `compiler/src` and `compiler/src-xhr`; §6.2) | exact AST with doc comments; dogfood; kg builds on nothing from eco-compiler and needs nothing from `eco/kernel` |
 | D5 | C++ extraction is a port of `script/atlas-graph.py`'s scanner and linker | already tuned against false edges |
 | D6 | MCP protocol revision `2025-11-25` (the "legacy", initialize-based era); unknown methods, including `server/discover`, get error -32601 at once | the simplest era to implement; Claude Code falls back to it when the probe gets an error (§14.1) |
 | D7 | The server learns its worktree from `CLAUDE_PROJECT_DIR`, with a command-line fallback; it is registered with `--scope local` in each eco-compiler worktree | one view per worktree; nothing written to eco-compiler; not loaded in other projects (§15) |
@@ -199,11 +199,9 @@ the kernels. File and line references are in eco-compiler.
 ```
 kg/
   elm.json                 application (§6.3)
-  vendor/
-    COMMIT                 the eco-compiler commit vendored (checked in)
-    eco-compiler/          compiler/src, compiler/src-xhr, compiler/elm.json at COMMIT (git-ignored)
+  parser/                  kg's copy of eco's parser, 33 modules (§6.2, parser/README.md)
   scripts/
-    vendor-compiler.sh     fills vendor/eco-compiler from COMMIT (§6.2)
+    eval-summary.py        tables from evaluation results (§18.4)
   src/
     Main.elm               command line (§16)
     Kg/Cli.elm             argument parsing
@@ -251,51 +249,43 @@ kg/
 "Pure" modules import nothing from `eco/system`, so they can be tested without
 IO and can be shared with the website (§17).
 
-### 6.2 Vendoring the parser
+### 6.2 The parser
 
-- `kg/vendor/COMMIT` holds one eco-compiler commit hash. At the start it is
-  `a874aa90…`, the commit the experiment built.
-- `scripts/vendor-compiler.sh <eco-compiler-path>`:
+**Changed on 2026-11-03.** kg first built the parser from a `git archive` of
+eco-compiler's `compiler/src` and `compiler/src-xhr` at a pinned commit. That
+built kg on the compiler's sources, and through them on its IO layer and its
+crashes (`Utils.Crash`, `Eco.Crash`, with `src-xhr`'s stand-ins for
+`eco/kernel`). It is replaced by a copy checked into `kg/parser/`: the 33
+modules the parser needs, from commit `a874aa90`, with the error messages,
+the JSON codecs, the IO layer and every crash taken out, and GLSL left
+unparsed (the GLSL package crashes under eco). `kg/parser/README.md` lists
+each change. On every Elm file of eco-compiler without a shader the copy
+gives kg the same facts as before; files with shaders now parse.
 
-  ```sh
-  set -eu
-  commit=$(cat "$(dirname "$0")/../vendor/COMMIT")
-  dest="$(dirname "$0")/../vendor/eco-compiler"
-  rm -rf "$dest" && mkdir -p "$dest"
-  git -C "$1" archive "$commit" compiler/src compiler/src-xhr compiler/elm.json | tar -x -C "$dest"
-  ```
-
-- `git archive` reads objects and writes only to `kg/vendor`.
-- To move the pin forward, change `COMMIT`, rerun the script, rebuild, run the
-  tests, and commit `COMMIT`.
+Changes in the compiler's parser are brought over by hand when kg needs them.
 
 ### 6.3 `kg/elm.json`
 
 - `type: application`.
-- `source-directories`:
-  `["src", "vendor/eco-compiler/compiler/src", "vendor/eco-compiler/compiler/src-xhr"]`.
-- `dependencies`: copy `direct` and `indirect` from
-  `vendor/eco-compiler/compiler/elm.json`, then add:
-  - direct: `eco/system 1.0.0`, `elm/parser`, `billstclair/elm-sha256`;
-  - indirect: `elm/virtual-dom`.
-
-  Resolve with `eco install` until `eco make` stops reporting missing
-  packages.
+- `source-directories`: `["src", "parser"]`.
+- `dependencies` (as built, 2026-11-03): direct `eco/system`, `elm/core`,
+  `elm/bytes`, `elm/http`, `elm/json`, `elm/regex`, `elm/time`,
+  `dasch/levenshtein`, `obiloud/numeric-decimal`, `rtfeldman/elm-hex`;
+  indirect `elm/file`, `elm/parser`, `elm/url`, `elm/virtual-dom`. Nothing
+  from `eco/kernel`.
 - The tests (§19) use a second application, `kg/tests/elm.json`, with
-  `source-directories` `["../src", ".", <the two vendor directories>]` and the
-  same dependencies.
+  `source-directories` `["../src", "../parser", "."]` and the same
+  dependencies.
 
 ### 6.4 Build
 
 ```sh
-cd kg && scripts/vendor-compiler.sh ~/sc/gitlab/eco-compiler && eco make src/Main.elm --output=bin/kg
+cd kg && eco make src/Main.elm --output=bin/kg
 cd kg/tests && eco make Run.elm --output=../bin/kg-test && ../bin/kg-test
 ```
 
-Do not pass `--optimize`: `src-xhr` contains `Debug.todo`.
-
-From the repository root, `npm run kg` vendors and builds, and `npm run atlas`
-also exports the website's atlas. `kg/README.md` says how to register and use
+From the repository root, `npm run kg` builds, and `npm run atlas` also
+exports the website's atlas. `kg/README.md` says how to register and use
 the server.
 
 ## 7. Git access (`Kg.Git`)
@@ -1372,7 +1362,7 @@ numbers in this plan as each phase closes.
 
 
 **Result (2026-11-03): done.**
-- `kg/` builds with `eco make` (`npm run kg` vendors and builds).
+- `kg/` builds with `eco make` (`npm run kg`). It first vendored the parser from eco-compiler; since 2026-11-03 it has its own copy (§6.2).
 - The parser parses all 291 files of `compiler/src` and the 30 of
   `src-xhr`, `src-version` and `eco-kernel-cpp/src`, about 5 ms each; over the
   history, 9,304 distinct Elm blobs parse.
@@ -1676,6 +1666,7 @@ Docker image) imported them in 1.2 s: 18,648 nodes, 69,171 relationships and
 | 2026-11-03 | Data held in Elm values is large: the 104 MB snapshot takes about 800 MB once decoded, and 14.3 M `Float`s in an `Array` or in lists about 50 bytes each. | `kg query context …` peaks at 808 MB | measured; within §11.5's 1 GB without vectors, at 1.15 GB peak with them (§13.7) |
 | 2026-11-03 | `Json.Encode` writes object keys in sorted order, where Elm keeps the order given. Harmless here. | `E.encode 0 (E.object [ ( "b", … ), ( "a", … ) ])` | noted |
 | 2026-11-03 | The parser rejects the character literal `'😀'` (asks for double quotes). Elm accepts it. | `c = '😀'` | open |
+| 2026-11-03 | Any `[glsl| … |]` literal segfaults the parser built with eco (8 files in eco-compiler); most likely in `guida-lang/glsl`'s parser running natively. | a module with a one-line shader | worked around: kg's copy of the parser does not parse GLSL (§6.2) |
 | 2026-11-03 | `Bitwise` is 64-bit (a known, not yet documented divergence, `elm-divergence.md` §5.5), so `billstclair/elm-sha256` returns wrong hashes. | `Sha256.sha256 ""` | worked around: `Kg.Sha256` masks every step to 32 bits; the package is not used |
 
 ## 22. Risks
@@ -1688,8 +1679,9 @@ Docker image) imported them in 1.2 s: 18,648 nodes, 69,171 relationships and
 - **Context flooding.** Output budgets (§14.4), checked in tests.
 - **Claude not using the tools.** The instructions say when to use them
   (§14.3), and evaluation shows whether it does.
-- **The parser's API changing.** It is pinned with `vendor/COMMIT` (§6.2); a
-  pin move that breaks `Kg.Extract.Elm` is fixed there.
+- **The parser falling behind.** kg has its own copy (§6.2), so a change in
+  the compiler cannot break kg's build; the copy is brought up to date by
+  hand when Elm syntax kg must read changes.
 - **eco gaps slowing the prototype.** That is part of the point, but a gap
   that blocks a phase gets a decision: fix it in eco first, or work around it
   behind a module boundary (§21).
@@ -1706,6 +1698,7 @@ is for.
 
 | § | the plan said | what was built | why |
 |---|---|---|---|
+| 6.2, D4 | a vendored, pinned archive of the compiler's sources | a checked-in copy of the parser in `kg/parser/`, with the IO layer, error messages, JSON codecs and crashes taken out | kg should not build on eco-compiler's sources, need `eco/kernel`, or crash (the user, 2026-11-03) |
 | 3 D10, 6.3 | SHA-256 from `billstclair/elm-sha256` | `Kg.Sha256`, a 32-bit-masked SHA-256 in Elm | the package gives wrong hashes under eco's 64-bit `Bitwise` (§21) |
 | 6.1 | the module list | as listed, plus `Kg.Re` (the regex workaround), `Kg.Sha256`, `Kg.PathUtil`, `Kg.Context` (worktree, cache, settings), `Kg.Commands`, `Kg.Session` (snapshot + freshness + overlay), `Kg.Serve` (the eco-kg MCP application), `Kg.Overlay`, `Kg.Replay` (the pure replay step), `Kg.Build` (the replay's IO), `Kg.Assemble` (§9.4, the whole graph), `Kg.Check`, `Kg.Args`, `Kg.Json`, `Kg.Debug`, `Kg.Semantic` (vector search state), `Kg.Neo4j`, and `tests/Test/Runner.elm`. There is no `Kg.Id`: ids are made where nodes are | the plan's modules were too coarse in places; nothing else changes |
 | 7 | `cat-file --batch` and `hash-object --stdin-paths` through `spawn` | both through `ChildProcess.run`: the blob ids go to a list file that `sh -c 'exec git cat-file --batch < "$1"'` reads, paths passed as arguments, in batches of 400; `hash-object -- <paths>` | `spawn` is a `Cmd`, which would have turned every command into a message-driven state machine; with `run` every command is one `Task` chain |
