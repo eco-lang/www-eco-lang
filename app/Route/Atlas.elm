@@ -3,6 +3,9 @@ module Route.Atlas exposing (ActionData, Data, Model, Msg, RouteParams, route)
 {-| The compiler atlas: every Elm module and C++ component of the compiler, laid out along the pipeline on the double
 grid, with pan and zoom.
 
+It opens on the compiler as it is now. The timeline plays its history, from the first commit on: modules arrive, move
+and leave as they did, and a drag along the timeline goes to any moment of it.
+
 The diagram is drawn by the `Diagram` engine. While the view moves, the drawing already on the screen is moved and
 scaled with a transform, which is cheap. Once it settles, the diagram is projected again for the new view, onto device
 pixels, so that it is sharp at every zoom. The base drawing and the highlight are drawn lazily, from the settled view,
@@ -47,6 +50,7 @@ import Svg.Attributes as SvgAttrs
 import Svg.Events
 import Svg.Lazy
 import Task
+import Time
 import UrlPath exposing (UrlPath)
 import View exposing (View)
 
@@ -56,7 +60,7 @@ type alias RouteParams =
 
 
 type alias Data =
-    Graph
+    Graph.History
 
 
 type alias ActionData =
@@ -75,6 +79,37 @@ route =
             , update = update
             , subscriptions = subscriptions
             }
+
+
+{-| How long playing the whole history takes, in seconds.
+-}
+playSeconds : Float
+playSeconds =
+    60
+
+
+{-| The history's clock: where the timeline starts and ends, in seconds since 1970; how many seconds of history pass
+in a second of playing; and how many seconds of history a commit's changes take to settle, a little over half a second
+of playing. The timeline ends once the last commit has settled.
+-}
+type alias Clock =
+    { start : Float
+    , end : Float
+    , rate : Float
+    , settle : Float
+    }
+
+
+clock : Graph.History -> Clock
+clock history =
+    let
+        start =
+            Graph.first history
+
+        rate =
+            max 1 (Graph.last history - start) / playSeconds
+    in
+    { start = start, end = Graph.last history + rate * 0.6, rate = rate, settle = rate * 0.6 }
 
 
 head : App Data ActionData RouteParams -> List Head.Tag
@@ -126,6 +161,9 @@ type alias Model =
     , query : String
     , showGrid : Bool
     , wheelCount : Int
+    , time : Float
+    , playing : Bool
+    , graph : Graph
     }
 
 
@@ -166,13 +204,21 @@ type Msg
     | FocusOn Int
     | ClearSelection
     | Export
+    | Play
+    | Pause
+    | Tick Float
+    | Scrub String
+    | Now
 
 
 init : App Data ActionData RouteParams -> Shared.Model -> ( Model, Effect Msg )
-init _ shared =
+init app shared =
     let
         camera =
             { x = 24, y = 24, scale = 0.15, pixelRatio = shared.pixelRatio }
+
+        c =
+            clock app.data
     in
     ( { view = camera
       , settled = camera
@@ -185,6 +231,9 @@ init _ shared =
       , query = ""
       , showGrid = False
       , wheelCount = 0
+      , time = c.end
+      , playing = False
+      , graph = Graph.at app.data c.settle c.end
       }
     , measure
     )
@@ -205,7 +254,10 @@ update : App Data ActionData RouteParams -> Shared.Model -> Msg -> Model -> ( Mo
 update app _ msg model =
     let
         graph =
-            app.data
+            model.graph
+
+        c =
+            clock app.data
     in
     case msg of
         GotScreen (Ok { element }) ->
@@ -389,6 +441,50 @@ update app _ msg model =
                 |> Effect.fromCmd
             )
 
+        Play ->
+            ( atTime app
+                (if model.time >= c.end then
+                    c.start
+
+                 else
+                    model.time
+                )
+                { model | playing = True }
+            , Effect.none
+            )
+
+        Pause ->
+            ( { model | playing = False }, Effect.none )
+
+        Tick ms ->
+            if model.playing then
+                let
+                    t =
+                        min c.end (model.time + ms / 1000 * c.rate)
+                in
+                ( atTime app t { model | playing = t < c.end }, Effect.none )
+
+            else
+                ( model, Effect.none )
+
+        Scrub value ->
+            case String.toFloat value of
+                Just t ->
+                    ( atTime app (clamp c.start c.end t) { model | playing = False }, Effect.none )
+
+                Nothing ->
+                    ( model, Effect.none )
+
+        Now ->
+            ( atTime app c.end { model | playing = False }, Effect.none )
+
+
+{-| The model at a moment of the history.
+-}
+atTime : App Data ActionData RouteParams -> Float -> Model -> Model
+atTime app t model =
+    { model | time = t, graph = Graph.at app.data (clock app.data).settle t }
+
 
 settle : Model -> Model
 settle model =
@@ -505,6 +601,11 @@ subscriptions _ _ _ model =
 
             Nothing ->
                 Sub.none
+        , if model.playing then
+            Browser.Events.onAnimationFrameDelta Tick
+
+          else
+            Sub.none
         ]
 
 
@@ -524,14 +625,18 @@ view app _ model =
     }
 
 
-viewAtlas : Graph -> Model -> Html Msg
-viewAtlas graph model =
+viewAtlas : Graph.History -> Model -> Html Msg
+viewAtlas history model =
     let
+        graph =
+            model.graph
+
         matchCount =
             List.length (Graph.matches graph model.query)
     in
     Html.div [ Attrs.class "eco-atlas-main" ]
         [ viewBar graph model matchCount
+        , viewTimeline history model
         , Html.div [ Attrs.class "eco-atlas-stage" ]
             ([ viewRuler graph model.view
              , viewViewport graph model
@@ -600,7 +705,7 @@ viewBar graph model matchCount =
             ]
         , Html.span [ Attrs.class "eco-atlas-summary" ]
             [ Html.text
-                (String.fromInt (Array.length graph.nodes)
+                (String.fromInt (Dict.size graph.index)
                     ++ " modules and files · "
                     ++ thousands graph.edgeCount
                     ++ " dependencies"
@@ -641,8 +746,9 @@ viewRuler graph camera =
                          else
                             "eco-atlas-tab"
                         )
-                    , Attrs.style "left" (px (camera.x + Grid.rhythm grid (toFloat s.gx) * camera.scale))
-                    , Attrs.style "width" (px (Grid.rhythm grid (toFloat s.gw) * camera.scale))
+                    , Attrs.style "left" (px (camera.x + Grid.rhythm grid s.gx * camera.scale))
+                    , Attrs.style "width" (px (Grid.rhythm grid s.gw * camera.scale))
+                    , Attrs.style "opacity" (String.fromFloat s.opacity)
                     , Attrs.style "top"
                         (px
                             (if shared || s.row == 0 then
@@ -924,6 +1030,142 @@ viewPanel graph model =
 
         Nothing ->
             []
+
+
+{-| The timeline: play or pause, the slider, and the date and subject of the commit the atlas is at.
+-}
+viewTimeline : Graph.History -> Model -> Html Msg
+viewTimeline history model =
+    let
+        c =
+            clock history
+
+        atEnd =
+            model.time >= c.end
+
+        ( date, subject ) =
+            case Graph.frameAt history model.time of
+                Just f ->
+                    ( (if atEnd then
+                        "Now · "
+
+                       else
+                        ""
+                      )
+                        ++ formatDate f.time
+                    , f.subject
+                    )
+
+                Nothing ->
+                    ( formatDate (round model.time), "" )
+    in
+    Html.div [ Attrs.class "eco-atlas-timeline" ]
+        [ Html.button
+            [ Attrs.type_ "button"
+            , Attrs.class "eco-atlas-play"
+            , Attrs.attribute "aria-label"
+                (if model.playing then
+                    "Pause"
+
+                 else
+                    "Play the history"
+                )
+            , Events.onClick
+                (if model.playing then
+                    Pause
+
+                 else
+                    Play
+                )
+            ]
+            [ if model.playing then
+                filledIcon "M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"
+
+              else
+                filledIcon "M8 5.5v13l10.5-6.5z"
+            ]
+        , Html.input
+            [ Attrs.type_ "range"
+            , Attrs.class "eco-atlas-range"
+            , Attrs.attribute "aria-label" "Time"
+            , Attrs.min (String.fromFloat c.start)
+            , Attrs.max (String.fromFloat c.end)
+            , Attrs.step "any"
+            , Attrs.value (String.fromFloat model.time)
+            , Events.onInput Scrub
+            ]
+            []
+        , Html.div [ Attrs.class "eco-atlas-when" ]
+            [ Html.span [ Attrs.class "eco-atlas-when-date" ] [ Html.text date ]
+            , Html.span [ Attrs.class "eco-atlas-when-subject" ] [ Html.text subject ]
+            ]
+        , if atEnd then
+            Html.text ""
+
+          else
+            Html.button [ Attrs.type_ "button", Attrs.class "eco-atlas-now", Events.onClick Now ] [ Html.text "Now" ]
+        ]
+
+
+{-| A date such as 2 Dec 2025, in UTC.
+-}
+formatDate : Int -> String
+formatDate seconds =
+    let
+        posix =
+            Time.millisToPosix (seconds * 1000)
+
+        month =
+            case Time.toMonth Time.utc posix of
+                Time.Jan ->
+                    "Jan"
+
+                Time.Feb ->
+                    "Feb"
+
+                Time.Mar ->
+                    "Mar"
+
+                Time.Apr ->
+                    "Apr"
+
+                Time.May ->
+                    "May"
+
+                Time.Jun ->
+                    "Jun"
+
+                Time.Jul ->
+                    "Jul"
+
+                Time.Aug ->
+                    "Aug"
+
+                Time.Sep ->
+                    "Sep"
+
+                Time.Oct ->
+                    "Oct"
+
+                Time.Nov ->
+                    "Nov"
+
+                Time.Dec ->
+                    "Dec"
+    in
+    String.fromInt (Time.toDay Time.utc posix) ++ " " ++ month ++ " " ++ String.fromInt (Time.toYear Time.utc posix)
+
+
+filledIcon : String -> Html msg
+filledIcon d =
+    Svg.svg
+        [ SvgAttrs.width "16"
+        , SvgAttrs.height "16"
+        , SvgAttrs.viewBox "0 0 24 24"
+        , SvgAttrs.fill "currentColor"
+        , Attrs.attribute "aria-hidden" "true"
+        ]
+        [ Svg.path [ SvgAttrs.d d ] [] ]
 
 
 icon : String -> Html msg

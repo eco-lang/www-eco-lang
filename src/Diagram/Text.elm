@@ -59,10 +59,10 @@ lineHeight grid style =
 {-| Text whose rows end on grid line `row`, starting, centred on or ending at column `col`, which may be fractional to
 centre text over a region.
 -}
-onGrid : Grid -> Style -> Anchor -> { col : Float, row : Int } -> String -> Element WorldCoordinates
+onGrid : Grid -> Style -> Anchor -> { col : Float, row : Float } -> String -> Element WorldCoordinates
 onGrid grid style anchor at content =
     Diagram.text
-        { baseline = Point2d.pixels (Grid.rhythm grid at.col) (Grid.rhythm grid (toFloat at.row) - lift grid style)
+        { baseline = Point2d.pixels (Grid.rhythm grid at.col) (Grid.rhythm grid at.row - lift grid style)
         , anchor = anchor
         , content = content
         , font = style.font
@@ -79,8 +79,8 @@ inFrame grid style cells row content =
     onGrid grid
         style
         Diagram.Start
-        { col = toFloat (cells.col + 1), row = cells.row + row }
-        (fit grid style (Grid.rhythm grid (toFloat (cells.cols - 2))) content)
+        { col = cells.col + 1, row = cells.row + toFloat row }
+        (fit grid style (Grid.rhythm grid (cells.cols - 2)) content)
 
 
 {-| How wide text is, if the font says.

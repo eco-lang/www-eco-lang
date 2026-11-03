@@ -89,7 +89,7 @@ write ids node =
         Content s ->
             ( escape s, ids )
 
-        Group g children ->
+        Group g presentation children ->
             let
                 ( idAttr, ids2 ) =
                     case g.key of
@@ -118,7 +118,7 @@ write ids node =
                 ( inner, ids3 ) =
                     writeAll ids2 children
             in
-            ( "<g" ++ attrs idAttr ++ ">\n" ++ inner ++ "\n</g>", ids3 )
+            ( "<g" ++ attrs (idAttr ++ presentation) ++ ">\n" ++ inner ++ "\n</g>", ids3 )
 
 
 writeAll : Dict String Int -> List Node -> ( String, Dict String Int )

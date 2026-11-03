@@ -1,6 +1,6 @@
 module Diagram exposing
     ( Diagram, Element(..), Anchor(..)
-    , diagram, box, line, polygon, text, group
+    , diagram, box, line, polygon, text, group, faded
     , Group, Box, Line, Polygon, Text
     )
 
@@ -11,7 +11,7 @@ page, and `Diagram.Svg` and `Diagram.Svg11` draw it.
 Diagrams are built on the double grid with `Diagram.Grid` and `Diagram.Text`.
 
 @docs Diagram, Element, Anchor
-@docs diagram, box, line, polygon, text, group
+@docs diagram, box, line, polygon, text, group, faded
 @docs Group, Box, Line, Polygon, Text
 
 -}
@@ -37,7 +37,8 @@ type alias Diagram coordinates =
 
 A `Group` collects elements and can carry a `key`, which names the thing the group draws, and `data`, a list of
 named values about it. A renderer that handles events uses the key to say which thing an event happened on, and a web
-renderer can write the data into the page for scripts and styles to use. Neither changes how the group looks.
+renderer can write the data into the page for scripts and styles to use. Neither changes how the group looks. Its
+`opacity`, from 0 to 1, fades the group as a whole, as when something fades in or out.
 
 -}
 type Element coordinates
@@ -92,6 +93,7 @@ type alias Text coordinates =
 type alias Group =
     { key : Maybe String
     , data : List ( String, String )
+    , opacity : Float
     }
 
 
@@ -143,3 +145,10 @@ text =
 group : Group -> List (Element coordinates) -> Element coordinates
 group =
     GroupElement
+
+
+{-| Elements faded together to an opacity, from 0 to 1.
+-}
+faded : Float -> List (Element coordinates) -> Element coordinates
+faded opacity =
+    GroupElement { key = Nothing, data = [], opacity = opacity }

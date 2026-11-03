@@ -128,12 +128,12 @@ nodePaint lang =
 -}
 bounds : Grid -> Graph -> BoundingBox2d Pixels WorldCoordinates
 bounds grid graph =
-    Grid.footprint grid { col = 0, row = 0, cols = graph.world.cols, rows = graph.world.rows }
+    Grid.footprint grid { col = 0, row = 0, cols = max 1 graph.world.cols, rows = max 1 graph.world.rows }
 
 
 cells : Graph -> Node -> Cells
 cells graph n =
-    { col = n.gx, row = n.gy, cols = graph.world.nodeW, rows = graph.world.nodeH }
+    { col = n.gx, row = n.gy, cols = toFloat graph.world.nodeW, rows = toFloat graph.world.nodeH }
 
 
 stageCells : Stage -> Cells
@@ -145,7 +145,18 @@ stageCells s =
 -}
 nodeCentre : Grid -> Graph -> Node -> Point2d Pixels WorldCoordinates
 nodeCentre grid graph n =
-    Grid.point grid (toFloat n.gx + toFloat graph.world.nodeW / 2) (toFloat n.gy + 1.5)
+    Grid.point grid (n.gx + toFloat graph.world.nodeW / 2) (n.gy + 1.5)
+
+
+{-| Elements faded together, unless they are fully there.
+-}
+fade : Float -> List (Element WorldCoordinates) -> List (Element WorldCoordinates)
+fade opacity elements =
+    if opacity >= 1 then
+        elements
+
+    else
+        [ Diagram.faded opacity elements ]
 
 
 {-| A chevron arrow pointing right, its tip `x` pixels right of the point and its shaft starting at the point, in the
@@ -178,11 +189,11 @@ ground grid graph =
         ]
 
 
-{-| Every node, at rest.
+{-| Every node there, at rest.
 -}
 nodes : Grid -> Graph -> List (Element WorldCoordinates)
 nodes grid graph =
-    Array.toList graph.nodes |> List.map (nodeElement grid graph Plain)
+    Array.toList graph.nodes |> List.filter (\n -> n.opacity > 0) |> List.map (nodeElement grid graph Plain)
 
 
 {-| A stage: its frame, title, blurb, count and note in the header rows, and an arrow to the next stage in its row.
@@ -192,7 +203,7 @@ stageBand : Grid -> Graph -> Int -> Stage -> List (Element WorldCoordinates)
 stageBand grid graph i s =
     let
         col =
-            toFloat (s.gx + 2)
+            s.gx + 2
 
         next =
             List.drop (i + 1) graph.stages |> List.head
@@ -207,23 +218,25 @@ stageBand grid graph i s =
             else
                 "C++ · " ++ String.fromInt s.count ++ " components"
     in
-    [ Diagram.box (bandPaint s.lang (modBy 2 i == 1)) 3 (Grid.frame grid (stageCells s))
-    , Text.onGrid grid title Start { col = col, row = s.gy + 4 } s.title
-    , Text.onGrid grid blurb Start { col = col, row = s.gy + 6 } s.blurb
-    , Text.onGrid grid meta Start { col = col, row = s.gy + 7 } langName
-    ]
-        ++ (if stageNotes s.key == "" then
-                []
+    fade s.opacity
+        ([ Diagram.box (bandPaint s.lang (modBy 2 s.order == 1)) 3 (Grid.frame grid (stageCells s))
+         , Text.onGrid grid title Start { col = col, row = s.gy + 4 } s.title
+         , Text.onGrid grid blurb Start { col = col, row = s.gy + 6 } s.blurb
+         , Text.onGrid grid meta Start { col = col, row = s.gy + 7 } langName
+         ]
+            ++ (if stageNotes s.key == "" then
+                    []
 
-            else
-                [ Text.onGrid grid meta Start { col = col, row = s.gy + 8 } (stageNotes s.key) ]
-           )
-        ++ (if hasArrow then
-                chevron (Grid.rhythm grid (toFloat (s.gx + s.gw + 1)) - 7) (Grid.rhythm grid (toFloat s.gy + 2.5))
+                else
+                    [ Text.onGrid grid meta Start { col = col, row = s.gy + 8 } (stageNotes s.key) ]
+               )
+            ++ (if hasArrow then
+                    chevron (Grid.rhythm grid (s.gx + s.gw + 1) - 7) (Grid.rhythm grid (s.gy + 2.5))
 
-            else
-                []
-           )
+                else
+                    []
+               )
+        )
 
 
 {-| The typed path leaving the shared pipeline after Local optimize: down the gap after that stage to the typed row's
@@ -239,30 +252,31 @@ branch grid graph =
         ( Just from, Just to ) ->
             let
                 gapX =
-                    Grid.rhythm grid (toFloat (from.gx + from.gw + 1))
+                    Grid.rhythm grid (from.gx + from.gw + 1)
 
                 tailX =
                     gapX - 7
 
                 y1 =
-                    Grid.rhythm grid (toFloat from.gy + 2.5) + 14
+                    Grid.rhythm grid (from.gy + 2.5) + 14
 
                 y2 =
-                    Grid.rhythm grid (toFloat to.gy + 2.5)
+                    Grid.rhythm grid (to.gy + 2.5)
             in
-            Diagram.line (Paint.scaled colors.accent 2.5) [ Point2d.pixels tailX y1, Point2d.pixels tailX y2 ]
-                :: chevron tailX y2
-                ++ [ Diagram.text
-                        { baseline =
-                            Point2d.pixels (tailX + 6)
-                                (Grid.rhythm grid (toFloat (from.gy + from.gh + 1)) - Text.lift grid branchLabel)
-                        , anchor = Start
-                        , content = "typed path"
-                        , font = branchLabel.font
-                        , size = Text.size grid branchLabel
-                        , color = branchLabel.color
-                        }
-                   ]
+            fade (min from.opacity to.opacity) <|
+                Diagram.line (Paint.scaled colors.accent 2.5) [ Point2d.pixels tailX y1, Point2d.pixels tailX y2 ]
+                    :: chevron tailX y2
+                    ++ [ Diagram.text
+                            { baseline =
+                                Point2d.pixels (tailX + 6)
+                                    (Grid.rhythm grid (from.gy + from.gh + 1) - Text.lift grid branchLabel)
+                            , anchor = Start
+                            , content = "typed path"
+                            , font = branchLabel.font
+                            , size = Text.size grid branchLabel
+                            , color = branchLabel.color
+                            }
+                       ]
 
         _ ->
             []
@@ -281,24 +295,40 @@ foundations grid graph =
             w.foundTop
 
         header col heading text =
-            [ Text.onGrid grid title Start { col = toFloat (col + 2), row = ft + 4 } heading
-            , Text.onGrid grid blurb Start { col = toFloat (col + 2), row = ft + 6 } text
+            [ Text.onGrid grid title Start { col = col + 2, row = ft + 4 } heading
+            , Text.onGrid grid blurb Start { col = col + 2, row = ft + 6 } text
             ]
+
+        elm =
+            if w.foundCols > 0 then
+                fade w.foundOpacity
+                    (Diagram.box (Paint.filledAndOutlined "#EEEEE8" (Paint.hairline "#DADAD2" 1))
+                        3
+                        (Grid.frame grid { col = 0, row = ft, cols = w.foundCols, rows = w.foundRows })
+                        :: header 0
+                            "Shared foundation"
+                            "ASTs, data structures, error reporting and utilities that every Elm stage leans on. Each module sits under the stages that use it most."
+                    )
+
+            else
+                []
+
+        cpp =
+            if w.cppFoundCols > 0 then
+                fade w.cppFoundOpacity
+                    (Diagram.box (Paint.filledAndOutlined "#E8EDF3" (Paint.hairline "#D0D9E4" 1))
+                        3
+                        (Grid.frame grid { col = w.cppFoundCol, row = ft, cols = w.cppFoundCols, rows = w.foundRows })
+                        :: header w.cppFoundCol
+                            "C++ foundation"
+                            "The heap value model every C++ stage reads and writes, and the C ABI that generated code, kernels and the runtime share."
+                        ++ List.map (\c -> Text.onGrid grid section Start { col = c.gx + 1, row = ft + 8 } c.title) w.cppSections
+                    )
+
+            else
+                []
     in
-    [ Diagram.box (Paint.filledAndOutlined "#EEEEE8" (Paint.hairline "#DADAD2" 1))
-        3
-        (Grid.frame grid { col = 0, row = ft, cols = w.foundCols, rows = w.foundRows })
-    , Diagram.box (Paint.filledAndOutlined "#E8EDF3" (Paint.hairline "#D0D9E4" 1))
-        3
-        (Grid.frame grid { col = w.cppFoundCol, row = ft, cols = w.cppFoundCols, rows = w.foundRows })
-    ]
-        ++ header 0
-            "Shared foundation"
-            "ASTs, data structures, error reporting and utilities that every Elm stage leans on. Each module sits under the stages that use it most."
-        ++ header w.cppFoundCol
-            "C++ foundation"
-            "The heap value model every C++ stage reads and writes, and the C ABI that generated code, kernels and the runtime share."
-        ++ List.map (\c -> Text.onGrid grid section Start { col = toFloat (c.gx + 1), row = ft + 8 } c.title) w.cppSections
+    elm ++ cpp
 
 
 
@@ -338,7 +368,7 @@ nodeElement grid graph look n =
                 Match ->
                     ( Paint.filledAndOutlined "#E8F5E9" (Paint.hairline colors.accentDark 2), label )
     in
-    Diagram.group { key = Just n.id, data = [ ( "stage", n.stage ), ( "path", n.path ) ] }
+    Diagram.group { key = Just n.id, data = [ ( "stage", n.stage ), ( "path", n.path ) ], opacity = n.opacity }
         [ Diagram.box paint 2 (Grid.frame grid c)
         , Text.inFrame grid style c 2 n.label
         ]
@@ -405,7 +435,7 @@ link grid graph color a b =
             cells graph b
 
         ( p1, p2 ) =
-            if abs (b.gx - a.gx) >= graph.world.nodeW then
+            if abs (b.gx - a.gx) >= toFloat graph.world.nodeW then
                 if b.gx > a.gx then
                     ( Grid.rightAnchor grid ca 1, Grid.leftAnchor grid cb 1 )
 

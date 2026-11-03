@@ -89,16 +89,18 @@ toSvg cfg node =
         Content s ->
             Svg.text s
 
-        Group g children ->
+        Group g attrs children ->
             Svg.g
-                (case g.key of
-                    Just key ->
-                        Html.Attributes.attribute "data-key" key
-                            :: List.map (\( k, v ) -> Html.Attributes.attribute ("data-" ++ k) v) g.data
-                            ++ cfg.group key
+                (List.map attribute attrs
+                    ++ (case g.key of
+                            Just key ->
+                                Html.Attributes.attribute "data-key" key
+                                    :: List.map (\( k, v ) -> Html.Attributes.attribute ("data-" ++ k) v) g.data
+                                    ++ cfg.group key
 
-                    Nothing ->
-                        List.map (\( k, v ) -> Html.Attributes.attribute ("data-" ++ k) v) g.data
+                            Nothing ->
+                                List.map (\( k, v ) -> Html.Attributes.attribute ("data-" ++ k) v) g.data
+                       )
                 )
                 (List.map (toSvg cfg) children)
 

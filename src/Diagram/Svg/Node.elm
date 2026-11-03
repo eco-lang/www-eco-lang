@@ -20,12 +20,12 @@ import Polyline2d
 
 
 {-| An SVG element with its attributes and children, some text, or a group, which keeps the key and data of the
-diagram's group for the renderer to use as it sees fit.
+diagram's group for the renderer to use as it sees fit, along with the group's own presentation attributes.
 -}
 type Node
     = Node String (List ( String, String )) (List Node)
     | Content String
-    | Group Diagram.Group (List Node)
+    | Group Diagram.Group (List ( String, String )) (List Node)
 
 
 {-| The SVG for an element of a diagram on the screen.
@@ -109,7 +109,14 @@ fromElement element =
                 [ Content t.content ]
 
         GroupElement g children ->
-            Group g (List.map fromElement children)
+            Group g
+                (if g.opacity < 1 then
+                    [ ( "opacity", number (max 0 g.opacity) ) ]
+
+                 else
+                    []
+                )
+                (List.map fromElement children)
 
 
 paint : Paint -> List ( String, String )

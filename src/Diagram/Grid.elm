@@ -67,14 +67,15 @@ type WorldCoordinates
     = WorldCoordinates
 
 
-{-| A footprint on the grid: the cells a component of a diagram takes, counted in whole grid units. Its frame is drawn
-on the in-between grid inside it, and the space left between neighbouring frames is their margins.
+{-| A footprint on the grid: the cells a component of a diagram takes, counted in grid units. Its frame is drawn on
+the in-between grid inside it, and the space left between neighbouring frames is their margins. A footprint sits on
+whole cells; it is only between cells while it moves from one place to another.
 -}
 type alias Cells =
-    { col : Int
-    , row : Int
-    , cols : Int
-    , rows : Int
+    { col : Float
+    , row : Float
+    , cols : Float
+    , rows : Float
     }
 
 
@@ -115,16 +116,16 @@ frame : Grid -> Cells -> BoundingBox2d Pixels WorldCoordinates
 frame grid cells =
     let
         x =
-            rhythm grid (toFloat cells.col) + hInset grid
+            rhythm grid cells.col + hInset grid
 
         y =
-            rhythm grid (toFloat cells.row) + vOffset grid
+            rhythm grid cells.row + vOffset grid
     in
     BoundingBox2d.fromExtrema
         { minX = Pixels.pixels x
         , minY = Pixels.pixels y
-        , maxX = Pixels.pixels (rhythm grid (toFloat (cells.col + cells.cols)) - hInset grid)
-        , maxY = Pixels.pixels (y + rhythm grid (toFloat (cells.rows - 1)))
+        , maxX = Pixels.pixels (rhythm grid (cells.col + cells.cols) - hInset grid)
+        , maxY = Pixels.pixels (y + rhythm grid (cells.rows - 1))
         }
 
 
@@ -133,8 +134,8 @@ frame grid cells =
 footprint : Grid -> Cells -> BoundingBox2d Pixels WorldCoordinates
 footprint grid cells =
     BoundingBox2d.from
-        (point grid (toFloat cells.col) (toFloat cells.row))
-        (point grid (toFloat (cells.col + cells.cols)) (toFloat (cells.row + cells.rows)))
+        (point grid cells.col cells.row)
+        (point grid (cells.col + cells.cols) (cells.row + cells.rows))
 
 
 
@@ -147,8 +148,8 @@ is the first row).
 leftAnchor : Grid -> Cells -> Int -> Point2d Pixels WorldCoordinates
 leftAnchor grid cells textRow =
     Point2d.pixels
-        (rhythm grid (toFloat cells.col) + hInset grid)
-        (rhythm grid (toFloat cells.row + toFloat textRow + 0.5))
+        (rhythm grid cells.col + hInset grid)
+        (rhythm grid (cells.row + toFloat textRow + 0.5))
 
 
 {-| Where a line meets the right edge of a frame, level with the middle of text row `textRow`.
@@ -156,8 +157,8 @@ leftAnchor grid cells textRow =
 rightAnchor : Grid -> Cells -> Int -> Point2d Pixels WorldCoordinates
 rightAnchor grid cells textRow =
     Point2d.pixels
-        (rhythm grid (toFloat (cells.col + cells.cols)) - hInset grid)
-        (rhythm grid (toFloat cells.row + toFloat textRow + 0.5))
+        (rhythm grid (cells.col + cells.cols) - hInset grid)
+        (rhythm grid (cells.row + toFloat textRow + 0.5))
 
 
 {-| The middle of the top edge of a frame.
