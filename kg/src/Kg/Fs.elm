@@ -104,7 +104,7 @@ makeDirs path =
         |> Task.map (\_ -> ())
         |> Task.onError
             (\e ->
-                if FileSystem.errorIsFileExists e then
+                if FileSystem.errorKind e == FileSystem.FileExists then
                     Task.succeed ()
 
                 else

@@ -61,11 +61,33 @@ failure args f =
     "git " ++ String.join " " (List.take 6 args) ++ ": "
         ++ (case f of
                 ChildProcess.InitError e ->
-                    "could not start (" ++ e.errorCode ++ ")"
+                    "could not start (" ++ startErrorText e.error ++ ")"
 
                 ChildProcess.ProgramError e ->
                     "exit " ++ String.fromInt e.exitCode ++ ": " ++ String.left 500 (Maybe.withDefault "" (Fs.bytesToString e.stderr))
            )
+
+
+startErrorText : ChildProcess.StartError -> String
+startErrorText e =
+    case e of
+        ChildProcess.ProgramNotFound ->
+            "program not found"
+
+        ChildProcess.PermissionDenied ->
+            "permission denied"
+
+        ChildProcess.NotExecutable ->
+            "not executable"
+
+        ChildProcess.ArgumentsTooLong ->
+            "arguments too long"
+
+        ChildProcess.ProcessLimitReached ->
+            "process limit reached"
+
+        ChildProcess.OtherStartError code ->
+            code
 
 
 gitBytes : Int -> String -> List String -> Task String Bytes

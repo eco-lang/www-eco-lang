@@ -111,13 +111,14 @@ toMatch index m =
             { index = index m.index, match = "", groups = [] }
 
 
-{-| Maps a code point index in the text to a UTF-16 index. eco's `String.foldl`
-steps through UTF-16 units, so a character outside the Basic Multilingual Plane
-arrives as two surrogates.
+{-| Maps a code point index in the text to a UTF-16 index. Older eco (and
+JavaScript) step `String.foldl` through UTF-16 units, so a character outside the
+Basic Multilingual Plane arrives as two surrogates; eco 0.2.0 final steps by code
+point, so it arrives as one `Char` above `0xFFFF`. Both are handled.
 -}
 indexer : String -> (Int -> Int)
 indexer text =
-    if not (String.any isSurrogate text) then
+    if not (String.any isAstralOrSurrogate text) then
         identity
 
     else
@@ -125,6 +126,9 @@ indexer text =
             step c ( u, acc ) =
                 if isLowSurrogate c then
                     ( u + 1, acc )
+
+                else if Char.toCode c > 0xFFFF then
+                    ( u + 2, Array.push u acc )
 
                 else
                     ( u + 1, Array.push u acc )
@@ -135,6 +139,11 @@ indexer text =
                     |> (\( u, acc ) -> Array.push u acc)
         in
         \i -> Array.get i offsets |> Maybe.withDefault (String.length text)
+
+
+isAstralOrSurrogate : Char -> Bool
+isAstralOrSurrogate c =
+    Char.toCode c > 0xFFFF || isSurrogate c
 
 
 isSurrogate : Char -> Bool
