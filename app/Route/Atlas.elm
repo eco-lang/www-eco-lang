@@ -1057,15 +1057,7 @@ viewTimeline history model =
         ( date, subject ) =
             case Graph.frameAt history model.time of
                 Just f ->
-                    ( (if atEnd then
-                        "Now · "
-
-                       else
-                        ""
-                      )
-                        ++ formatDate f.time
-                    , f.subject
-                    )
+                    ( formatDate f.time, f.subject )
 
                 Nothing ->
                     ( formatDate (round model.time), "" )
@@ -1110,11 +1102,21 @@ viewTimeline history model =
             [ Html.span [ Attrs.class "eco-atlas-when-date" ] [ Html.text date ]
             , Html.span [ Attrs.class "eco-atlas-when-subject" ] [ Html.text subject ]
             ]
-        , if atEnd then
-            Html.text ""
+        -- always there, so that the slider keeps its length; at the end it shows that this is now
+        , Html.button
+            [ Attrs.type_ "button"
+            , Attrs.class "eco-atlas-now"
+            , Attrs.disabled atEnd
+            , Attrs.attribute "aria-pressed"
+                (if atEnd then
+                    "true"
 
-          else
-            Html.button [ Attrs.type_ "button", Attrs.class "eco-atlas-now", Events.onClick Now ] [ Html.text "Now" ]
+                 else
+                    "false"
+                )
+            , Events.onClick Now
+            ]
+            [ Html.text "Now" ]
         ]
 
 

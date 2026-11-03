@@ -2115,6 +2115,7 @@ atlasStyles =
         , Css.property "font" "600 13px Inter, sans-serif"
         , Css.property "font-variant-numeric" "tabular-nums"
         , Css.property "color" "#242424"
+        , mobile [ Css.property "width" "78px" ]
         ]
     , Css.Global.class "eco-atlas-when-subject"
         [ Css.property "min-width" "0"
@@ -2135,8 +2136,14 @@ atlasStyles =
         , Css.property "color" "#242424"
         , Css.property "cursor" "pointer"
         ]
-    , Css.Global.selector ".eco-atlas-now:hover"
+    , Css.Global.selector ".eco-atlas-now:hover:not(:disabled)"
         [ Css.property "background" "#F0F0F0"
+        ]
+    , Css.Global.selector ".eco-atlas-now:disabled"
+        [ Css.property "border-color" "#4CAF50"
+        , Css.property "background" "#E8F5E9"
+        , Css.property "color" "#2E7D32"
+        , Css.property "cursor" "default"
         ]
     , Css.Global.class "eco-atlas-title"
         [ Css.property "flex" "none"
