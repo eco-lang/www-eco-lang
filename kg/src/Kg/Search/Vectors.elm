@@ -113,8 +113,8 @@ fromList d pairs n =
 
 
 {-| A vector of exactly d values: cut, or padded with zeros. A vector that is
-already the right length is returned as it is: under eco 0.2.0 a list made by
-`List.take` makes the scan over it ten times slower (see the dogfooding log).
+already the right length is returned as it is: under eco a list made by
+`List.take` is about twice as slow to scan as one made by `List.map`.
 -}
 padTo : Int -> List Float -> List Float
 padTo d v =

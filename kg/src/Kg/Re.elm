@@ -3,24 +3,11 @@ module Kg.Re exposing
     , find, findAll, contains, replace, replaceWith, split, firstMatch, matches, fullMatch
     )
 
-{-| Regular expressions, over `elm/regex`.
-
-Under eco 0.2.0 the `Match` records `Regex.find` and `Regex.replace` hand back
-are built by the kernel in a field order the compiled code does not read: `index`
-and `submatches` are right, `number` is garbage and reading `match` crashes (see
-the dogfooding log in plans/compiler-knowledge-graph.md). This module is the one
-place that knows: it wraps every pattern in a capture group, so the matched text
-is the first submatch, and it never reads `match` or `number`.
-
-Backreferences in a pattern are renumbered to allow for the extra group.
-
-The kernel also counts `index` in code points, where `String.slice` counts
-UTF-16 units, as Elm does. `findAll` converts it when the text holds a
-character outside the Basic Multilingual Plane.
-
+{-| Regular expressions, over `elm/regex`, with the few helpers kg uses:
+`unsafe` for patterns written in the source, `fullMatch`, and a `Match` whose
+submatches are called `groups`.
 -}
 
-import Array exposing (Array)
 import Regex
 
 
@@ -34,12 +21,12 @@ type alias Match =
 
 compile : String -> Maybe Regex
 compile pattern =
-    compileWith { caseInsensitive = False, multiline = False } pattern
+    Regex.fromString pattern |> Maybe.map Regex
 
 
 compileWith : Regex.Options -> String -> Maybe Regex
 compileWith options pattern =
-    Regex.fromStringWith options ("(" ++ renumber pattern ++ ")") |> Maybe.map Regex
+    Regex.fromStringWith options pattern |> Maybe.map Regex
 
 
 {-| For patterns written in the source: a bad one gives a regex that never
@@ -47,131 +34,17 @@ matches, and a test catches it.
 -}
 unsafe : String -> Regex
 unsafe pattern =
-    compile pattern |> Maybe.withDefault never_
+    compile pattern |> Maybe.withDefault (Regex Regex.never)
 
 
-never_ : Regex
-never_ =
-    Regex (Maybe.withDefault Regex.never (Regex.fromString "(?!)"))
-
-
-{-| Raises each `\N` backreference by one. A backslash escaping a backslash is
-skipped over.
--}
-renumber : String -> String
-renumber pattern =
-    renumberHelp (String.toList pattern) []
-
-
-renumberHelp : List Char -> List String -> String
-renumberHelp chars acc =
-    case chars of
-        '\\' :: c :: rest ->
-            if Char.isDigit c && c /= '0' then
-                let
-                    digits =
-                        c :: takeWhile Char.isDigit rest
-
-                    n =
-                        String.toInt (String.fromList digits) |> Maybe.withDefault 0
-                in
-                renumberHelp (List.drop (List.length digits - 1) rest) (("\\" ++ String.fromInt (n + 1)) :: acc)
-
-            else
-                renumberHelp rest (String.fromList [ '\\', c ] :: acc)
-
-        c :: rest ->
-            renumberHelp rest (String.fromChar c :: acc)
-
-        [] ->
-            String.concat (List.reverse acc)
-
-
-takeWhile : (a -> Bool) -> List a -> List a
-takeWhile p xs =
-    case xs of
-        x :: rest ->
-            if p x then
-                x :: takeWhile p rest
-
-            else
-                []
-
-        [] ->
-            []
-
-
-toMatch : (Int -> Int) -> Regex.Match -> Match
-toMatch index m =
-    case m.submatches of
-        whole :: groups ->
-            { index = index m.index, match = Maybe.withDefault "" whole, groups = groups }
-
-        [] ->
-            { index = index m.index, match = "", groups = [] }
-
-
-{-| Maps a code point index in the text to a UTF-16 index. Older eco (and
-JavaScript) step `String.foldl` through UTF-16 units, so a character outside the
-Basic Multilingual Plane arrives as two surrogates; eco 0.2.0 final steps by code
-point, so it arrives as one `Char` above `0xFFFF`. Both are handled.
--}
-indexer : String -> (Int -> Int)
-indexer text =
-    if not (String.any isAstralOrSurrogate text) then
-        identity
-
-    else
-        let
-            step c ( u, acc ) =
-                if isLowSurrogate c then
-                    ( u + 1, acc )
-
-                else if Char.toCode c > 0xFFFF then
-                    ( u + 2, Array.push u acc )
-
-                else
-                    ( u + 1, Array.push u acc )
-
-            offsets : Array Int
-            offsets =
-                String.foldl step ( 0, Array.empty ) text
-                    |> (\( u, acc ) -> Array.push u acc)
-        in
-        \i -> Array.get i offsets |> Maybe.withDefault (String.length text)
-
-
-isAstralOrSurrogate : Char -> Bool
-isAstralOrSurrogate c =
-    Char.toCode c > 0xFFFF || isSurrogate c
-
-
-isSurrogate : Char -> Bool
-isSurrogate c =
-    let
-        n =
-            Char.toCode c
-    in
-    n >= 0xD800 && n <= 0xDFFF
-
-
-isLowSurrogate : Char -> Bool
-isLowSurrogate c =
-    let
-        n =
-            Char.toCode c
-    in
-    n >= 0xDC00 && n <= 0xDFFF
+toMatch : Regex.Match -> Match
+toMatch m =
+    { index = m.index, match = m.match, groups = m.submatches }
 
 
 findAll : Regex -> String -> List Match
 findAll (Regex re) text =
-    case Regex.find re text of
-        [] ->
-            []
-
-        found ->
-            List.map (toMatch (indexer text)) found
+    List.map toMatch (Regex.find re text)
 
 
 find : Regex -> String -> Maybe Match
@@ -181,7 +54,7 @@ find re text =
 
 firstMatch : Regex -> String -> Maybe Match
 firstMatch (Regex re) text =
-    Regex.findAtMost 1 re text |> List.head |> Maybe.map (toMatch (indexer text))
+    Regex.findAtMost 1 re text |> List.head |> Maybe.map toMatch
 
 
 matches : Regex -> String -> List String
@@ -216,20 +89,11 @@ split (Regex re) text =
 
 
 replace : Regex -> String -> String -> String
-replace re by text =
-    replaceWith re (\_ -> by) text
+replace (Regex re) by text =
+    Regex.replace re (\_ -> by) text
 
 
 {-| Replaces each match with what the function makes of it. -}
 replaceWith : Regex -> (Match -> String) -> String -> String
-replaceWith re f text =
-    let
-        step m ( pos, acc ) =
-            ( m.index + String.length m.match
-            , f m :: String.slice pos m.index text :: acc
-            )
-
-        ( end, parts ) =
-            List.foldl step ( 0, [] ) (findAll re text)
-    in
-    String.concat (List.reverse (String.dropLeft end text :: parts))
+replaceWith (Regex re) f text =
+    Regex.replace re (toMatch >> f) text

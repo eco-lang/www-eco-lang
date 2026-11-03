@@ -1,9 +1,8 @@
 module Kg.Args exposing (Args, parse, string, requiredString, int, bool, enum, enumList, stringList)
 
 {-| Tool arguments, checked one field at a time so that a mistake gets a
-message saying which argument is wrong and why. (Under eco 0.2.0 a
-`Json.Decode.Error` cannot be looked at, so the decoders' own errors are never
-used.)
+message saying which argument is wrong and why, in words for the tool's
+caller rather than a decoder's.
 -}
 
 import Dict exposing (Dict)

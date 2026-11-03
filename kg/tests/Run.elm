@@ -79,6 +79,12 @@ ecoTests =
     , T.pure "re: index counts like String.slice" <|
         \_ ->
             T.equal [ "b" ] (List.map (\m -> String.slice m.index (m.index + 1) "a😀b") (Re.findAll (Re.unsafe "b") "a😀b"))
+    , T.pure "re: groups are the submatches, and match is the whole match" <|
+        \_ ->
+            T.equal [ ( "ab1", [ Just "b", Nothing ] ) ] (List.map (\m -> ( m.match, m.groups )) (Re.findAll (Re.unsafe "a(b)(x)?1") "zab1z"))
+    , T.pure "re: a pattern that does not compile never matches" <|
+        \_ ->
+            T.equal [] (Re.matches (Re.unsafe "(") "((")
     , T.pure "eco: sha256 vectors" <|
         \_ ->
             T.equal

@@ -3,7 +3,7 @@ module Kg.Sha256 exposing (sha256, sha256Bytes, short)
 {-| SHA-256, in hex.
 
 `billstclair/elm-sha256` gives wrong hashes under eco, whose `Bitwise` works on
-64-bit integers where Elm's works on 32 (see the dogfooding log). This version
+64-bit integers by design, where JavaScript Elm's works on 32. This version
 masks every result to 32 bits, so it is right under both.
 
 -}

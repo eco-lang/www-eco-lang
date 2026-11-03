@@ -54,10 +54,8 @@ type Action
 decode : String -> Incoming
 decode line =
     case D.decodeString D.value line of
-        Err _ ->
-            -- Under eco 0.2.0 a Json.Decode.Error must not be looked at: see
-            -- the dogfooding log in plans/compiler-knowledge-graph.md.
-            Malformed "not valid JSON"
+        Err e ->
+            Malformed (D.errorToString e)
 
         Ok v ->
             let
