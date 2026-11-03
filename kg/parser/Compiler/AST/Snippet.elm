@@ -1,6 +1,6 @@
 module Compiler.AST.Snippet exposing
     ( Snippet(..), Row, Col
-    , encoder, decoder
+    
     )
 
 {-| Some pieces of a source text are found during one pass and read again later,
@@ -17,14 +17,10 @@ Because a snippet holds the whole text, encoding one writes the whole text too:
 every serialised snippet carries a full copy of the source it was taken from.
 
 @docs Snippet, Row, Col
-@docs encoder, decoder
+
 
 -}
 
-import Bytes.Decode
-import Bytes.Encode
-import Utils.Bytes.Decode as BD
-import Utils.Bytes.Encode as BE
 
 
 {-| A line number in a source text, counted from 1 as the parser counts lines.
@@ -71,36 +67,3 @@ type Snippet
         }
 
 
-{-| Encodes a snippet for `decoder` to read back. All of `fptr` is written, not
-only the piece the snippet names.
--}
-encoder : Snippet -> Bytes.Encode.Encoder
-encoder (Snippet { fptr, offset, length, offRow, offCol }) =
-    Bytes.Encode.sequence
-        [ BE.string fptr
-        , BE.int offset
-        , BE.int length
-        , BE.int offRow
-        , BE.int offCol
-        ]
-
-
-{-| A decoder for a snippet written by `encoder`.
--}
-decoder : Bytes.Decode.Decoder Snippet
-decoder =
-    Bytes.Decode.map5
-        (\fptr offset length offRow offCol ->
-            Snippet
-                { fptr = fptr
-                , offset = offset
-                , length = length
-                , offRow = offRow
-                , offCol = offCol
-                }
-        )
-        BD.string
-        BD.int
-        BD.int
-        BD.int
-        BD.int

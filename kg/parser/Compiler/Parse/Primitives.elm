@@ -4,8 +4,8 @@ module Compiler.Parse.Primitives exposing
     , Row, Col, getPosition, addLocation, addEnd
     , withIndent, withBacksetIndent
     , inContext, specialize
-    , fromByteString, fromSnippet, Snippet
-    , word1, word2, unsafeIndex, isWord, getCharWidth, charWidthAt, codePointAt
+    , fromByteString, Snippet
+    , word1, word2, unsafeIndex, isWord, charWidthAt, codePointAt
     , Step(..)
     )
 
@@ -84,12 +84,12 @@ the state instead of being built from the combinators.
 
 # Running Parsers
 
-@docs fromByteString, fromSnippet, Snippet
+@docs fromByteString, Snippet
 
 
 # Character Utilities
 
-@docs word1, word2, unsafeIndex, isWord, getCharWidth, charWidthAt, codePointAt
+@docs word1, word2, unsafeIndex, isWord, charWidthAt, codePointAt
 
 
 # Loop Control
@@ -100,7 +100,6 @@ the state instead of being built from the combinators.
 
 import Compiler.AST.Snippet as Snippet
 import Compiler.Reporting.Annotation as A
-
 
 
 -- ====== PARSER ======
@@ -190,7 +189,6 @@ type alias Col =
     Int
 
 
-
 -- ====== FUNCTOR ======
 
 
@@ -214,7 +212,6 @@ map f (Parser parser) =
                 Eerr r c t ->
                     Eerr r c t
         )
-
 
 
 -- ====== ONE OF ======
@@ -260,7 +257,6 @@ oneOfHelp state toError parsers =
             Eerr s.row s.col toError
 
 
-
 -- ====== ONE OF WITH FALLBACK ======
 
 
@@ -292,7 +288,6 @@ oowfHelp state parsers fallback =
 
                 result ->
                     result
-
 
 
 -- ====== MONAD ======
@@ -347,7 +342,6 @@ andThen callback (Parser parserA) =
         )
 
 
-
 -- ====== FROM BYTESTRING ======
 
 
@@ -399,7 +393,6 @@ toErr row col toError =
     Err (toError row col)
 
 
-
 -- ====== FROM SNIPPET ======
 
 
@@ -409,37 +402,6 @@ toErr row col toError =
 -}
 type alias Snippet =
     Snippet.Snippet
-
-
-{-| Runs a parser over the piece of text a snippet names, with an indent of 0.
-It starts at the snippet's row and column, so positions are reported in the
-whole text rather than in the piece.
-
-As with `fromByteString`, the result is `Ok` only if the parser succeeds and
-stops at the end of the piece; a parser that succeeds earlier gives
-`toBadEnd` applied to the row and column where it stopped.
-
--}
-fromSnippet : Parser x a -> (Row -> Col -> x) -> Snippet -> Result x a
-fromSnippet (Parser parser) toBadEnd (Snippet.Snippet { fptr, offset, length, offRow, offCol }) =
-    let
-        initialState : State
-        initialState =
-            State { src = fptr, pos = offset, end = offset + length, indent = 0, row = offRow, col = offCol }
-    in
-    case parser initialState of
-        Cok a state ->
-            toOk toBadEnd a state
-
-        Eok a state ->
-            toOk toBadEnd a state
-
-        Cerr row col toError ->
-            toErr row col toError
-
-        Eerr row col toError ->
-            toErr row col toError
-
 
 
 -- ====== POSITION ======
@@ -489,7 +451,6 @@ addEnd start value =
         )
 
 
-
 -- ====== INDENT ======
 
 
@@ -537,7 +498,6 @@ withBacksetIndent backset (Parser parser) =
                 err ->
                     err
         )
-
 
 
 -- ====== CONTEXT ======
@@ -622,7 +582,6 @@ specialize addContext (Parser parser) =
         )
 
 
-
 -- ====== SYMBOLS ======
 
 
@@ -679,7 +638,6 @@ word2 w1 w2 toError =
         )
 
 
-
 -- ====== LOW-LEVEL CHECKS ======
 
 
@@ -708,18 +666,6 @@ unsafeIndex str index =
 isWord : String -> Int -> Int -> Char -> Bool
 isWord src pos end word =
     pos < end && unsafeIndex src pos == word
-
-
-{-| Returns how many units of `pos` a character takes: 2 for a character above
-U+FFFF and 1 for any other.
--}
-getCharWidth : Char -> Int
-getCharWidth word =
-    if Char.toCode word > 0xFFFF then
-        2
-
-    else
-        1
 
 
 {-| Returns the code point and width, in `pos` units, of the character at
@@ -765,7 +711,6 @@ on a host whose `Char` is one UTF-16 unit and never steps past `end`.
 charWidthAt : String -> Int -> Int -> Char -> Int
 charWidthAt src pos end word =
     Tuple.second (codePointAt src pos end (Char.toCode word))
-
 
 
 -- ====== LOOP ======

@@ -8,7 +8,6 @@
     "elm-version": "0.19.1",
     "dependencies": {
         "direct": {
-            "dasch/levenshtein": "1.0.3",
             "eco/system": "1.0.0",
             "elm/bytes": "1.0.8",
             "elm/core": "1.0.5",

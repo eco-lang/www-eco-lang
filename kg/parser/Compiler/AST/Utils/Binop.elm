@@ -1,7 +1,6 @@
 module Compiler.AST.Utils.Binop exposing
-    ( Precedence, Associativity(..)
-    , precedenceEncoder, precedenceDecoder
-    , associativityEncoder, associativityDecoder
+    ( Precedence
+    , Associativity(..)
     )
 
 {-| An expression such as `a + b * c - d` is a chain of operators, and which
@@ -27,15 +26,9 @@ which `Utils.Bytes.Encode` describes.
 
 # Binary Serialization
 
-@docs precedenceEncoder, precedenceDecoder
-@docs associativityEncoder, associativityDecoder
 
 -}
 
-import Bytes.Decode
-import Bytes.Encode
-import Utils.Bytes.Decode as BD
-import Utils.Bytes.Encode as BE
 
 
 {-| The binding strength of an operator: of two operators, the one with the
@@ -67,56 +60,3 @@ type Associativity
     | Right
 
 
-{-| Encodes a precedence as `Utils.Bytes.Encode.int` encodes any `Int`.
--}
-precedenceEncoder : Precedence -> Bytes.Encode.Encoder
-precedenceEncoder =
-    BE.int
-
-
-{-| A decoder for a precedence written by `precedenceEncoder`.
--}
-precedenceDecoder : Bytes.Decode.Decoder Precedence
-precedenceDecoder =
-    BD.int
-
-
-{-| Encodes an associativity as a single byte: 0 for `Left`, 1 for `Non` and
-2 for `Right`.
--}
-associativityEncoder : Associativity -> Bytes.Encode.Encoder
-associativityEncoder associativity =
-    Bytes.Encode.unsignedInt8
-        (case associativity of
-            Left ->
-                0
-
-            Non ->
-                1
-
-            Right ->
-                2
-        )
-
-
-{-| A decoder for an associativity written by `associativityEncoder`. Any byte
-other than 0, 1 or 2 makes it fail.
--}
-associativityDecoder : Bytes.Decode.Decoder Associativity
-associativityDecoder =
-    Bytes.Decode.unsignedInt8
-        |> Bytes.Decode.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        Bytes.Decode.succeed Left
-
-                    1 ->
-                        Bytes.Decode.succeed Non
-
-                    2 ->
-                        Bytes.Decode.succeed Right
-
-                    _ ->
-                        Bytes.Decode.fail
-            )

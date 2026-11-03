@@ -1,12 +1,12 @@
 module Compiler.Elm.Package exposing
     ( Name, Author, Project
-    , compareName, toString, toChars, toUrl, toJsonString
+    , toString, toChars
     , isKernel
-    , dummyName, kernel, ecoKernel, ecoSystem, core, virtualDom, html, json, bytes, webgl, linearAlgebra
-    , suggestions, nearbyNames
+    , kernel, core, virtualDom, html, json, bytes, webgl
     
-    , nameEncoder, nameDecoder, parser
-    , nameEncoderS, nameDecoderS, collectStringsFromName
+    
+    , parser
+    
     )
 
 {-| An Elm package is identified by a name in two parts, its author and its
@@ -46,7 +46,7 @@ describes; the others write them inline.
 
 # Comparison and Conversion
 
-@docs compareName, toString, toChars, toUrl, toJsonString
+@docs toString, toChars
 
 
 # Package Properties
@@ -56,12 +56,10 @@ describes; the others write them inline.
 
 # Common Packages
 
-@docs dummyName, kernel, ecoKernel, ecoSystem, core, virtualDom, html, json, bytes, webgl, linearAlgebra
+@docs kernel, core, virtualDom, html, json, bytes, webgl
 
 
 # Package Suggestions
-
-@docs suggestions, nearbyNames
 
 
 # JSON Encoding/Decoding
@@ -69,21 +67,15 @@ describes; the others write them inline.
 
 # Parsing and Binary Encoding/Decoding
 
-@docs nameEncoder, nameDecoder, parser
+@docs parser
 
 
 # String-Interned Binary Encoding/Decoding
 
-@docs nameEncoderS, nameDecoderS, collectStringsFromName
 
 -}
 
-import Bytes.Decode
-import Bytes.Encode
-import Compiler.AST.StringTable as StringTable exposing (StringTable)
 import Compiler.Parse.Primitives as P exposing (Col, Row)
-import Dict exposing (Dict)
-import Levenshtein
 
 
 -- ====== PACKAGE NAMES ======
@@ -105,22 +97,6 @@ type alias Name =
 toString : Name -> String
 toString ( author, project ) =
     author ++ "/" ++ project
-
-
-{-| Returns the order of two names: by author, and by project where the authors
-are equal.
--}
-compareName : Name -> Name -> Order
-compareName ( name1, project1 ) ( name2, project2 ) =
-    case compare name1 name2 of
-        LT ->
-            LT
-
-        EQ ->
-            compare project1 project2
-
-        GT ->
-            GT
 
 
 {-| The author part of a package name, the `elm` in `elm/core`.
@@ -161,25 +137,6 @@ toChars ( author, project ) =
     author ++ "/" ++ project
 
 
-{-| Returns the name as `author/project`, the same text as `toString`.
-
-Nothing is escaped for use in a URL. A name that `parser` accepts holds only
-letters, digits, dashes and the one `/`, which need no escaping.
-
--}
-toUrl : Name -> String
-toUrl ( author, project ) =
-    author ++ "/" ++ project
-
-
-{-| Returns the name as `author/project`, the same text as `toString`. It is
-not quoted, so it is the text of a JSON string, not a JSON string literal.
--}
-toJsonString : Name -> String
-toJsonString ( author, project ) =
-    String.join "/" [ author, project ]
-
-
 -- ====== COMMON PACKAGE NAMES ======
 
 
@@ -190,32 +147,11 @@ toName =
     Tuple.pair
 
 
-{-| A placeholder package name, `author/project`.
--}
-dummyName : Name
-dummyName =
-    toName "author" "project"
-
-
 {-| The package name `elm/kernel`.
 -}
 kernel : Name
 kernel =
     toName elm "kernel"
-
-
-{-| The package name `eco/kernel`.
--}
-ecoKernel : Name
-ecoKernel =
-    toName eco "kernel"
-
-
-{-| The package name `eco/system`.
--}
-ecoSystem : Name
-ecoSystem =
-    toName eco "system"
 
 
 {-| The package name `elm/core`.
@@ -295,13 +231,6 @@ webgl =
     toName elmExplorations "webgl"
 
 
-{-| The package name `elm-explorations/linear-algebra`.
--}
-linearAlgebra : Name
-linearAlgebra =
-    toName elmExplorations "linear-algebra"
-
-
 {-| The author `elm`, one of the three kernel authors that `isKernel` accepts.
 -}
 elm : Author
@@ -327,87 +256,7 @@ eco =
 -- ====== PACKAGE SUGGESTIONS ======
 
 
-{-| A table from module name to the package that provides the module, for
-fourteen commonly imported modules of `elm/browser`, `elm/file`, `elm/html`,
-`elm/http`, `elm/json`, `elm/random`, `elm/time` and `elm/url`.
-
-A module that is not listed has no entry, even when it belongs to one of those
-packages, as `Browser.Navigation` does.
-
--}
-suggestions : Dict String Name
-suggestions =
-    let
-        file : Name
-        file =
-            toName elm "file"
-    in
-    Dict.fromList
-        [ ( "Browser", browser )
-        , ( "File", file )
-        , ( "File.Download", file )
-        , ( "File.Select", file )
-        , ( "Html", html )
-        , ( "Html.Attributes", html )
-        , ( "Html.Events", html )
-        , ( "Http", http )
-        , ( "Json.Decode", json )
-        , ( "Json.Encode", json )
-        , ( "Random", random )
-        , ( "Time", time )
-        , ( "Url.Parser", url )
-        , ( "Url", url )
-        ]
-
-
 -- ====== NEARBY NAMES ======
-
-
-{-| Returns up to four of `possibleNames`, closest to the given name first.
-
-A candidate's distance is the distance between the two authors plus the
-distance between the two projects, each as `Levenshtein.distance` gives it.
-The exception is a candidate whose author is `elm` or `elm-explorations`: its
-author distance is 0 whatever author was given, so its project alone decides.
-
--}
-nearbyNames : Name -> List Name -> List Name
-nearbyNames ( author1, project1 ) possibleNames =
-    let
-        authorDist : Author -> Int
-        authorDist =
-            authorDistance author1
-
-        projectDist : Project -> Int
-        projectDist =
-            projectDistance project1
-
-        nameDistance : Name -> Int
-        nameDistance ( author2, project2 ) =
-            authorDist author2 + projectDist project2
-    in
-    List.take 4 (List.sortBy nameDistance possibleNames)
-
-
-{-| Returns how far the author `possibility` is from the author `given`: 0 when
-`possibility` is `elm` or `elm-explorations`, and otherwise the
-`Levenshtein.distance` between the two.
--}
-authorDistance : String -> Author -> Int
-authorDistance given possibility =
-    if possibility == elm || possibility == elmExplorations then
-        0
-
-    else
-        abs (Levenshtein.distance given possibility)
-
-
-{-| Returns the `Levenshtein.distance` between the projects `given` and
-`possibility`.
--}
-projectDistance : String -> Project -> Int
-projectDistance given possibility =
-    abs (Levenshtein.distance given possibility)
 
 
 -- ====== JSON ======
@@ -538,50 +387,3 @@ chompName isGoodChar src pos end prevWasDash =
 -- ====== ENCODERS and DECODERS ======
 
 
-{-| Encodes a name as its author followed by its project, each written inline
-as a string, with no string table. It is `nameEncoderS StringTable.disabled`.
--}
-nameEncoder : Name -> Bytes.Encode.Encoder
-nameEncoder =
-    nameEncoderS StringTable.disabled
-
-
-{-| A decoder for a name written by `nameEncoder`: two inline strings, the
-author and then the project.
--}
-nameDecoder : Bytes.Decode.Decoder Name
-nameDecoder =
-    nameDecoderS StringTable.disabled
-
-
-{-| Encodes a name as its author followed by its project, each written through
-`st` as `StringTable.string` writes a string.
-
-Both strings must be in `st`, unless it is `StringTable.disabled`; what happens
-to a missing string is described in `Compiler.AST.StringTable`.
-
--}
-nameEncoderS : StringTable -> Name -> Bytes.Encode.Encoder
-nameEncoderS st ( author, project ) =
-    Bytes.Encode.sequence
-        [ StringTable.string st author
-        , StringTable.string st project
-        ]
-
-
-{-| Produces a decoder for a name written by `nameEncoderS` with the same
-table.
--}
-nameDecoderS : StringTable -> Bytes.Decode.Decoder Name
-nameDecoderS st =
-    Bytes.Decode.map2 Tuple.pair (StringTable.stringDec st) (StringTable.stringDec st)
-
-
-{-| Returns the collector `acc` after giving it the author and then the project
-of a name. It keeps each as its own rule decides.
--}
-collectStringsFromName : Name -> StringTable.Collector -> StringTable.Collector
-collectStringsFromName ( author, project ) acc =
-    acc
-        |> StringTable.add author
-        |> StringTable.add project

@@ -1,13 +1,13 @@
 module Compiler.Data.Name exposing
     ( Name
-    , toChars, toElmString
-    , fromPtr, fromVarIndex, fromTypeVariable, fromTypeVariableScheme, fromManyNames, fromWords
-    , hasDot, splitDots, sepBy
+    , toChars
+    , fromPtr, fromWords
+    
     , isKernel
-    , isNumberType, isComparableType, isAppendableType, isCompappendType
-    , int, float, bool, char, string, maybe, result, list, array, dict, bytes, tuple, jsArray, json, task, router, cmd, sub
-    , platform, virtualDom, shader, debug, debugger, bitwise, basics, utils
-    , negate, true, false, value, node, program, main_, mainModule, dollar, identity_, replValueToPrint
+    
+    , int, float, bool, char, string, maybe, result, list, array, dict, bytes, tuple, json, task, cmd, sub
+    , platform, virtualDom, shader, debug, basics
+    , negate, true, false, value, node, program, mainModule
     )
 
 {-| Every identifier the compiler handles is a `Name`, and this module holds the
@@ -48,17 +48,15 @@ text, so one constant can name several things: `maybe` is both the module
 
 # Conversion
 
-@docs toChars, toElmString
+@docs toChars
 
 
 # Construction
 
-@docs fromPtr, fromVarIndex, fromTypeVariable, fromTypeVariableScheme, fromManyNames, fromWords
+@docs fromPtr, fromWords
 
 
 # Name Analysis
-
-@docs hasDot, splitDots, sepBy
 
 
 # Kernel Module Utilities
@@ -68,25 +66,22 @@ text, so one constant can name several things: `maybe` is both the module
 
 # Type Constraint Prefixes
 
-@docs isNumberType, isComparableType, isAppendableType, isCompappendType
-
 
 # Names of Common Types and Modules
 
-@docs int, float, bool, char, string, maybe, result, list, array, dict, bytes, tuple, jsArray, json, task, router, cmd, sub
+@docs int, float, bool, char, string, maybe, result, list, array, dict, bytes, tuple, json, task, cmd, sub
 
 
 # Names of Other Modules, Kernel Modules and Types
 
-@docs platform, virtualDom, shader, debug, debugger, bitwise, basics, utils
+@docs platform, virtualDom, shader, debug, basics
 
 
 # Special Names
 
-@docs negate, true, false, value, node, program, main_, mainModule, dollar, identity_, replValueToPrint
+@docs negate, true, false, value, node, program, mainModule
 
 -}
-
 
 
 -- ====== NAME ======
@@ -114,13 +109,6 @@ toChars =
     String.toList
 
 
-{-| Returns the name unchanged, since a `Name` already is a `String`.
--}
-toElmString : Name -> String
-toElmString =
-    identity
-
-
 -- ====== FROM ======
 
 
@@ -133,22 +121,6 @@ fromPtr src start end =
 
 
 -- ====== HAS DOT ======
-
-
-{-| Tells whether the name contains a `.`, as a qualified name or a dotted module
-name does.
--}
-hasDot : Name -> Bool
-hasDot =
-    String.contains "."
-
-
-{-| Splits a name at every `.`, so `Elm.Kernel.List` gives
-`[ "Elm", "Kernel", "List" ]`. A name with no dot gives a list of itself alone.
--}
-splitDots : Name -> List String
-splitDots =
-    String.split "."
 
 
 -- ====== GET KERNEL ======
@@ -165,39 +137,6 @@ isKernel name =
     String.startsWith prefixKernel name || String.startsWith prefixEcoKernel name
 
 
-{-| Tells whether a type variable with this name is constrained to numbers, which
-it is whenever the name starts with `number`.
--}
-isNumberType : Name -> Bool
-isNumberType =
-    String.startsWith prefixNumber
-
-
-{-| Tells whether a type variable with this name is constrained to comparable
-types, which it is whenever the name starts with `comparable`.
--}
-isComparableType : Name -> Bool
-isComparableType =
-    String.startsWith prefixComparable
-
-
-{-| Tells whether a type variable with this name is constrained to appendable
-types, which it is whenever the name starts with `appendable`.
--}
-isAppendableType : Name -> Bool
-isAppendableType =
-    String.startsWith prefixAppendable
-
-
-{-| Tells whether a type variable with this name is constrained to types that are
-both comparable and appendable, which it is whenever the name starts with
-`compappend`.
--}
-isCompappendType : Name -> Bool
-isCompappendType =
-    String.startsWith prefixCompappend
-
-
 {-| The start of the name of every kernel module whose kernel prefix is `Elm`.
 -}
 prefixKernel : Name
@@ -212,144 +151,16 @@ prefixEcoKernel =
     "Eco.Kernel."
 
 
-{-| The start of the name of every type variable constrained to numbers.
--}
-prefixNumber : Name
-prefixNumber =
-    "number"
-
-
-{-| The start of the name of every type variable constrained to comparable
-types.
--}
-prefixComparable : Name
-prefixComparable =
-    "comparable"
-
-
-{-| The start of the name of every type variable constrained to appendable
-types.
--}
-prefixAppendable : Name
-prefixAppendable =
-    "appendable"
-
-
-{-| The start of the name of every type variable constrained to types that are
-both comparable and appendable.
--}
-prefixCompappend : Name
-prefixCompappend =
-    "compappend"
-
-
 -- ====== FROM VAR INDEX ======
-
-
-{-| Returns the generated variable name for index `n`: `_v` followed by the
-index, so 0 gives `_v0`. It cannot clash with a name from source, but it is
-only as unique as the index.
--}
-fromVarIndex : Int -> Name
-fromVarIndex n =
-    writeDigitsAtEnd "_v" n
-
-
-{-| Returns `prefix` followed by the decimal digits of `n`.
--}
-writeDigitsAtEnd : String -> Int -> String
-writeDigitsAtEnd prefix n =
-    prefix ++ String.fromInt n
 
 
 -- ====== FROM TYPE VARIABLE ======
 
 
-{-| Returns `name` numbered with `index`, for telling apart type variables that
-share a name.
-
-An `index` of zero or less leaves the name unchanged, and so does an empty
-name. Otherwise the digits of `index` are appended, after an underscore when
-the name already ends in a digit: `a` with 3 gives `a3`, and `a2` with 3 gives
-`a2_3`, which keeps it apart from `a` with 23.
-
--}
-fromTypeVariable : Name -> Int -> Name
-fromTypeVariable name index =
-    if index <= 0 then
-        name
-
-    else
-        name
-            |> String.toList
-            |> List.reverse
-            |> List.head
-            |> Maybe.map
-                (\lastChar ->
-                    if Char.isDigit lastChar then
-                        writeDigitsAtEnd (name ++ "_") index
-
-                    else
-                        writeDigitsAtEnd name index
-                )
-            |> Maybe.withDefault name
-
-
 -- ====== FROM TYPE VARIABLE SCHEME ======
 
 
-{-| Returns the name for the type variable numbered `scheme`, counting from 0.
-
-The first 26 are the letters `a` to `z`. From 26 on, the letter is the one for
-`scheme` modulo 26, and the number after it is `scheme` divided by 26, as
-upstream Elm's `quotRem`: 26 gives `a1`, 27 gives `b1` and 52 gives `a2`.
-Different non-negative numbers give different names.
-
--}
-fromTypeVariableScheme : Int -> Name
-fromTypeVariableScheme scheme =
-    if scheme < 26 then
-        (0x61 + scheme)
-            |> Char.fromCode
-            |> String.fromChar
-
-    else
-        let
-            letter : Int
-            letter =
-                remainderBy 26 scheme
-
-            extra : Int
-            extra =
-                scheme // 26
-        in
-        writeDigitsAtEnd
-            ((0x61 + letter)
-                |> Char.fromCode
-                |> String.fromChar
-            )
-            extra
-
-
 -- ====== FROM MANY NAMES ======
-
-
-{-| Returns one name standing for a group of names: `_M$` followed by the first
-of them, so `[ "x", "y" ]` gives `_M$x`.
-
-Only the first name is used, so the result is as unique as that name: two
-groups with the same first name get the same name. It never equals a name from
-source, including the first name itself. An empty list gives `_M$` alone.
-
--}
-fromManyNames : List Name -> Name
-fromManyNames names =
-    case names of
-        [] ->
-            blank
-
-        firstName :: _ ->
-            blank ++ firstName
 
 
 {-| The start of every name `fromManyNames` makes. The parser never starts a name
@@ -371,14 +182,6 @@ fromWords words =
 
 
 -- ====== SEP BY ======
-
-
-{-| Returns `ba1` and `ba2` joined by `sep`, so `sepBy '.' "List" "map"` gives
-`List.map`.
--}
-sepBy : Char -> Name -> Name -> Name
-sepBy sep ba1 ba2 =
-    String.join (String.fromChar sep) [ ba1, ba2 ]
 
 
 -- ====== COMMON NAMES ======
@@ -469,13 +272,6 @@ tuple =
     "Tuple"
 
 
-{-| The name of elm/core's module `Elm.JsArray`.
--}
-jsArray : Name
-jsArray =
-    "Elm.JsArray"
-
-
 {-| The name of the kernel module `Elm.Kernel.Json`, without its `Elm.Kernel.`
 part.
 -}
@@ -489,13 +285,6 @@ json =
 task : Name
 task =
     "Task"
-
-
-{-| The name of the type `Router`.
--}
-router : Name
-router =
-    "Router"
 
 
 {-| The name `Cmd`, of the type and of the alias `Platform.Cmd` is imported under
@@ -545,34 +334,11 @@ debug =
     "Debug"
 
 
-{-| The name of the kernel module `Elm.Kernel.Debugger`, without its
-`Elm.Kernel.` part.
--}
-debugger : Name
-debugger =
-    "Debugger"
-
-
-{-| The name of the module `Bitwise`.
--}
-bitwise : Name
-bitwise =
-    "Bitwise"
-
-
 {-| The name of the module `Basics`.
 -}
 basics : Name
 basics =
     "Basics"
-
-
-{-| The name of the kernel module `Elm.Kernel.Utils`, without its `Elm.Kernel.`
-part.
--}
-utils : Name
-utils =
-    "Utils"
 
 
 {-| The name of the function `negate`.
@@ -617,13 +383,6 @@ program =
     "Program"
 
 
-{-| The name `main`, of the value a program starts from.
--}
-main_ : Name
-main_ =
-    "main"
-
-
 {-| The name `Main`, given to a module whose source has no `module` line.
 -}
 mainModule : Name
@@ -631,25 +390,3 @@ mainModule =
     "Main"
 
 
-{-| The name `$`, which the parser never reads as a name of its own. The compiler
-gives it to values it makes up, among them the argument of a port encoder or
-decoder it builds and the value name of a kernel module's global.
--}
-dollar : Name
-dollar =
-    "$"
-
-
-{-| The name of the function `identity`.
--}
-identity_ : Name
-identity_ =
-    "identity"
-
-
-{-| The name the REPL declares an entered expression under, so that its value
-can be printed.
--}
-replValueToPrint : Name
-replValueToPrint =
-    "repl_input_value_"

@@ -1,10 +1,16 @@
 module Compiler.Reporting.Annotation exposing
-    ( Located(..), Position(..), Region(..)
-    , at, toValue, toRegion
-    , traverse, merge
-    , mergeRegions, zero, one, isMultiline
-    , regionEncoder, regionDecoder, regionEncoderV, regionDecoderV
-    , locatedEncoder, locatedDecoder
+    ( Located(..)
+    , Position(..)
+    , Region(..)
+    , at
+    , toValue
+    , toRegion
+    , traverse
+    , merge
+    , mergeRegions
+    , zero
+    , one
+    , isMultiline
     )
 
 {-| An error found in a late phase of the compiler still has to point at the
@@ -44,15 +50,8 @@ decoder of the same encoding.
 
 # Serialization
 
-@docs regionEncoder, regionDecoder, regionEncoderV, regionDecoderV
-@docs locatedEncoder, locatedDecoder
 
 -}
-
-import Bytes.Decode
-import Bytes.Encode
-import Utils.Bytes.Decode as BD
-import Utils.Bytes.Encode as BE
 
 
 
@@ -99,7 +98,6 @@ merge (At r1 _) (At r2 _) value =
     At (mergeRegions r1 r2) value
 
 
-
 -- ====== POSITION ======
 
 
@@ -118,7 +116,6 @@ type Position
 at : Position -> Position -> a -> Located a
 at start end a =
     At (Region start end) a
-
 
 
 -- ====== REGION ======
@@ -168,91 +165,6 @@ isMultiline (Region (Position startRow _) (Position endRow _)) =
     startRow /= endRow
 
 
-
 -- ====== ENCODERS and DECODERS ======
 
 
-{-| Produces the fixed encoding of a region: start row, start column, end row
-and end column, each written with `Utils.Bytes.Encode.int`.
--}
-regionEncoder : Region -> Bytes.Encode.Encoder
-regionEncoder (Region start end) =
-    Bytes.Encode.sequence
-        [ positionEncoder start
-        , positionEncoder end
-        ]
-
-
-{-| A decoder for a region in the fixed encoding that `regionEncoder` writes.
--}
-regionDecoder : Bytes.Decode.Decoder Region
-regionDecoder =
-    Bytes.Decode.map2 Region
-        positionDecoder
-        positionDecoder
-
-
-{-| Produces the compact encoding of a region: start row, start column, the end
-row minus the start row, and end column, as varints. The difference is written
-with `Utils.Bytes.Encode.sintV`, so it may be negative, and the other three
-with `Utils.Bytes.Encode.uintV`, so they must not be.
-
-The ranges `Utils.Bytes.Encode.uintV` and `Utils.Bytes.Encode.sintV` require
-are not checked here. Only `regionDecoderV` can read the result.
-
--}
-regionEncoderV : Region -> Bytes.Encode.Encoder
-regionEncoderV (Region (Position r1 c1) (Position r2 c2)) =
-    Bytes.Encode.sequence [ BE.uintV r1, BE.uintV c1, BE.sintV (r2 - r1), BE.uintV c2 ]
-
-
-{-| A decoder for a region in the compact encoding that `regionEncoderV` writes.
--}
-regionDecoderV : Bytes.Decode.Decoder Region
-regionDecoderV =
-    Bytes.Decode.map4 (\r1 c1 dr c2 -> Region (Position r1 c1) (Position (r1 + dr) c2))
-        BD.uintV
-        BD.uintV
-        BD.sintV
-        BD.uintV
-
-
-{-| Produces the fixed encoding of a position: its row, then its column, each
-written with `Utils.Bytes.Encode.int`.
--}
-positionEncoder : Position -> Bytes.Encode.Encoder
-positionEncoder (Position start end) =
-    Bytes.Encode.sequence
-        [ BE.int start
-        , BE.int end
-        ]
-
-
-{-| A decoder for a position that `positionEncoder` writes.
--}
-positionDecoder : Bytes.Decode.Decoder Position
-positionDecoder =
-    Bytes.Decode.map2 Position
-        BD.int
-        BD.int
-
-
-{-| Produces an encoding of a located value: its region in the fixed encoding
-that `regionEncoder` writes, then its value as `encoder` writes it.
--}
-locatedEncoder : (a -> Bytes.Encode.Encoder) -> Located a -> Bytes.Encode.Encoder
-locatedEncoder encoder (At region value) =
-    Bytes.Encode.sequence
-        [ regionEncoder region
-        , encoder value
-        ]
-
-
-{-| Produces a decoder for a located value that `locatedEncoder` writes: a
-region in the fixed encoding, then a value that `decoder` reads.
--}
-locatedDecoder : Bytes.Decode.Decoder a -> Bytes.Decode.Decoder (Located a)
-locatedDecoder decoder =
-    Bytes.Decode.map2 At
-        regionDecoder
-        (BD.lazy (\_ -> decoder))

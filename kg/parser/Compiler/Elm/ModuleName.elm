@@ -1,16 +1,16 @@
 module Compiler.Elm.ModuleName exposing
     ( Raw
-    , toFilePath, toHyphenPath
     
-    , compareCanonical, toComparableCanonical
+    
+    
     , basics, char, string, maybe, result, list, array, dict, tuple, platform, cmd, sub, debug
     , virtualDom
-    , jsonDecode, jsonEncode
+    
     , bytes
-    , webgl, texture, vector2, vector3, vector4, matrix4
-    , canonicalEncoder, canonicalDecoder, rawEncoder, rawDecoder
-    , canonicalEncoderS, canonicalDecoderS
-    , collectStringsFromCanonical
+    , webgl
+    
+    
+    
     , Canonical(..)
     )
 
@@ -38,15 +38,11 @@ canonical names, and constants naming particular modules of `elm/core`,
 
 # Path Conversion
 
-@docs toFilePath, toHyphenPath
-
 
 # JSON Encoding/Decoding
 
 
 # Canonical Module Names
-
-@docs compareCanonical, toComparableCanonical
 
 
 # Core Modules
@@ -61,8 +57,6 @@ canonical names, and constants naming particular modules of `elm/core`,
 
 # JSON Modules
 
-@docs jsonDecode, jsonEncode
-
 
 # Bytes Modules
 
@@ -71,31 +65,23 @@ canonical names, and constants naming particular modules of `elm/core`,
 
 # WebGL Modules
 
-@docs webgl, texture, vector2, vector3, vector4, matrix4
+@docs webgl
 
 
 # Binary Encoding/Decoding
 
-@docs canonicalEncoder, canonicalDecoder, rawEncoder, rawDecoder
-
 
 # String-Interned Binary Encoding/Decoding
 
-@docs canonicalEncoderS, canonicalDecoderS
-@docs collectStringsFromCanonical
+
 @docs Canonical
 
 -}
 
-import Bytes.Decode
-import Bytes.Encode
-import Compiler.AST.StringTable as StringTable exposing (StringTable)
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.Package as Pkg
 import Compiler.Parse.Primitives as P
 import Compiler.Parse.Variable as Var
-import Utils.Bytes.Decode as BD
-import Utils.Bytes.Encode as BE
 
 
 -- ====== RAW ======
@@ -121,39 +107,6 @@ constructor is exposed and checks nothing, so any strings make a `Canonical`.
 -}
 type Canonical
     = Canonical ( String, String ) String
-
-
-{-| Returns `name` with every dot replaced by `/`, so `Html.Attributes` gives
-`Html/Attributes`. The separator is `/` whatever the platform, and no file
-extension is added.
--}
-toFilePath : Raw -> String
-toFilePath name =
-    String.map
-        (\c ->
-            if c == '.' then
-                '/'
-
-            else
-                c
-        )
-        name
-
-
-{-| Returns `name` with every dot replaced by `-`, so `Html.Attributes` gives
-`Html-Attributes`.
--}
-toHyphenPath : Raw -> String
-toHyphenPath name =
-    String.map
-        (\c ->
-            if c == '.' then
-                '-'
-
-            else
-                c
-        )
-        name
 
 
 -- ====== JSON ======
@@ -253,40 +206,6 @@ chompInner src pos end col =
 
 
 -- ====== INSTANCES ======
-
-
-{-| Returns the order of two canonical names: by raw module name, and where
-those are equal by package, as `Compiler.Elm.Package.compareName` orders
-packages.
-
-This is not the order of the strings `toComparableCanonical` makes, which
-begin with the package's author.
-
--}
-compareCanonical : Canonical -> Canonical -> Order
-compareCanonical (Canonical pkg1 name1) (Canonical pkg2 name2) =
-    case compare name1 name2 of
-        LT ->
-            LT
-
-        EQ ->
-            Pkg.compareName pkg1 pkg2
-
-        GT ->
-            GT
-
-
-{-| Returns a canonical name as one string, `author/project:Module`, such as
-`elm/core:List`, for use where a `comparable` is needed.
-
-Two different names give different strings as long as no part contains `/` or
-`:`. The strings begin with the author, so they do not sort in the order
-`compareCanonical` gives.
-
--}
-toComparableCanonical : Canonical -> String
-toComparableCanonical (Canonical ( author, project ) name) =
-    author ++ "/" ++ project ++ ":" ++ name
 
 
 -- ====== CORE ======
@@ -396,20 +315,6 @@ virtualDom =
 -- ====== JSON ======
 
 
-{-| The canonical name of `Json.Decode` in `elm/json`.
--}
-jsonDecode : Canonical
-jsonDecode =
-    Canonical Pkg.json "Json.Decode"
-
-
-{-| The canonical name of `Json.Encode` in `elm/json`.
--}
-jsonEncode : Canonical
-jsonEncode =
-    Canonical Pkg.json "Json.Encode"
-
-
 -- ====== BYTES ======
 
 
@@ -430,107 +335,6 @@ webgl =
     Canonical Pkg.webgl "WebGL"
 
 
-{-| The canonical name of `WebGL.Texture` in `elm-explorations/webgl`.
--}
-texture : Canonical
-texture =
-    Canonical Pkg.webgl "WebGL.Texture"
-
-
-{-| The canonical name of `Math.Vector2` in `elm-explorations/linear-algebra`.
--}
-vector2 : Canonical
-vector2 =
-    Canonical Pkg.linearAlgebra "Math.Vector2"
-
-
-{-| The canonical name of `Math.Vector3` in `elm-explorations/linear-algebra`.
--}
-vector3 : Canonical
-vector3 =
-    Canonical Pkg.linearAlgebra "Math.Vector3"
-
-
-{-| The canonical name of `Math.Vector4` in `elm-explorations/linear-algebra`.
--}
-vector4 : Canonical
-vector4 =
-    Canonical Pkg.linearAlgebra "Math.Vector4"
-
-
-{-| The canonical name of `Math.Matrix4` in `elm-explorations/linear-algebra`.
--}
-matrix4 : Canonical
-matrix4 =
-    Canonical Pkg.linearAlgebra "Math.Matrix4"
-
-
 -- ====== ENCODERS and DECODERS ======
 
 
-{-| Encodes a canonical name as its author, project and module name, each
-written inline as `Utils.Bytes.Encode.string` writes a string.
--}
-canonicalEncoder : Canonical -> Bytes.Encode.Encoder
-canonicalEncoder =
-    canonicalEncoderS StringTable.disabled
-
-
-{-| A decoder for a canonical name written by `canonicalEncoder`.
--}
-canonicalDecoder : Bytes.Decode.Decoder Canonical
-canonicalDecoder =
-    canonicalDecoderS StringTable.disabled
-
-
-{-| Encodes a raw name as `Utils.Bytes.Encode.string` writes a string.
--}
-rawEncoder : Raw -> Bytes.Encode.Encoder
-rawEncoder =
-    BE.string
-
-
-{-| A decoder for a raw name written by `rawEncoder`.
--}
-rawDecoder : Bytes.Decode.Decoder Raw
-rawDecoder =
-    BD.string
-
-
-{-| Encodes a canonical name as its package, as
-`Compiler.Elm.Package.nameEncoderS` writes it, followed by its module name,
-each string written through `st` as `StringTable.string` writes it.
-
-Every string must be in `st`, unless its index width is 0, as
-`StringTable.disabled`'s is; what happens to a missing one is described in
-`Compiler.AST.StringTable`.
-
-`collectStringsFromCanonical` gives a collector the strings this writes.
-
--}
-canonicalEncoderS : StringTable -> Canonical -> Bytes.Encode.Encoder
-canonicalEncoderS st (Canonical pkgName name) =
-    Bytes.Encode.sequence
-        [ Pkg.nameEncoderS st pkgName
-        , StringTable.string st name
-        ]
-
-
-{-| Produces a decoder for a canonical name written by `canonicalEncoderS`
-with the same table.
--}
-canonicalDecoderS : StringTable -> Bytes.Decode.Decoder Canonical
-canonicalDecoderS st =
-    Bytes.Decode.map2 Canonical
-        (Pkg.nameDecoderS st)
-        (StringTable.stringDec st)
-
-
-{-| Returns the collector `acc` after giving it the author, the project and the
-module name of a canonical name. It keeps each as its own rule decides.
--}
-collectStringsFromCanonical : Canonical -> StringTable.Collector -> StringTable.Collector
-collectStringsFromCanonical (Canonical pkgName name) acc =
-    acc
-        |> Pkg.collectStringsFromName pkgName
-        |> StringTable.add name

@@ -7,7 +7,7 @@ package.
 
 ## Where it came from
 
-The 33 modules the parser needs, from eco-compiler's `compiler/src` at
+The modules the parser needs, from eco-compiler's `compiler/src` at
 commit `a874aa905452cfd2b2135a5d6d46bb8ddc47da30` (2026-10-30), copied on
 2026-11-03. Module names are unchanged (`Compiler.Parse.Module`,
 `Compiler.AST.Source`, …), so code moves between the two easily. The copy
@@ -44,6 +44,27 @@ shader, the copy gives kg exactly the facts the compiler's own sources gave;
 on the 8 with shaders, the compiler's sources crashed and the copy parses
 them.
 
-The modules not needed by the parser (`Compiler.Elm.Version`,
-`Compiler.Data.Index`, the JSON modules, `Utils.Crash`, `Prelude` and the IO
-layer) are not copied.
+- **The binary codecs are gone.** The AST, annotation, name, package,
+  operator and shader modules carried encoders and decoders for the
+  compiler's build cache; kg stores its facts with its own `Kg.Codec`. Removing
+  them dropped `Compiler.AST.StringTable`, `Utils.Bytes.Decode` and
+  `Utils.Bytes.Encode`, and with them `Compiler.Data.NonEmptyList` and
+  `Compiler.Data.OneOrMore`.
+- **Dead functions are gone:** 50 values nothing in kg or the parser uses,
+  found by name and confirmed by the compiler (each removal that broke the
+  build was put back). They were in `Compiler.Data.Name` (the names the type
+  checker and code generators need: `isNumberType`, `fromVarIndex`, `jsArray`,
+  …), `Compiler.Elm.ModuleName` (the WebGL and JSON module names, file paths,
+  canonical ordering), `Compiler.Elm.Package` (package suggestions by edit
+  distance, which also drops `dasch/levenshtein`, and URLs) and
+  `Compiler.Parse.Primitives` (`fromSnippet`, `getCharWidth`).
+
+What is left is 28 modules, about 14,500 lines (from 33 modules and 30,300
+lines as first copied, and 51 modules and 36,600 lines reached from the
+compiler's sources). The modules not needed by the parser
+(`Compiler.Elm.Version`, `Compiler.Data.Index`, the JSON modules,
+`Utils.Crash`, `Prelude` and the IO layer) were never copied.
+
+Each step was checked the same way: on all 807 Elm files of eco-compiler
+without a shader, kg's facts are byte for byte the ones the compiler's own
+sources gave.

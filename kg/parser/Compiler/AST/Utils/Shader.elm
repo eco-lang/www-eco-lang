@@ -1,9 +1,10 @@
 module Compiler.AST.Utils.Shader exposing
-    ( Source(..), fromString, toJsStringBuilder, unescape
-    , Type(..), Types(..)
-    , sourceEncoder, sourceDecoder
-    , typesEncoder, typesDecoder
-    , sourceEncoderS, sourceDecoderS, collectStringsFromSource
+    ( Source(..)
+    , fromString
+    , toJsStringBuilder
+    , unescape
+    , Type(..)
+    , Types(..)
     )
 
 {-| An Elm program can embed a WebGL shader as a GLSL literal, written
@@ -44,25 +45,15 @@ write) and a pair that writes the text inline (`sourceEncoder`,
 
 # Binary Serialization
 
-@docs sourceEncoder, sourceDecoder
-@docs typesEncoder, typesDecoder
-
 
 # String-Interned Binary Serialization
 
-@docs sourceEncoderS, sourceDecoderS, collectStringsFromSource
 
 -}
 
-import Bytes.Decode
-import Bytes.Encode
-import Compiler.AST.StringTable as StringTable exposing (StringTable)
 import Compiler.Data.Name exposing (Name)
 import Data.Map exposing (Dict)
 import Regex
-import Utils.Bytes.Decode as BD
-import Utils.Bytes.Encode as BE
-
 
 
 -- ====== SOURCE ======
@@ -78,7 +69,6 @@ it was given.
 -}
 type Source
     = Source String
-
 
 
 -- ====== TYPES ======
@@ -113,7 +103,6 @@ type Type
     | Bool
 
 
-
 -- ====== TO BUILDER ======
 
 
@@ -124,7 +113,6 @@ itself, a plain `String`.
 toJsStringBuilder : Source -> String
 toJsStringBuilder (Source src) =
     src
-
 
 
 -- ====== FROM STRING ======
@@ -209,147 +197,6 @@ unescape =
         )
 
 
-
 -- ====== ENCODERS and DECODERS ======
 
 
-{-| Encodes the escaped text of a `Source` inline, as `Utils.Bytes.Encode.string`
-writes a string. This is `sourceEncoderS` with `StringTable.disabled`.
--}
-sourceEncoder : Source -> Bytes.Encode.Encoder
-sourceEncoder =
-    sourceEncoderS StringTable.disabled
-
-
-{-| A decoder for a `Source` written by `sourceEncoder`.
--}
-sourceDecoder : Bytes.Decode.Decoder Source
-sourceDecoder =
-    sourceDecoderS StringTable.disabled
-
-
-{-| Encodes the escaped text of a `Source` as `StringTable.string` writes a
-string with the table `st`: as its index, or inline when `st` is
-`StringTable.disabled`.
-
-An indexed table must hold this `Source`'s escaped text, the string
-`collectStringsFromSource` gives to a collector; `Compiler.AST.StringTable`
-describes what is written for a string the table does not hold.
-
--}
-sourceEncoderS : StringTable -> Source -> Bytes.Encode.Encoder
-sourceEncoderS st (Source src) =
-    StringTable.string st src
-
-
-{-| Produces a decoder for a `Source` written by `sourceEncoderS` with the same
-table.
--}
-sourceDecoderS : StringTable -> Bytes.Decode.Decoder Source
-sourceDecoderS st =
-    Bytes.Decode.map Source (StringTable.stringDec st)
-
-
-{-| Returns `acc` after giving it the escaped text of a `Source`, which it
-keeps as `StringTable.add` describes. That text is the one string
-`sourceEncoderS` writes for it.
--}
-collectStringsFromSource : Source -> StringTable.Collector -> StringTable.Collector
-collectStringsFromSource (Source src) acc =
-    StringTable.add src acc
-
-
-{-| Encodes a `Types` as its three maps in turn, attributes, then uniforms, then
-varyings, each as `Utils.Bytes.Encode.assocListDict` writes a map. Each name is
-written inline, as `Utils.Bytes.Encode.string` writes it, and each type as the
-one byte `Type` describes. There is no string-table variant.
--}
-typesEncoder : Types -> Bytes.Encode.Encoder
-typesEncoder (Types attribute uniform varying) =
-    Bytes.Encode.sequence
-        [ BE.assocListDict BE.string typeEncoder attribute
-        , BE.assocListDict BE.string typeEncoder uniform
-        , BE.assocListDict BE.string typeEncoder varying
-        ]
-
-
-{-| A decoder for a `Types` written by `typesEncoder`, with each map keyed by
-the input's name itself. A type byte above 7 fails the decode.
--}
-typesDecoder : Bytes.Decode.Decoder Types
-typesDecoder =
-    Bytes.Decode.map3 Types
-        (BD.assocListDict identity BD.string typeDecoder)
-        (BD.assocListDict identity BD.string typeDecoder)
-        (BD.assocListDict identity BD.string typeDecoder)
-
-
-{-| Encodes a `Type` as one byte, from 0 for `Int` to 7 for `Bool`, as listed
-in the `Type` docstring.
--}
-typeEncoder : Type -> Bytes.Encode.Encoder
-typeEncoder type_ =
-    Bytes.Encode.unsignedInt8
-        (case type_ of
-            Int ->
-                0
-
-            Float ->
-                1
-
-            V2 ->
-                2
-
-            V3 ->
-                3
-
-            V4 ->
-                4
-
-            M4 ->
-                5
-
-            Texture ->
-                6
-
-            Bool ->
-                7
-        )
-
-
-{-| A decoder for one `Type` byte written by `typeEncoder`. A byte above 7
-fails the decode.
--}
-typeDecoder : Bytes.Decode.Decoder Type
-typeDecoder =
-    Bytes.Decode.unsignedInt8
-        |> Bytes.Decode.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        Bytes.Decode.succeed Int
-
-                    1 ->
-                        Bytes.Decode.succeed Float
-
-                    2 ->
-                        Bytes.Decode.succeed V2
-
-                    3 ->
-                        Bytes.Decode.succeed V3
-
-                    4 ->
-                        Bytes.Decode.succeed V4
-
-                    5 ->
-                        Bytes.Decode.succeed M4
-
-                    6 ->
-                        Bytes.Decode.succeed Texture
-
-                    7 ->
-                        Bytes.Decode.succeed Bool
-
-                    _ ->
-                        Bytes.Decode.fail
-            )

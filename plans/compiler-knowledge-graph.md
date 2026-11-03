@@ -255,10 +255,11 @@ IO and can be shared with the website (§17).
 eco-compiler's `compiler/src` and `compiler/src-xhr` at a pinned commit. That
 built kg on the compiler's sources, and through them on its IO layer and its
 crashes (`Utils.Crash`, `Eco.Crash`, with `src-xhr`'s stand-ins for
-`eco/kernel`). It is replaced by a copy checked into `kg/parser/`: the 33
-modules the parser needs, from commit `a874aa90`, with the error messages,
-the JSON codecs, the IO layer and every crash taken out, and GLSL left
-unparsed (the GLSL package crashes under eco). `kg/parser/README.md` lists
+`eco/kernel`). It is replaced by a copy checked into `kg/parser/`: 28
+modules, about 14,500 lines, from commit `a874aa90`, with the error
+messages, the JSON and binary codecs, the IO layer, every crash and 50 dead
+functions taken out, and GLSL left unparsed (the GLSL package crashes under
+eco). `kg/parser/README.md` lists
 each change. On every Elm file of eco-compiler without a shader the copy
 gives kg the same facts as before; files with shaders now parse.
 
@@ -270,7 +271,7 @@ Changes in the compiler's parser are brought over by hand when kg needs them.
 - `source-directories`: `["src", "parser"]`.
 - `dependencies` (as built, 2026-11-03): direct `eco/system`, `elm/core`,
   `elm/bytes`, `elm/http`, `elm/json`, `elm/regex`, `elm/time`,
-  `dasch/levenshtein`, `obiloud/numeric-decimal`, `rtfeldman/elm-hex`;
+  `obiloud/numeric-decimal`, `rtfeldman/elm-hex`;
   indirect `elm/file`, `elm/parser`, `elm/url`, `elm/virtual-dom`. Nothing
   from `eco/kernel`.
 - The tests (§19) use a second application, `kg/tests/elm.json`, with

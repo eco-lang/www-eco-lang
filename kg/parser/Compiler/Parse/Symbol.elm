@@ -1,7 +1,7 @@
 module Compiler.Parse.Symbol exposing
-    ( operator, binopCharSet
+    ( operator
+    , binopCharSet
     , BadOperator(..)
-    , badOperatorEncoder, badOperatorDecoder
     )
 
 {-| An Elm operator is named with symbol characters, but a few runs of those
@@ -34,16 +34,12 @@ consumed, which ends the choice.
 
 # Serialization
 
-@docs badOperatorEncoder, badOperatorDecoder
 
 -}
 
-import Bytes.Decode
-import Bytes.Encode
 import Compiler.Data.Name exposing (Name)
 import Compiler.Parse.Primitives as P exposing (Col, Parser, Row)
 import Data.Set as EverySet exposing (EverySet)
-
 
 
 -- ====== OPERATOR ======
@@ -152,58 +148,6 @@ binopCharSet =
     EverySet.fromList identity (List.map Char.toCode (String.toList "+-/*=.<>:&|^?%!"))
 
 
-
 -- ====== ENCODERS and DECODERS ======
 
 
-{-| Encodes a `BadOperator` as one unsigned byte, numbering the constructors
-from 0 to 4 in the order the type declares them.
--}
-badOperatorEncoder : BadOperator -> Bytes.Encode.Encoder
-badOperatorEncoder badOperator =
-    Bytes.Encode.unsignedInt8
-        (case badOperator of
-            BadDot ->
-                0
-
-            BadPipe ->
-                1
-
-            BadArrow ->
-                2
-
-            BadEquals ->
-                3
-
-            BadHasType ->
-                4
-        )
-
-
-{-| A decoder for the byte that `badOperatorEncoder` writes. It fails on any
-byte above 4.
--}
-badOperatorDecoder : Bytes.Decode.Decoder BadOperator
-badOperatorDecoder =
-    Bytes.Decode.unsignedInt8
-        |> Bytes.Decode.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        Bytes.Decode.succeed BadDot
-
-                    1 ->
-                        Bytes.Decode.succeed BadPipe
-
-                    2 ->
-                        Bytes.Decode.succeed BadArrow
-
-                    3 ->
-                        Bytes.Decode.succeed BadEquals
-
-                    4 ->
-                        Bytes.Decode.succeed BadHasType
-
-                    _ ->
-                        Bytes.Decode.fail
-            )
