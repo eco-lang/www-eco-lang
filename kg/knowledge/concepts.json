@@ -1,0 +1,202 @@
+[
+  {
+    "slug": "borrow-inference",
+    "name": "Borrow inference",
+    "aliases": ["borrow analysis", "borrow oracle", "ownership analysis", "borrow signatures", "BorrowSig", "Perceus borrowing", "owned vs borrowed parameters", "RC elimination analysis", "B0-B6 borrow series"],
+    "summary": "Borrow inference is a whole-program ownership analysis that decides, for every specialization, which heap positions of each parameter are only borrowed (the caller still owns them after the call) and which are owned (consumed), plus which result positions may alias which parameters. It runs in global optimization, at the end of Compiler.GlobalOpt.MonoGlobalOptimize before CSE and the CAF passes: Borrow.Constrain generates constraints over each definition's resources, Borrow.Solve solves them, and Compiler.GlobalOpt.Borrow solves signatures one strongly connected component at a time into a signature table, with a handshake to lambda-set facts (Borrow.LssFacts) and an audited kernel signature allowlist (Borrow.KernelSigs). It ships off (borrow.enabled = false) and never changes the program: its products are a census (borrow.report) and validators (borrow.validate), because it costs about 15% of self-compile wall time and nothing in production consumes its results. The analysis-oracle track (phases 0 to 4) is done; the RC optimizations that would use it (phase 5, tier 3) are deferred, and its census is used off-line to size aggregate promotion.",
+    "links": [
+      {"node": "Compiler.GlobalOpt.Borrow", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.Borrow.Constrain", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.Borrow.Solve", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.Borrow.Sig", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.Borrow.KernelSigs", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.Borrow.LssFacts", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.Borrow#runCensus", "role": "measures"},
+      {"node": "plan:borrow-inference-phase0-measurement", "role": "measures"},
+      {"node": "plan:borrow-inference-phase3-interprocedural", "role": "implements"},
+      {"node": "flag:borrow.enabled", "role": "configures"},
+      {"node": "flag:borrow.report", "role": "configures"},
+      {"node": "plan:opt-tier1-aggregate-promotion", "role": "consumes_facts_of"}
+    ]
+  },
+  {
+    "slug": "escape-analysis-aggregate-promotion",
+    "name": "Escape analysis and aggregate promotion",
+    "aliases": ["escape analysis", "stack promotion", "scalar replacement", "SROA", "aggregate promotion", "aggPromote", "value aggregates", "unboxed aggregates", "unboxed-agg", "sret", "result promotion", "psplit", "parameter splitting", "worker/wrapper", "eco.make.tuple2", "to_heap / from_heap", "non-escaping allocations"],
+    "summary": "Aggregate promotion builds values that provably do not escape their function, such as let-bound tuples and single-constructor values, as SSA aggregates (eco.make.* ops, lowered to LLVM structs) instead of heap objects, and gives functions $sret workers that return a 2- or 3-tuple's fields as separate results and $psplit workers that take a tuple or single-constructor parameter as its fields. It lives in MLIR generation: the per-function escape walk is in Compiler.Generate.MLIR.Expr (walkPromo, tupleBinderPromotable, promotableCtorCall) and the whole-program sret/psplit tables are fixpoints in Compiler.Generate.MLIR.Backend; the C++ side only lowers the aggregates (EcoToLLVMValueAgg) and rematerializes them with eco.to_heap/eco.from_heap. All its switches (aggPromote, sretResults, psplitParams, sretFresh, sretTailFuncs, ctorInline) are on by default. It replaced an earlier C++ escape analysis (EcoEscapeAnalysis plus the CrossSpec worker/wrapper passes behind -enable-unboxed-agg), which was deleted after measurement showed it promoted 2 of 30,910 constructs and increased allocation; tier 1 of the optimization roadmap (opt-tier1-aggregate-promotion, partial) designed the replacement to be oracle-free at compile time, using the borrow census only off-line for sizing.",
+    "links": [
+      {"node": "Compiler.Generate.MLIR.Expr#walkPromo", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.Expr#tupleBinderPromotable", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.Expr#promotableCtorCall", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.Backend#buildSretPromoted", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.Backend#buildPsplitPromoted", "role": "implements"},
+      {"node": "cpp:pass:EcoToLLVMValueAgg", "role": "implements"},
+      {"node": "flag:aggPromote", "role": "configures"},
+      {"node": "flag:sretResults", "role": "configures"},
+      {"node": "flag:psplitParams", "role": "configures"},
+      {"node": "plan:opt-tier1-aggregate-promotion", "role": "implements"},
+      {"node": "plan:escape-analysis-implementation", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.Borrow#renderEscClasses", "role": "measures"}
+    ]
+  },
+  {
+    "slug": "lambda-sets",
+    "name": "Lambda sets",
+    "aliases": ["lambda-set specialization", "LSS", "lambda set", "member ids", "set slots", "defunctionalization", "closure-set analysis", "control-flow analysis", "which functions reach a call", "singleton lambda sets", "LambdaSetAnno"],
+    "summary": "Lambda sets record, for every function-typed position, which function values (members, each named only by its identity) can reach it, so that a call through a single-member set can be proved direct and a higher-order function can be specialized once per set of functions its callers pass. eco runs lambda-set specialization inside monomorphization, in the solver engine (Compiler.MonoSolver): each function arrow in the per-demand store gets a set slot that unification joins, callee effects are summarized as memoized signatures (Compiler.MonoSolver.LssInfer), and sets become part of a specialization's key. It is on by default (mono.lss.enabled) with unlimited set size; all other LSS flags were removed and their mechanisms made unconditional (LSS_041, fix-lss-flags-at-defaults). Global optimization's stamp phase (AbiCloning) is the last consumer of membership, and sets with two or more members always lower to generic dispatch because eco does not lower function types to sums.",
+    "links": [
+      {"node": "Compiler.MonoSolver.LssInfer", "role": "implements"},
+      {"node": "Compiler.MonoSolver.LssInfer#signatureFor", "role": "implements"},
+      {"node": "Compiler.MonoSolver.KernelSetFacts", "role": "implements"},
+      {"node": "Compiler.MonoSolver.Engine#lambdaInstanceMemberId", "role": "implements"},
+      {"node": "Compiler.AST.Monomorphized#LambdaSetAnno", "role": "implements"},
+      {"node": "Compiler.MonoSolver.Translate#devirtDirectTarget", "role": "consumes_facts_of"},
+      {"node": "Compiler.GlobalOpt.AbiCloning", "role": "consumes_facts_of"},
+      {"node": "Compiler.GlobalOpt.Borrow.LssFacts", "role": "consumes_facts_of"},
+      {"node": "flag:mono.lss.enabled", "role": "configures"},
+      {"node": "flag:mono.lss.report", "role": "measures"},
+      {"node": "plan:lss-lambda-set-specialization", "role": "implements"},
+      {"node": "plan:lss-provenance-ratio-census", "role": "measures"}
+    ]
+  },
+  {
+    "slug": "staging",
+    "name": "Staging",
+    "aliases": ["staged currying", "staged-curry calling convention", "call staging", "stage arities", "closure regrouping", "CallInfo", "call records", "call kind", "generic apply", "direct known segmentation", "segmentation unknown", "AbiCloning", "call stamping", "devirtualization", "arity"],
+    "summary": "A stage is a group of parameters a closure takes in one application: \\x y -> ... has one stage of two, while a function returning a lambda has two stages. eco decides staging in exactly one phase, global optimization after monomorphization, so monomorphization ignores it and MLIR generation only reads the call record it is given. Compiler.GlobalOpt.MonoGlobalOptimize wraps every function-valued top-level definition as a closure, Compiler.GlobalOpt.Staging regroups each closure's type so its first stage is exactly its parameters (GOPT_001), Compiler.GlobalOpt.AbiCloning stamps or devirtualizes calls whose lambda set has a single provable callee, and annotateCallStaging/computeCallInfo attach a CallInfo (call model, stage arities, call kind) to every call. Anything not proved stays a generic apply that the runtime performs from the closure header; joins whose branches disagree are never re-staged (GOPT_003). This is all always on; the earlier class-voting staging solver and the staging logic in monomorphization were removed (consolidate-staging-to-globalopt), and mono.stagingReport prints a census of generic calls with their reasons.",
+    "links": [
+      {"node": "Compiler.GlobalOpt.Staging", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.Staging#regroup", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.MonoGlobalOptimize#annotateCallStaging", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.MonoGlobalOptimize#computeCallInfo", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.MonoGlobalOptimize#wrapTopLevelCallables", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.AbiCloning#stampCall", "role": "implements"},
+      {"node": "Compiler.AST.Monomorphized#CallInfo", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.Expr#generateCall", "role": "consumes_facts_of"},
+      {"node": "Compiler.GlobalOpt.GenCallCensus", "role": "measures"},
+      {"node": "flag:mono.stagingReport", "role": "measures"},
+      {"node": "plan:consolidate-staging-to-globalopt", "role": "implements"},
+      {"node": "plan:staging-honesty-and-production-test-pipeline", "role": "measures"}
+    ]
+  },
+  {
+    "slug": "ids",
+    "name": "Ids (MVar ids, lambda ids and arrow ids)",
+    "aliases": ["MVarId", "MVar ids", "type variable ids", "arrow ids", "ArrowId", "ArrowSlot", "source lambda ids", "SrcLambdaId", "member ids", "identity numbers", "AssignMVarIds", "id minting", "fresh ids", "unified id space", "phantom-typed ids", "super table"],
+    "summary": "After type checking, eco numbers three kinds of thing with typed integers (Compiler.AST.TypeIds, Compiler.Data.Id): an MVarId names one type variable across the whole program, a source-lambda id names each lambda written in the source, and an ArrowId names each syntactic function arrow in a type. Compiler.Monomorphize.AssignMVarIds assigns all three over the linked typed graph, resolving names per scope and backing variables by the type checker's solver roots; super-types such as number and comparable go into a side table keyed by MVarId rather than being inferred from names (TYPE_SUPER_001). It runs before the pre-monomorphization passes, and lambda-set analysis keys on these ids (lambda ids become set members, arrow ids give set slots their identity, LSS_027 and LSS_031). Any pass that copies code must mint fresh ids through Compiler.GlobalOpt.PreMono.Fresh, and the checkMinted validator rejects missing or duplicated ids, because a copy that kept its ids would put two bodies under one lambda-set member, a silent miscompile.",
+    "links": [
+      {"node": "Compiler.Monomorphize.AssignMVarIds", "role": "implements"},
+      {"node": "Compiler.Monomorphize.AssignMVarIds#assignIds", "role": "implements"},
+      {"node": "Compiler.AST.TypeIds", "role": "implements"},
+      {"node": "Compiler.Data.Id", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.PreMono.Fresh", "role": "implements"},
+      {"node": "Compiler.Pipeline.Steps#checkMinted", "role": "measures"},
+      {"node": "Compiler.Type.SolverRoots", "role": "implements"},
+      {"node": "Compiler.MonoSolver.LssInfer", "role": "consumes_facts_of"},
+      {"node": "plan:mvar-id-global-assignment", "role": "implements"},
+      {"node": "plan:solver-root-backed-mvar-ids", "role": "implements"},
+      {"node": "plan:pre-mono-lss-transforms-00-assign-mvar-ids-first", "role": "implements"},
+      {"node": "inv:LSS_027", "role": "implements"}
+    ]
+  },
+  {
+    "slug": "bytes-fusion",
+    "name": "Bytes fusion",
+    "aliases": ["fused bytes", "elm/bytes fusion", "encoder fusion", "decoder fusion", "bf dialect", "cursor", "Bytes.Encode.encode fusion", "Bytes.Decode.decode fusion", "EOpaque", "escape hatch", "LoopIR"],
+    "summary": "Bytes fusion compiles a call to Bytes.Encode.encode or Bytes.Decode.decode into code that sizes one buffer exactly and writes or reads it through a cursor, instead of building an encoder tree for the C++ elm/bytes kernel to interpret. It is a fast path inside MLIR generation, run on the final graph after the post-monomorphization inliner has unfolded bytes helpers (MonoInlineSimplify's whitelist): Compiler.Generate.MLIR.Expr gates each saturated call, BytesFusion.Reify reads the encoder or decoder shape into nodes and flattens it into LoopIR operations, and BytesFusion.Emit emits the bf dialect, which the C++ BFToLLVM pass lowers to loads, stores and runtime helpers. It is on by default (bytesFusion.enabled). The kernel is the reference: an unreadable decoder or wholly unreadable encoder stays a kernel call, and an unreadable part of an encoder becomes an opaque leaf written by the kernel's own walker (bytes-fusion-escape-hatch).",
+    "links": [
+      {"node": "Compiler.Generate.MLIR.BytesFusion.Reify", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.BytesFusion.LoopIR", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.BytesFusion.Emit", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.Expr#generateSaturatedCallFusionGate", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.Expr#tryBytesEncodeFusion", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.Expr#tryInlinedDecodeFusion", "role": "implements"},
+      {"node": "cpp:pass:BFToLLVM", "role": "implements"},
+      {"node": "cpp:alloc:ElmBytesRuntime", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.MonoInlineSimplify#defaultWhitelist", "role": "configures"},
+      {"node": "flag:bytesFusion.enabled", "role": "configures"},
+      {"node": "plan:fused-bytes-plan", "role": "implements"},
+      {"node": "plan:bytes-fusion-escape-hatch", "role": "implements"}
+    ]
+  },
+  {
+    "slug": "cafs",
+    "name": "CAFs",
+    "aliases": ["CAF", "constant applicative form", "top-level constants", "nullary definitions", "thunks", "constant thunks", "CAF memoization", "memo slot", "__eco_caf", "CAF hoisting", "CAF dedupe", "permanent space", "constant folding of thunks"],
+    "summary": "A CAF is a top-level value with no arguments, which eco compiles to a thunk (a function of no arguments). MLIR generation shortens the route in two ways: small closed bodies are folded at each reference (Compiler.Generate.MLIR.ConstThunks, level set by constThunks, default 2), and a thunk whose ABI result is a boxed value gets a memo slot, a global that caches its value after first use and is then a GC root (cafMemoQualifies in Compiler.Generate.MLIR.Functions, cafMemo.enabled, on by default; the back end derives the __eco_caf$ slot in EcoToLLVMGlobals). At run time computed CAFs, interned literals and capture-free closures are copied into a permanent space the collector never visits. Two global-optimization passes around them ship off because measurement shows they do not pay: CAF hoisting (Compiler.GlobalOpt.CafHoist, cafMemo.hoist.enabled), which lifts closed expressions out of function bodies into new nullary specializations, and CAF dedupe (Compiler.GlobalOpt.CafDedupe, cafMemo.dedupe), which merges identical ones; Compiler.GlobalOpt.CafCensus sizes the opportunity.",
+    "links": [
+      {"node": "Compiler.Generate.MLIR.Functions#cafMemoQualifies", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.ConstThunks", "role": "implements"},
+      {"node": "cpp:pass:EcoToLLVMGlobals", "role": "implements"},
+      {"node": "cpp:alloc:PermanentSpace", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.CafHoist", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.CafDedupe", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.CafCensus", "role": "measures"},
+      {"node": "flag:cafMemo.enabled", "role": "configures"},
+      {"node": "flag:cafMemo.hoist.enabled", "role": "configures"},
+      {"node": "flag:cafMemo.dedupe", "role": "configures"},
+      {"node": "flag:constThunks", "role": "configures"},
+      {"node": "plan:caf-memoization-implementation", "role": "implements"}
+    ]
+  },
+  {
+    "slug": "reification",
+    "name": "Reification",
+    "aliases": ["reify", "reifier", "borrow reify", "borrow.reify", "reify=rc", "RC reification", "oracle-driven reification", "oracle-coupled reification", "BytesFusion.Reify", "reifying encoders and decoders", "reifiedOwned"],
+    "summary": "Reification means two things in eco, both about turning something implicit into explicit data. In bytes fusion, BytesFusion.Reify reifies an elm/bytes encoder or decoder expression into a structural description (EncoderNode lists, DecoderNode trees) and then into LoopIR cursor operations, reading only the shape and leaving the values as unlowered expressions; this is live and on by default as part of MLIR generation. In borrow inference, reification is the step that would turn the analysis's ownership results into program changes, explicit reference-counting operations, under borrow.reify = rc (BorrowReify RRc); Borrow.Solve's reifiedOwned says which resources must be treated as owned. Borrow reification is not built: both reify modes leave the program unchanged (RRc only forces the analysis to run), the reification rewrite of phase 5 is deferred to v2 and tier 3, and oracle-coupled reification for promotion (tier 1 U-T1.4, borrow-oracle-consumers) was parked and then killed on measurement.",
+    "links": [
+      {"node": "Compiler.Generate.MLIR.BytesFusion.Reify", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.BytesFusion.Reify#reifyEncoderWith", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.BytesFusion.Reify#decoderNodeToOps", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.BytesFusion.Emit", "role": "consumes_facts_of"},
+      {"node": "Compiler.Generate.MLIR.Expr#tryBytesEncodeFusion", "role": "consumes_facts_of"},
+      {"node": "Compiler.GlobalOpt.Borrow.Solve#reifiedOwned", "role": "implements"},
+      {"node": "Compiler.Eco.Config#BorrowReify", "role": "configures"},
+      {"node": "flag:borrow.reify", "role": "configures"},
+      {"node": "Compiler.GlobalOpt.Borrow#runCensus", "role": "measures"},
+      {"node": "plan:borrow-inference-phase5-rc-optimizations", "role": "implements"},
+      {"node": "plan:borrow-oracle-consumers", "role": "implements"},
+      {"node": "plan:opt-tier4-parked", "role": "implements"}
+    ]
+  },
+  {
+    "slug": "kernels",
+    "name": "Kernels",
+    "aliases": ["kernel functions", "Elm.Kernel", "Eco.Kernel", "kernel modules", "kernel ABI", "kernel calling convention", "kernel declarations", "kernel types", "KernelFacts", "kernel facts table", "elm-kernel-cpp", "eco/kernel", "eco/system", "system kernel", "C++ built-ins", "Elm_Kernel_* symbols", "task bindings"],
+    "summary": "Kernels are the functions the compiler treats as having no Elm body: Elm source names them as Elm.Kernel.<Home>.<name> or Eco.Kernel.<Home>.<name>, and each use becomes a call to a C symbol such as Elm_Kernel_List_cons implemented in C++ on the eco heap. Three C++ libraries supply them: Elm's own kernels ported from JavaScript (elm-kernel-cpp), the compiler's private IO layer eco/kernel (eco-kernel-cpp), and the public eco/system library (system-kernel-cpp). The compiler alone owns the calling convention (KERN_006): kernel types come from Compiler.Type.KernelTypes, per-instance ABIs are chosen from the concrete specialized types (Compiler.Monomorphize.KernelAbi, Compiler.Generate.MLIR.KernelAbi), Int, Float and Char cross unboxed and everything else boxed, and MLIR generation writes one declaration per symbol that every call must match. One hand-audited table, Compiler.GlobalOpt.KernelFacts, records each kernel's effects, allocation, failure and borrow modes for every pass, and Compiler.MonoSolver.KernelSetFacts licenses how lambda sets flow through kernels; kernelGcLeaf (on) marks non-allocating kernels so the back end can skip collector bookkeeping.",
+    "links": [
+      {"node": "Compiler.Generate.MLIR.KernelAbi", "role": "implements"},
+      {"node": "Compiler.Monomorphize.KernelAbi", "role": "implements"},
+      {"node": "Compiler.Type.KernelTypes", "role": "implements"},
+      {"node": "Compiler.GlobalOpt.KernelFacts", "role": "implements"},
+      {"node": "Compiler.MonoSolver.KernelSetFacts", "role": "implements"},
+      {"node": "Compiler.Generate.MLIR.Context#registerKernelInstance", "role": "implements"},
+      {"node": "cpp:ek:KernelExports", "role": "implements"},
+      {"node": "cpp:eco:KernelExports", "role": "implements"},
+      {"node": "cpp:sys:System", "role": "implements"},
+      {"node": "flag:kernelGcLeaf", "role": "configures"},
+      {"node": "plan:kernel-abi-single-source-of-truth", "role": "implements"},
+      {"node": "plan:kernel-call-census", "role": "measures"}
+    ]
+  },
+  {
+    "slug": "gc",
+    "name": "The garbage collector",
+    "aliases": ["GC", "garbage collector", "collector", "nursery", "eden", "survivor extents", "minor collection", "major collection", "tenure", "tenuring", "promotion to old generation", "old generation", "GC roots", "root set", "stack maps", "statepoints", "RS4GC", "safepoints", "write barrier", "concurrent marking", "permanent space", "threaded GC"],
+    "summary": "eco's runtime has one mutator thread (the eco thread) and one generational heap with no write barrier, which is sound because no published Elm value is ever written again, so no old object can point to a younger one. Young objects are bump-allocated in a contiguous nursery (eden); a minor collection copies eden's survivors in parallel into rotating survivor extents, background threads later tenure the still-live ones into a non-moving old generation of size-class blocks with mark bitmaps plus a large-object space, and the old generation is marked concurrently and swept (C++ in runtime/src/allocator: ThreadLocalHeap, NurserySpace, NurseryTenure, OldGenSpace). Because the nursery moves objects, roots must be exact: compiled frames are found through LLVM stack maps from RewriteStatepointsForGC, and C++ roots through registered slots and scanners (RootSet, StackMap). The only safepoint in compiled code is the slow path of an inline bump allocation; there are no loop polls, EcoGCPrepare and the GC-leaf marking shrink the statepoint set, and gc.preLink (on) asks for a full collection before the back end lowers and links. The threaded collector is partial (threaded-gc-master-plan) and its concurrent protocols are checked by TLA+ models.",
+    "links": [
+      {"node": "cpp:alloc:ThreadLocalHeap", "role": "implements"},
+      {"node": "cpp:alloc:NurserySpace", "role": "implements"},
+      {"node": "cpp:alloc:NurseryTenure", "role": "implements"},
+      {"node": "cpp:alloc:OldGenSpace", "role": "implements"},
+      {"node": "cpp:alloc:RootSet", "role": "implements"},
+      {"node": "cpp:alloc:StackMap", "role": "implements"},
+      {"node": "cpp:pass:EcoGCPrepare", "role": "implements"},
+      {"node": "cpp:pass:EcoMarkGCLeafCalls", "role": "implements"},
+      {"node": "cpp:alloc:GCStats", "role": "measures"},
+      {"node": "flag:gc.preLink", "role": "configures"},
+      {"node": "plan:threaded-gc-master-plan", "role": "implements"},
+      {"node": "plan:migrate-to-rewritestatepointsforgc", "role": "implements"}
+    ]
+  }
+]

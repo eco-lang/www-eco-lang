@@ -1,0 +1,189 @@
+[
+  {
+    "id": "entryprep-placement",
+    "question": "What is Compiler.Monomorphize.EntryPrep, what does it do, and should it live in the driver rather than under Monomorphize?",
+    "reference": "compiler/src/Compiler/Monomorphize/EntryPrep.elm turns the merged typed graph (TOpt.GlobalGraph Name) into an `Assigned` record (graph with ids, flagsGlobal, mvarState, entryHome). `assign`/`assignIn` (lines 68-90) first insert the synthetic flags decoder `main$flagsDecoder` for a `Platform.Program` entry (insertFlagsDecoderNode/insertDecoderFor, lines 114-170), then run `AssignMVarIds.assignIds` to give every type variable, lambda and arrow a program-wide id. It is called only through the driver-side wrappers Compiler.Pipeline.Steps.prepare/prepareRoot/prepareEntry (compiler/src/Compiler/Pipeline/Steps.elm:125-143), which Builder.Generate.buildMonoGraphFromMerged (compiler/src/Builder/Generate.elm:840) invokes before the pre-mono passes. Its output feeds Steps.preMono (AliasForward, EtaExpand, InlineSimplify) and either mono engine, and the pre-mono passes import EntryPrep.flagsDecoderName, so a GlobalOpt module depends on a Monomorphize module. It is pure graph preparation (no IO or config reading), so the orchestration already sits in the driver (Pipeline.Steps); EntryPrep itself is better seen as a shared 'prepare' step before pre-mono than as driver code, and moving it into the driver would make GlobalOpt.PreMono depend on the driver.",
+    "mustMention": [
+      "Compiler.Monomorphize.EntryPrep",
+      "Compiler.Pipeline.Steps",
+      "AssignMVarIds"
+    ],
+    "category": "orientation"
+  },
+  {
+    "id": "premono-global-or-local",
+    "question": "Are the Compiler.GlobalOpt.PreMono.* passes (EtaExpand, AliasForward) really global passes or local ones? What IR do they consume and produce?",
+    "reference": "They are whole-program passes but they run before monomorphization, on the typed-optimized IR rather than the Mono IR. Both `AliasForward.run` (compiler/src/Compiler/GlobalOpt/PreMono/AliasForward.elm:321) and `EtaExpand.run` (compiler/src/Compiler/GlobalOpt/PreMono/EtaExpand.elm:209) take `Config.InlineConfig`, an `AssignMVarIds.GlobalMVarState` and a `TOpt.GlobalGraph TypeIds.MVarId`, and return the same graph type, the updated id state and Metrics. They are global in scope: AliasForward builds a program-wide alias map (`aliasMap`) and rewrites references across modules; EtaExpand indexes every callee's declared arity over the merged graph. They are not the per-module LocalOpt passes (compiler/src/Compiler/LocalOpt/Typed/*). Compiler.Pipeline.Steps.preMono (Steps.elm:183) runs AliasForward, then EtaExpand, then the pre-mono inliner Compiler.GlobalOpt.InlineSimplify, after EntryPrep has assigned ids; new nodes must get fresh ids via Compiler.GlobalOpt.PreMono.Fresh. LiftClosedArgs in the same folder is a census only and rewrites nothing.",
+    "mustMention": [
+      "TOpt",
+      "AliasForward",
+      "EtaExpand"
+    ],
+    "category": "data flow"
+  },
+  {
+    "id": "borrow-inference-placement",
+    "question": "Where does borrow inference run in the compiler pipeline, what gates it, and would it make sense as a stage of its own?",
+    "reference": "Borrow inference (compiler/src/Compiler/GlobalOpt/Borrow.elm, with Constrain/Solve/Sig/LssFacts etc. under GlobalOpt/Borrow/) runs as the last step of Compiler.GlobalOpt.MonoGlobalOptimize.globalOptimizeWithStats (MonoGlobalOptimize.elm:175-200), after wrapping, Staging.regroup, AbiCloning, Mono.clearLssTables and annotateCallStaging, and before CSE, CAF dedupe and CAF hoist (Pipeline.Steps.globalOptCore then cse/dedupe/hoist). It runs only when `borrow.enabled` is on (Compiler.Eco.Config.BorrowConfig, default off), and `Borrow.run` additionally does nothing unless `report`, `validate` or `reify = RRc` is set. It never changes the graph: it returns the graph unchanged plus a BorrowStats census; its only coupling to the rest of the step is that `keepOrigins = borrowCfg.enabled || listMapTemplate` keeps `lssMemberOrigins` through clearLssTables. Because it is analysis-only and needs only the post-staging Mono graph, it could be split out as a separate step in Compiler.Pipeline.Steps (like cse/dedupe/hoist), provided the lssMemberOrigins retention is preserved.",
+    "mustMention": [
+      "Compiler.GlobalOpt.Borrow",
+      "MonoGlobalOptimize",
+      "borrow.enabled"
+    ],
+    "category": "orientation"
+  },
+  {
+    "id": "escape-analysis",
+    "question": "Do we have escape analysis anywhere in the compiler?",
+    "reference": "Not under that name today. The live equivalent is aggregate promotion in the Elm MLIR generator: Compiler.Generate.MLIR.Expr runs an escape walk (`walkPromo`, Expr.elm:7554, used by `tupleBinderPromotable`) so let-bound tuples/constructors whose uses only read fields become SSA aggregates (`eco.make.*`), and Compiler.Generate.MLIR.Backend builds `$sret` result workers (`buildSretPromoted`) and `$psplit` parameter workers (`buildPsplitPromoted`); these are gated by the `aggPromote`, `sretResults`, `psplitParams` (and `ctorInline`, `sretFresh`, `sretTailFuncs`) flags in compiler/src/Compiler/Eco/Config.elm, added in commit 914c0f87. Borrow inference (Compiler.GlobalOpt.Borrow) also computes an escape census (`nonEscapingOwned`, `nonEscapingOwnedLB`) but changes nothing. A C++ escape analysis existed as runtime/src/codegen/Passes/EcoEscapeAnalysis.cpp in the unboxed-aggregate pipeline; it was deleted with the `-enable-unboxed-agg` flag in commit 5ab78669, and the design docs design_docs/escape-analysis.md and escape-analysis-status.md were deleted in 94a1e6b4. Plans: plans/opt-tier1-aggregate-promotion.md (partial, 'escape sizing + aggregate/scalar promotion'), plans/split-unboxed-agg-flag-and-redesign-escape-analysis.md (superseded) and plans/borrow-oracle-consumers.md (abandoned).",
+    "mustMention": [
+      "aggPromote",
+      "psplit",
+      "sret",
+      "5ab78669",
+      "EcoEscapeAnalysis"
+    ],
+    "category": "vocabulary"
+  },
+  {
+    "id": "borrow-facts-consumers",
+    "question": "What consumes the borrow-inference oracle facts in Compiler.GlobalOpt.Borrow.Facts?",
+    "reference": "Compiler.GlobalOpt.Borrow.Facts (compiler/src/Compiler/GlobalOpt/Borrow/Facts.elm) defines OracleFacts (bySpec keyed by SpecId, byLambda keyed by lambda-set member id) and the lookup `borrowedParamsOfLambda`. Its only producer is `Compiler.GlobalOpt.Borrow.deriveFacts` (Borrow.elm:379), and at a874aa90 nothing in production consumes it: the only other user is the test compiler/tests/TestLogic/Monomorphize/BorrowFenceTest.elm. The facts were exported to code generation in commit 70dfed43 (Ctx.oracleFacts in Compiler.Generate.MLIR.Context, derived in Compiler.Generate.MLIR.Backend under `borrow.oracleOpt` / ECO_BORROW_OPT), and that consumer was removed as dead code in commit 94a1e6b4. The planned consumers in plans/borrow-oracle-consumers.md (OC1-OC3: call-crossing aggregate promotion, closure-environment promotion, uniqueness-informed kernel specialization) were never built; that plan is marked abandoned.",
+    "mustMention": [
+      "deriveFacts",
+      "BorrowFenceTest",
+      "94a1e6b4",
+      "borrow-oracle-consumers"
+    ],
+    "category": "data flow"
+  },
+  {
+    "id": "passes-after-borrow",
+    "question": "Which passes rewrite the Mono graph after borrow inference has run?",
+    "reference": "Borrow inference itself (Compiler.GlobalOpt.Borrow.run) returns the graph unchanged and is the last step of MonoGlobalOptimize.globalOptimizeWithStats. After it, Compiler.Pipeline.Steps.globalOpt (Steps.elm:606) and Builder.Generate.runGlobalOptPhase (Generate.elm:1552) run three rewriting passes in order: Compiler.GlobalOpt.MonoCse (CSE of pure calls, when `cse.enabled`, default off), Compiler.GlobalOpt.CafDedupe (when `cafMemo.dedupe`, default off) and Compiler.GlobalOpt.CafHoist (when `cafMemo.hoist.enabled`, default off). Nothing rewrites the graph after that: Compiler.Generate.MLIR.Backend.buildContext only derives side tables from it (sret/psplit promotion, ConstThunks, MapTemplate.derive, inline bodies) while emitting MLIR. So with default config no pass rewrites the graph after borrow inference, and any facts derived by Borrow describe the pre-CSE/CAF graph.",
+    "mustMention": [
+      "MonoCse",
+      "CafDedupe",
+      "CafHoist"
+    ],
+    "category": "data flow"
+  },
+  {
+    "id": "unboxed-agg-replacement",
+    "question": "What replaced the -enable-unboxed-agg option?",
+    "reference": "Nothing replaced the flag directly: commit 5ab78669 (2026-05-22, 'Remove unboxed-aggregate pass pipeline and -enable-unboxed-agg flag') deleted the C++ passes EcoUnboxedAggCrossSpec, EcoEscapeAnalysis, EcoUnboxedAggSpecialize, EcoFlattenAggBoundary and EcoBoxAggregateOperands together with the flag in eco-boot, ecoc, EcoNativeDriver, EcoRunner and heap-profile.py. plans/split-unboxed-agg-flag-and-redesign-escape-analysis.md is marked superseded with 'Unboxed-agg pass pipeline deleted outright (no replacement plan)'. The job of keeping tuples and constructors off the heap was later redone in the Elm MLIR generator: commit 914c0f87 (2026-08-04) added the aggregate-promotion flags `aggPromote`, `ctorInline`, `sretResults` and `psplitParams` (Compiler.Eco.Config, now default on, implemented in Compiler.Generate.MLIR.Expr/Backend/TailRec), planned in plans/opt-tier1-aggregate-promotion.md, which lists the deleted passes and the flag as 'Deleted (after measured failure)'.",
+    "mustMention": [
+      "5ab78669",
+      "aggPromote",
+      "opt-tier1-aggregate-promotion",
+      "EcoUnboxedAggCrossSpec"
+    ],
+    "category": "history"
+  },
+  {
+    "id": "closure-abi-invariants",
+    "question": "Which invariants in design_docs/invariants.csv govern the closure ABI?",
+    "reference": "design_docs/invariants.csv (';'-separated: id;phase;category;status;description;source) has the closure ABI rules mostly in category `Closures`. Representation: REP_CLOSURE_001 (captures stored by SSA rules with 2-bit kinds; Bool boxed) and REP_CLOSURE_002 (application preserves captured representation, eco_pap_extend_l). Codegen: CGEN_CLOSURE_004 (papCreate with captures needs _fast_evaluator), CGEN_CLOSURE_005 (saturated typed papExtend with _fast_evaluator/_capture_abi lowers to a direct call of the $cap fast clone), CLONE_RELATION_001 (fast clone signature is capture_types ++ param_types -> return), ZERO_CAPTURE_001, CGEN_CLOSURE_003 (free variables), CGEN_CLOSURE_006, CGEN_033/049/051/052/056 (papCreate/papExtend arity, slot_kinds, remaining_arity, result type), CGEN_058/059/060 and RUNTIME_CLOSURE_004 (generic apply via eco_apply_closure_eval), plus ABI_CLONE_001 (one capture ABI per closure parameter after Compiler.GlobalOpt.AbiCloning), FORBID_CLOSURE_001/002 and LSS_036. CGEN_CLOSURE_007, CGEN_CLOSURE_008 and CGEN_055 are retired (the _dispatch_mode attribute and staging wrappers were removed).",
+    "mustMention": [
+      "REP_CLOSURE_001",
+      "CGEN_CLOSURE_005",
+      "CLONE_RELATION_001",
+      "ABI_CLONE_001"
+    ],
+    "category": "plans"
+  },
+  {
+    "id": "open-cpp-foundation-plans",
+    "question": "Which plans are still open (partial or not-started) on the C++ runtime foundation, meaning the heap/values model and the runtime ABI exports?",
+    "reference": "Plans carry YAML front matter with `status:` (done, partial, not-started, superseded, abandoned); 27 are partial and 14 not-started of 606 in plans/. Those about the heap/values code (runtime Heap, HeapHelpers, RootedSlots, StringOps, ListOps, BytesOps, TypeInfo, CaseMap) and the runtime ABI (RuntimeExports, KernelExports, ExportHelpers, TaskBinding) are: plans/runtime-cpp-gc-rooting-audit.md (partial: the committed detection query and fact snapshot, Step 8, were never built), plans/allocator-resolve-inlining.md (partial: R4, remove the ECO_INLINE_DEREF_EXT rollout flag), plans/elm-bytes-kernel-perf.md (partial: streaming StringOps visitor for slice/rope strings, C3, B1/B2), plans/remove-header-color-bits.md (not-started), plans/borrow-inference-phase5-rc-optimizations.md and plans/opt-tier3-rc-runtime.md (not-started, the RC runtime track), and plans/threaded-gc-master-plan.md (partial: Phase 8). Less directly related ones: chunked-list-spine-data-split.md, intern-hashtable-and-global-ids.md and over-application-re-entry.md (all not-started).",
+    "mustMention": [
+      "runtime-cpp-gc-rooting-audit",
+      "allocator-resolve-inlining",
+      "remove-header-color-bits",
+      "elm-bytes-kernel-perf"
+    ],
+    "category": "plans"
+  },
+  {
+    "id": "staging-cochange",
+    "question": "Which files change together with compiler/src/Compiler/GlobalOpt/Staging.elm most often?",
+    "reference": "Counting first-parent commits on master that touch compiler/src (`git log --first-parent --name-only -- compiler/src`), Staging.elm appears in 10 commits (from 658cdbb1 'Add global staging algorithm' to e92be268). Top partners: Compiler/GlobalOpt/AbiCloning.elm 6, Compiler/GlobalOpt/MonoGlobalOptimize.elm 6, and the former Staging/ProducerInfo.elm, Staging/Rewriter.elm and Staging/GraphBuilder.elm 6 each; then MonoInlineSimplify.elm, Generate/MLIR/Expr.elm, AST/Monomorphized.elm, Staging/Types.elm, Staging/UnionFind.elm and Staging/Solver.elm 5 each; Generate/MLIR/Backend.elm 4. The Staging/* submodules no longer exist: commit 16763952 ('retire the staging solver') deleted them. So among current files the strongest partners are AbiCloning.elm and MonoGlobalOptimize.elm, which call Staging.regroup and stamp calls after it.",
+    "mustMention": [
+      "AbiCloning.elm",
+      "MonoGlobalOptimize.elm",
+      "16763952"
+    ],
+    "category": "history"
+  },
+  {
+    "id": "kernel-function-types",
+    "question": "Where are the types of kernel functions (Elm.Kernel.* / Eco.Kernel.* references) derived?",
+    "reference": "Kernel functions have no Elm declaration, so their types are inferred from usage after type solving, in Compiler.Type.PostSolve (compiler/src/Compiler/Type/PostSolve.elm, `postSolve` line 90), called from Compiler.Compile (Compile.elm:375). It first takes the types of kernel aliases (`map = Elm.Kernel.List.map`), then walks declarations: a kernel call contributes the function type built from its argument node types (`postSolveCall`, KernelTypes.buildFunctionType), and bare kernel references take types from kernel-call parameters, constructor annotations, binop annotations or case results. The results are stored in Compiler.Type.KernelTypes.KernelTypeEnv (compiler/src/Compiler/Type/KernelTypes.elm), keyed by (prefix, home, name) with a first-usage-wins rule (`insertFirstUsage`). Later, the ABI types are derived from them: Compiler.Monomorphize.KernelAbi.deriveKernelAbiMode decides which type variables stay boxed (MVar CEcoValue), and Compiler.Generate.MLIR.KernelAbi.deriveKernelInstanceAbi picks the C symbol (with _Int/_Float/_Char suffix variants) and MLIR argument types.",
+    "mustMention": [
+      "Compiler.Type.PostSolve",
+      "Compiler.Type.KernelTypes",
+      "KernelAbi"
+    ],
+    "category": "orientation"
+  },
+  {
+    "id": "prune-after-inline",
+    "question": "What does Prune.pruneAfterInline remove, and when does it run?",
+    "reference": "Compiler.Monomorphize.Prune.pruneAfterInline (compiler/src/Compiler/Monomorphize/Prune.elm:159) removes specializations no longer reachable from the roots (main's spec, incoming port decoders and the flags decoder) once the post-mono inliner has absorbed calls, e.g. a spec whose only call was inlined. It recollects edges from the current bodies with MonoTraverse.collectSpecEdges (not the stale callEdges), sets dead slots to Nothing without renumbering SpecIds, does no type closing, keeps ctorShapes, and leaves callEdges restricted to intra-SCC edges (restrictToSccEdges). It runs via Compiler.Pipeline.Steps.prune (Steps.elm:385) only when `inline.pruneDead` is on (default True), right after MonoInlineSimplify (Steps.inline) and before global optimization; Builder.Generate.pruneAndReportInline drives it and validates the result with Steps.checkPruned (MONO_011) under mono.validate. The other entry point, pruneUnreachableSpecs, runs right after monomorphization and also closes residual number types.",
+    "mustMention": [
+      "pruneAfterInline",
+      "pruneDead",
+      "MonoInlineSimplify"
+    ],
+    "category": "data flow"
+  },
+  {
+    "id": "mlir-rewrite-flags",
+    "question": "Which config flags gate the rewrites done during MLIR generation?",
+    "reference": "compiler/src/Compiler/Eco/Config.elm documents twelve Bool switches in EcoConfig (lines 55-111), all on in `default` (lines 544-556), each gating one rewrite in Compiler.Generate.MLIR.*: `aggPromote` (Expr, TailRec), `ctorInline` (Expr), `sretResults`, `sretFresh`, `sretTailFuncs` and `psplitParams` (Backend, buildSretPromoted/buildPsplitPromoted), `stringLengthOp`, `appendSplit`, `stringOrderIntrinsic` (Expr), `valueEq` (Expr, Patterns), `kernelGcLeaf` (Functions) and `callPurityAttrs` (Ops). `constThunks` is a level (0-2, default 2) read by Backend/ConstThunks. Record settings also gate MLIR-time rewrites: `bytesFusion.enabled`, `list.chunks`, `list.consIntrinsic`, `list.mapTemplate` (MapTemplate, default off) and `cafMemo.enabled`, plus `logicalTypes.customMaxFields`. Each Bool puts a token into the config hash when on.",
+    "mustMention": [
+      "Compiler/Eco/Config.elm",
+      "aggPromote",
+      "sretResults",
+      "callPurityAttrs",
+      "valueEq"
+    ],
+    "category": "orientation"
+  },
+  {
+    "id": "flags-decoder",
+    "question": "Where is the decoder for a program's main flags built?",
+    "reference": "For the native (MLIR) path it is built in Compiler.Monomorphize.EntryPrep (compiler/src/Compiler/Monomorphize/EntryPrep.elm): `insertFlagsDecoderNode`/`insertDecoderFor` (lines 114-170) dealias the entry's type and, for `Platform.Program flags model msg`, insert a synthetic Define named `main$flagsDecoder` (`flagsDecoderName`, line 97) of type `Json.Decode.Decoder flags` in the entry's home module. Its body is `System.environmentDecoder` when EcoEnvironment.isEnvironmentFlags holds, otherwise the decoder from Compiler.LocalOpt.Typed.Port.toFlagsDecoder (Port.elm:369; `()` flags become `Json.Decode.succeed ()`). This happens in `assignIn` before AssignMVarIds, reached from Compiler.Pipeline.Steps.prepareRoot. The flags decoder is a prune root, and AliasForward/EtaExpand skip it. The JavaScript (erased) path builds it in Compiler.LocalOpt.Erased.Module (line 448) with Compiler.LocalOpt.Erased.Port.toFlagsDecoder.",
+    "mustMention": [
+      "EntryPrep",
+      "toFlagsDecoder",
+      "main$flagsDecoder"
+    ],
+    "category": "orientation"
+  },
+  {
+    "id": "lambda-set-member-id",
+    "question": "What is a lambda-set member id?",
+    "reference": "With lambda-set specialization (LSS) on, every function type's arrow carries a lambda set (Mono.LambdaSetAnno: LTop, LVar, LSet, LPartial in compiler/src/Compiler/AST/Monomorphized.elm:882), and each function value that can flow there is a member named by an integer member id. Ids are minted get-or-create from one supply, `nextMemberId`, and one key table, `LssMemberTable.byKey`, in Compiler.MonoSolver.Engine (memberIdFor, internMemberKey, lambdaInstanceMemberId). Key forms: `g|<global>` and `c|<global>` (provisional, grounded to `g|<global>|<typeKey>`), `k|<home>.<name>` kernels, `a|<field>` accessors, `p|<global>|<n>` partial applications, and `l|<raw>|<qualifier>` per-spec instances of a source lambda; the supply is seeded above source-lambda ids so they never collide. A closure records its member in `ClosureInfo.lssMember`, and MonoGraph keeps lssMemberOrigins/lssMemberKinds tables; borrow facts key `byLambda` by this id, which is a different number space from SpecId.",
+    "mustMention": [
+      "Compiler.MonoSolver.Engine",
+      "LssMemberTable",
+      "lssMember",
+      "LSet"
+    ],
+    "category": "vocabulary"
+  },
+  {
+    "id": "cpp-passes-before-ecotollvm",
+    "question": "Which C++ MLIR passes run before EcoToLLVM in the native lowering pipeline?",
+    "reference": "The pipeline is built in runtime/src/codegen/EcoPipeline.cpp (buildEcoToEcoPipeline line 82, buildEcoToOptPipeline line 126, buildEcoToLLVMPipeline line 151), used by eco-boot, ecoc, EcoNativeDriver and EcoRunner. Before EcoToLLVM, in order: RCElimination, CheckEcoClosureCaptures (only with ECO_LOWERING_VALIDATION), EcoPAPSimplify (optionally followed by a verify pass), EcoCompareCaseRewrite, UndefinedFunction; then JoinpointNormalization, EcoControlFlowToSCF, EcoListTemplate; the M4 slot with EcoFoldProject (on unless ECO_MLIR_FOLD=0) and MLIR CSE (only with ECO_MLIR_CSE); then EcoMarkGCLeafCalls, EcoGCPrepare, EcoGCLivenessAudit (validation builds only) and BFToLLVM. After EcoToLLVM come EcoListCursor, EcoBoxedStoreVerify (validation), EcoTailConversions, EcoReachability, EcoCapHoistPlan and EcoGcFreePropagation.",
+    "mustMention": [
+      "EcoPipeline.cpp",
+      "EcoPAPSimplify",
+      "EcoGCPrepare",
+      "EcoControlFlowToSCF",
+      "BFToLLVM"
+    ],
+    "category": "orientation"
+  }
+]

@@ -1,0 +1,4 @@
+imports Compiler.Parse.Module Compiler.Data.Name
+includes cpp:ek:core cpp:alloc:Heap
+kernel Compiler.Parse.Module cpp:ek:core
+uses_symbol cpp:ek:core cpp:alloc:Heap

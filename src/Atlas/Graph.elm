@@ -4,7 +4,7 @@ module Atlas.Graph exposing
     , at, node, matches
     )
 
-{-| The compiler's dependency graph through its history, as `script/atlas-graph.py` writes it to
+{-| The compiler's dependency graph through its history, as `kg export --atlas` (`npm run atlas`) writes it to
 `content/atlas/history.json`: every Elm module and C++ component there has ever been, the stage of the pipeline it was
 in, and its place on the grid, in cells, at each commit that changed any of that.
 
