@@ -50,7 +50,7 @@ factKind path =
         withPath k =
             k ++ "-" ++ Sha256.short 8 path ++ v
     in
-    if String.endsWith "Compiler/Eco/Config.elm" path then
+    if Stages.isConfigPath path then
         withPath "elmcfg"
 
     else
@@ -84,7 +84,7 @@ factKind path =
 {-| Whether kg reads a path at all: the module graph's files and the prose. -}
 needsFacts : String -> Bool
 needsFacts path =
-    Stages.relevant path || Replay.proseNodeId path /= Nothing || String.endsWith "Compiler/Eco/Config.elm" path
+    Stages.relevant path || Replay.proseNodeId path /= Nothing || Stages.isConfigPath path
 
 
 factPath : Context -> String -> String -> String

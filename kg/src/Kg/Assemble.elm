@@ -216,7 +216,7 @@ assemble mg files concepts =
                     (\( p, f ) ->
                         case f of
                             ElmFile e ->
-                                if String.endsWith "Compiler/Eco/Config.elm" p && not (List.isEmpty e.config) then
+                                if Stages.isConfigPath p && not (List.isEmpty e.config) then
                                     Just ( p, e.config )
 
                                 else
@@ -650,7 +650,7 @@ gates mg flags elmFacts defIds =
                         (\f ->
                             let
                                 importsConfig =
-                                    List.any (\i -> i.name == "Compiler.Eco.Config") f.imports
+                                    List.any (\i -> Stages.configModule i.name) f.imports
                             in
                             f.fieldReads
                                 |> List.concatMap
@@ -706,7 +706,7 @@ flag, and are gated by none.
 -}
 configModules : List String
 configModules =
-    [ "Compiler.Eco.Config", "Builder.Eco.Config" ]
+    [ "Compiler.Config", "Compiler.Eco.Config", "Builder.Eco.Config" ]
 
 
 mentionsConfig : String -> Bool

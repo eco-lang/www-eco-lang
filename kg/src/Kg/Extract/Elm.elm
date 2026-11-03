@@ -14,6 +14,7 @@ import Compiler.AST.Snippet as Snippet
 import Compiler.AST.Source as Src
 import Compiler.Elm.Compiler.Imports as Imports
 import Compiler.Parse.Module as M
+import Kg.Stages as Stages
 import Compiler.Reporting.Annotation as A
 import Dict exposing (Dict)
 import Kg.Extract.Config as Config
@@ -218,7 +219,7 @@ fromModule path text data =
     , references = List.reverse walked.refs ++ typeRefs
     , fieldReads = List.reverse walked.fields
     , config =
-        if String.endsWith "Compiler/Eco/Config.elm" path then
+        if Stages.isConfigPath path then
             Config.flags text data
 
         else

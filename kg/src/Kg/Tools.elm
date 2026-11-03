@@ -288,7 +288,7 @@ overview v =
             , "# The eco compiler\n\nThe stages in pipeline order. Row 0 is the shared front end plus the erased JavaScript path; the typed path branches off after Local optimize."
             , Stages.stages |> List.map stageBlock |> String.join "\n\n"
             , "### Foundations\n- Elm foundation, by group: " ++ String.join ", " foundationGroups ++ "\n- C++ foundation: " ++ (Stages.cppFound |> List.map (\( _, t, ids ) -> t ++ " (" ++ String.join ", " (List.map labelOf ids) ++ ")") |> String.join "; ")
-            , "### Config flags that gate code (Compiler/Eco/Config.elm)\n" ++ String.join "\n" (List.map (\l -> "- " ++ l) gatingFlags)
+            , "### Config flags that gate code (Compiler/Config.elm)\n" ++ String.join "\n" (List.map (\l -> "- " ++ l) gatingFlags)
             , "### Open plans, by the stage they mention most\n" ++ R.cutLines 3000 plansByStage
             ]
 

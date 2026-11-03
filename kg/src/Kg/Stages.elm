@@ -4,6 +4,7 @@ module Kg.Stages exposing
     , cppFound, cppFoundSlot, roots
     , elmJsons, logPaths, sourcePaths, cppDirs, cmakes, twinDir, libraries, relevant, isCppPath
     , stageIndex, stageTitle
+    , isConfigPath, configModule
     )
 
 {-| The pipeline stages and the rules that put each file in one: a port of
@@ -33,9 +34,10 @@ stages =
     , Stage "type" "Type check" "Constraints, solving, typed AST" "elm" 0 (Just "Compiler.Type.Solve")
     , Stage "local" "Local optimize" "Pattern checks, decision trees" "elm" 0 (Just "Compiler.LocalOpt.Typed.Module")
     , Stage "genjs" "Generate JavaScript" "Erased path: .js and .html output" "elm" 0 Nothing
-    , Stage "mono" "Monomorphize" "Typed path: link and specialize" "elm" 1 (Just "Compiler.Monomorphize.Monomorphize")
-    , Stage "global" "Global optimize" "Inline, CSE, borrow, staging" "elm" 1 (Just "Compiler.GlobalOpt.MonoGlobalOptimize")
-    , Stage "genmlir" "Generate MLIR" "eco-dialect MLIR bytecode" "elm" 1 (Just "Compiler.Generate.MLIR.Backend")
+    , Stage "premono" "Pre-mono" "Typed path: entry, eta, inline before specializing" "elm" 1 (Just "Compiler.PreMono.EntryPrep")
+    , Stage "mono" "Monomorphize" "Link and specialize" "elm" 1 (Just "Compiler.Monomorphize.Subst.Monomorphize")
+    , Stage "global" "Mono optimize" "Inline, CSE, borrow, staging" "elm" 1 (Just "Compiler.MonoOpt.GlobalOptimize")
+    , Stage "genmlir" "Generate MLIR" "eco-dialect MLIR bytecode" "elm" 1 (Just "Compiler.GenerateMlir.Backend")
     , Stage "backend" "MLIR lowering" "eco dialect to LLVM dialect" "cpp" 1 Nothing
     , Stage "native" "LLVM & link" "Driver, JIT, AOT, embedding" "cpp" 1 Nothing
     , Stage "runtime" "Runtime" "Collector and scheduler" "cpp" 1 Nothing
@@ -50,7 +52,7 @@ branchFrom =
 
 branchTo : String
 branchTo =
-    "mono"
+    "premono"
 
 
 {-| The stage keys in order, then the two foundations. -}
@@ -109,35 +111,44 @@ elmStage m =
     let
         p0 =
             String.split "." m |> List.head |> Maybe.withDefault ""
+
+        under prefixes =
+            startsWithAny prefixes m
     in
-    if List.member p0 [ "Terminal", "API", "Builder" ] || m == "Compiler.Compile" || String.startsWith "Compiler.Pipeline." m then
+    -- Both the old names (before the one-folder-per-pass reorganization,
+    -- eco-compiler e2647035) and the new ones, so that every commit in the
+    -- replay places its modules.
+    if List.member p0 [ "Terminal", "API", "Builder" ] || List.member m [ "Compiler.Compile", "Compiler.Error" ] || under [ "Compiler.Pipeline." ] then
         "driver"
 
-    else if String.startsWith "Compiler.Parse." m then
+    else if under [ "Compiler.Parse." ] then
         "parse"
 
-    else if String.startsWith "Compiler.Canonicalize." m then
+    else if under [ "Compiler.Canonicalize." ] then
         "canon"
 
-    else if String.startsWith "Compiler.Type." m || String.startsWith "Compiler.TypedCanonical." m then
+    else if under [ "Compiler.Type.", "Compiler.TypedCanonical." ] then
         "type"
 
-    else if String.startsWith "Compiler.Nitpick." m || String.startsWith "Compiler.LocalOpt." m then
+    else if under [ "Compiler.Nitpick.", "Compiler.LocalOpt." ] then
         "local"
 
-    else if startsWithAny [ "Compiler.Monomorphize.", "Compiler.MonoSolver." ] m then
+    else if under [ "Compiler.PreMono.", "Compiler.GlobalOpt.PreMono." ] || List.member m [ "Compiler.GlobalOpt.InlineSimplify", "Compiler.Monomorphize.AssignMVarIds", "Compiler.Monomorphize.EntryPrep" ] then
+        "premono"
+
+    else if under [ "Compiler.Monomorphize.", "Compiler.MonoSolver." ] then
         "mono"
 
-    else if String.startsWith "Compiler.GlobalOpt." m then
+    else if under [ "Compiler.MonoOpt.", "Compiler.GlobalOpt." ] then
         "global"
 
-    else if String.startsWith "Compiler.Generate.MLIR" m || p0 == "Mlir" then
+    else if under [ "Compiler.GenerateMlir.", "Compiler.Generate.MLIR" ] || p0 == "Mlir" then
         "genmlir"
 
     else if m == "Compiler.Generate.Mode" then
         "foundation"
 
-    else if String.startsWith "Compiler.Generate." m then
+    else if m == "Compiler.GenerateJs" || under [ "Compiler.GenerateJs.", "Compiler.Generate." ] then
         "genjs"
 
     else
@@ -353,3 +364,18 @@ relevant path =
 
     else
         False
+
+
+{-| Whether a path is the compiler's config module, which defines the flags:
+`Compiler/Config.elm` since the one-folder-per-pass reorganization
+(eco-compiler e2647035), `Compiler/Eco/Config.elm` before it.
+-}
+isConfigPath : String -> Bool
+isConfigPath path =
+    String.endsWith "compiler/src/Compiler/Config.elm" path || String.endsWith "Compiler/Eco/Config.elm" path
+
+
+{-| Whether a module name is the compiler's config module, old or new. -}
+configModule : String -> Bool
+configModule name =
+    name == "Compiler.Config" || name == "Compiler.Eco.Config"

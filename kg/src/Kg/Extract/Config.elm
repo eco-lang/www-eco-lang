@@ -1,6 +1,6 @@
 module Kg.Extract.Config exposing (flags)
 
-{-| The compiler's config flags, from `compiler/src/Compiler/Eco/Config.elm`
+{-| The compiler's config flags, from `compiler/src/Compiler/Config.elm`
 (§8.5 of the plan): every field of `EcoConfig`, through the record aliases it
 nests, with its path, its type, its default from `default` (and the
 `defaultX` values it refers to) as source text, and its doc: the paragraph of
