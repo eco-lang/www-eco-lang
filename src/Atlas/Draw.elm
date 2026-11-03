@@ -111,13 +111,39 @@ bandPaint lang alt =
         (Paint.hairline "#E0E0E0" 1)
 
 
-nodePaint : String -> Paint
-nodePaint lang =
-    if lang == "cpp" then
-        Paint.filledAndOutlined "#F2F6FB" (Paint.hairline "#B8C6D8" 1)
+{-| A node's paint, warmed towards amber as far as it glows from a commit touching it.
+-}
+nodePaint : String -> Float -> Paint
+nodePaint lang glow =
+    let
+        ( fill, line ) =
+            if lang == "cpp" then
+                ( ( 0xF2, 0xF6, 0xFB ), ( 0xB8, 0xC6, 0xD8 ) )
 
-    else
-        Paint.filledAndOutlined "#FFFFFF" (Paint.hairline "#CFCFCF" 1)
+            else
+                ( ( 0xFF, 0xFF, 0xFF ), ( 0xCF, 0xCF, 0xCF ) )
+    in
+    Paint.filledAndOutlined (mix glow fill ( 0xFF, 0xE8, 0xA3 )) (Paint.hairline (mix glow line ( 0xE0, 0x9A, 0x00 )) (1 + glow))
+
+
+{-| A colour part way from one to another, as `#rrggbb`.
+-}
+mix : Float -> ( Int, Int, Int ) -> ( Int, Int, Int ) -> String
+mix p ( r1, g1, b1 ) ( r2, g2, b2 ) =
+    let
+        channel a b =
+            let
+                v =
+                    round (toFloat a + (toFloat b - toFloat a) * p)
+            in
+            String.fromList [ hexDigit (v // 16), hexDigit (modBy 16 v) ]
+    in
+    "#" ++ channel r1 r2 ++ channel g1 g2 ++ channel b1 b2
+
+
+hexDigit : Int -> Char
+hexDigit d =
+    String.uncons (String.slice d (d + 1) "0123456789ABCDEF") |> Maybe.map Tuple.first |> Maybe.withDefault '0'
 
 
 
@@ -352,7 +378,7 @@ nodeElement grid graph look n =
         ( paint, style ) =
             case look of
                 Plain ->
-                    ( nodePaint n.lang, label )
+                    ( nodePaint n.lang n.glow, label )
 
                 Focus ->
                     ( Paint.filledAndOutlined "#E8F5E9" (Paint.hairline colors.accentDark 2)

@@ -89,14 +89,16 @@ playSeconds =
 
 
 {-| The history's clock: where the timeline starts and ends, in seconds since 1970; how many seconds of history pass
-in a second of playing; and how many seconds of history a commit's changes take to settle, a little over half a second
-of playing. The timeline ends once the last commit has settled.
+in a second of playing; how many seconds of history a commit's changes take to settle, a little over half a second
+of playing; and how long what a commit touched glows, a second and a half. The timeline ends once the last commit's
+glow has faded.
 -}
 type alias Clock =
     { start : Float
     , end : Float
     , rate : Float
     , settle : Float
+    , glow : Float
     }
 
 
@@ -109,7 +111,16 @@ clock history =
         rate =
             max 1 (Graph.last history - start) / playSeconds
     in
-    { start = start, end = Graph.last history + rate * 0.6, rate = rate, settle = rate * 0.6 }
+    { start = start, end = Graph.last history + rate * 1.5, rate = rate, settle = rate * 0.6, glow = rate * 1.5 }
+
+
+graphAt : Graph.History -> Float -> Graph
+graphAt history t =
+    let
+        c =
+            clock history
+    in
+    Graph.at history { settle = c.settle, glow = c.glow } t
 
 
 head : App Data ActionData RouteParams -> List Head.Tag
@@ -233,7 +244,7 @@ init app shared =
       , wheelCount = 0
       , time = c.end
       , playing = False
-      , graph = Graph.at app.data c.settle c.end
+      , graph = graphAt app.data c.end
       }
     , measure
     )
@@ -483,7 +494,7 @@ update app _ msg model =
 -}
 atTime : App Data ActionData RouteParams -> Float -> Model -> Model
 atTime app t model =
-    { model | time = t, graph = Graph.at app.data (clock app.data).settle t }
+    { model | time = t, graph = graphAt app.data t }
 
 
 settle : Model -> Model

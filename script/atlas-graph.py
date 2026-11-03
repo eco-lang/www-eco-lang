@@ -142,7 +142,10 @@ CPP_FOUND_SLOT = {i: (s, k) for s, (_, _, ids) in enumerate(CPP_FOUND) for k, i 
 ROOTS = {"Terminal.Main", "API.Main", "cpp:embed:eco_node_addon", "cpp:cg:EcoRunner"}
 
 # ---------------------------------------------------------------- sources
-PATHS = ["compiler/src", "compiler/src-xhr", "compiler/src-version", "compiler/elm.json",
+# The compiler's elm.json. For a few commits in March 2026 it lived in
+# compiler/build-xhr, with its source directories relative to there.
+ELM_JSONS = ["compiler/elm.json", "compiler/build-xhr/elm.json"]
+PATHS = ["compiler/src", "compiler/src-xhr", "compiler/src-version"] + ELM_JSONS + [
          "runtime/src", "runtime/include", "elm-kernel-cpp", "eco-kernel-cpp", "system-kernel-cpp/src",
          "system-kernel-cpp/CMakeLists.txt"]
 CPP_DIRS = ("runtime/src/", "runtime/include/", "elm-kernel-cpp/src/", "eco-kernel-cpp/src/", "system-kernel-cpp/src/")
@@ -153,7 +156,7 @@ LIBRARIES = ["runtime", "elm-kernel-cpp", "eco-kernel-cpp", "system-kernel-cpp"]
 
 
 def relevant(path):
-    if path == "compiler/elm.json" or path in CMAKES:
+    if path in ELM_JSONS or path in CMAKES:
         return True
     if path.endswith(".elm"):
         return path.startswith(("compiler/", TWIN_DIR))
@@ -483,14 +486,16 @@ def extract(files, cpp):
     # a single node with the imports of both.
     elm_files = defaultdict(list)
     kernel_imports = defaultdict(set)
-    elm_json = None
-    if "compiler/elm.json" in files:
-        try:
-            elm_json = json.loads(files["compiler/elm.json"])
-        except ValueError:
-            pass
+    elm_json, home = None, None
+    for path in ELM_JSONS:
+        if path in files:
+            try:
+                elm_json, home = json.loads(files[path]), os.path.dirname(path)
+                break
+            except ValueError:
+                pass
     if elm_json:
-        dirs = ["compiler/" + d.strip("./") + "/" for d in elm_json.get("source-directories", [])]
+        dirs = [os.path.normpath(os.path.join(home, d)) + "/" for d in elm_json.get("source-directories", [])]
         for p in files:
             if p.endswith(".elm"):
                 for d in dirs:
@@ -918,6 +923,7 @@ def main():
     tracks = defaultdict(list)    # uid -> [(frame, gx, gy)]
     infos = defaultdict(list)     # uid -> [(frame, stage, id, label, path)]
     lives = defaultdict(list)     # uid -> [born, died, born, ...]
+    edits = defaultdict(list)     # uid -> [time of each commit that touched its files]
     edge_lives = defaultdict(list)
     stage_tracks = defaultdict(list)
     world_track = []
@@ -957,8 +963,16 @@ def main():
             a, b = prev_file_node.get(old), file_node.get(new)
             if a and b and a != b:
                 renamed[a] = b
-        prev_file_node = file_node
+        before, prev_file_node = prev_file_node, file_node
         geo, pos = layout.step(nodes, edges, renamed)
+
+        # what the commit touched: the nodes whose files it added, changed,
+        # moved or deleted, if they are still there
+        for status, old, new, _ in changes:
+            nid = before.get(old) if status == "D" else file_node.get(new)
+            u = layout.uid.get(nid)
+            if u is not None and (not edits[u] or edits[u][-1] != t):
+                edits[u].append(t)
 
         uid_edges = {(layout.uid[a], layout.uid[b]) for a, b in edges}
         info_now = {u: (STAGE_KEYS.index(i["stage"]), i["id"], i["label"], i["path"]) for u, i in layout.info.items()}
@@ -1008,7 +1022,7 @@ def main():
         nodeW=NODE_W, nodeH=NODE_H,
         frames=[list(fr) for fr in frames],
         nodes=[dict(lang=layout_lang(layout, infos, u), life=lives[u], pos=[list(x) for x in tracks[u]],
-                    info=[list(x) for x in infos[u]])
+                    info=[list(x) for x in infos[u]], edits=deltas(edits[u], frames[0][1]))
                for u in range(len(layout.uids))],
         edges=[[a, b] + lives_ for (a, b), lives_ in sorted(edge_lives.items())],
         stageTracks={k: [list(x) for x in v] for k, v in stage_tracks.items()},
@@ -1017,6 +1031,11 @@ def main():
     json.dump(data, open(OUT, "w"), separators=(",", ":"))
     print(len(frames), "frames,", len(layout.uids), "nodes ever,", len(nodes), "now,", len(edges), "edges now",
           file=sys.stderr)
+
+
+def deltas(times, start):
+    """Times as the seconds from `start` to the first and from each to the next."""
+    return [b - a for a, b in zip([start] + times, times)]
 
 
 def layout_lang(layout, infos, u):

@@ -71,13 +71,15 @@ type alias StageInfo =
 
 
 {-| A node's history. `life` lists the frames it arrived and left in, alternately; `pos` its place from each frame
-it moved in and `info` what it was called from each frame that changed.
+it moved in and `info` what it was called from each frame that changed. `edits` has the time of every commit that
+touched its files, in seconds after the first frame; most of those commits change nothing else.
 -}
 type alias Track =
     { lang : String
     , life : Array Int
     , pos : Array { frame : Int, gx : Int, gy : Int }
     , info : Array Info
+    , edits : Array Float
     }
 
 
@@ -256,7 +258,7 @@ type alias Section =
     }
 
 
-{-| A module or C++ component.
+{-| A module or C++ component. `glow` is 1 when a commit has just touched its files, and fades to 0.
 -}
 type alias Node =
     { index : Int
@@ -269,15 +271,20 @@ type alias Node =
     , gx : Float
     , gy : Float
     , opacity : Float
+    , glow : Float
     }
 
 
 {-| The atlas at a time. Each commit's changes ease in over `settle` seconds of history after it. When commits come
-close together their changes overlap, each going at its own pace, and add up.
+close together their changes overlap, each going at its own pace, and add up. A node a commit touches glows, and the
+glow fades over `glow` seconds of history; another commit touching it lights it up again.
 -}
-at : History -> Float -> Float -> Graph
-at (History history) settle t =
+at : History -> { settle : Float, glow : Float } -> Float -> Graph
+at (History history) { settle, glow } t =
     let
+        sinceStart =
+            t - (Array.get 0 history.frames |> Maybe.map (.time >> toFloat) |> Maybe.withDefault 0)
+
         k =
             frameIndex history t
 
@@ -358,6 +365,12 @@ at (History history) settle t =
                     , gx = gx
                     , gy = gy
                     , opacity = opacity
+                    , glow =
+                        if opacity > 0 then
+                            glowing glow sinceStart track.edits
+
+                        else
+                            0
                     }
                 )
                 history.nodes
@@ -542,6 +555,22 @@ blendWorld history blend k =
     }
 
 
+{-| How brightly a node glows, `t` seconds into the history, given the times of its edits.
+-}
+glowing : Float -> Float -> Array Float -> Float
+glowing duration t edits =
+    case Array.get (countAtOrBefore (\e -> e <= t) edits - 1) edits of
+        Just e ->
+            if t - e < duration then
+                1 - ease ((t - e) / duration)
+
+            else
+                0
+
+        Nothing ->
+            0
+
+
 {-| Slow in, slow out.
 -}
 ease : Float -> Float
@@ -610,7 +639,7 @@ decoder =
 
 trackDecoder : Decoder Track
 trackDecoder =
-    Decode.map4 Track
+    Decode.map5 Track
         (Decode.field "lang" Decode.string)
         (Decode.field "life" (Decode.array Decode.int))
         (Decode.field "pos"
@@ -633,6 +662,8 @@ trackDecoder =
                 )
             )
         )
+        -- the seconds to the first edit, and from each to the next
+        (Decode.field "edits" (Decode.list Decode.float |> Decode.map (List.foldl (\gap ( t, ts ) -> ( t + gap, Array.push (t + gap) ts )) ( 0, Array.empty ) >> Tuple.second)))
 
 
 {-| `[from, to, frame, frame, ...]`: the frames the link appears and goes in, alternately.
