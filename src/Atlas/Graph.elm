@@ -1,6 +1,6 @@
 module Atlas.Graph exposing
     ( History, Frame, data, first, last, frameAt
-    , Graph, World, Stage, Section, Node
+    , Graph, World, Stage, Section, KernelBand, Node
     , at, node, matches
     )
 
@@ -13,7 +13,7 @@ a short while after the commit, what moved slides from its old place to its new 
 or out.
 
 @docs History, Frame, data, first, last, frameAt
-@docs Graph, World, Stage, Section, Node
+@docs Graph, World, Stage, Section, KernelBand, Node
 @docs at, node, matches
 
 -}
@@ -49,6 +49,7 @@ type alias HistoryData =
     , edges : List EdgeTrack
     , stageTracks : Dict String (Array ( Int, Maybe Box ))
     , world : Array ( Int, WorldBox )
+    , kernelBands : Array ( Int, List KernelBand )
     }
 
 
@@ -111,6 +112,9 @@ type alias WorldBox =
     , foundCols : Float
     , cppFoundCol : Float
     , cppFoundCols : Float
+    , kernTop : Float
+    , kernRows : Float
+    , kernCols : Float
     , sectionOffsets : List Float
     }
 
@@ -226,6 +230,11 @@ type alias World =
     , cppFoundCols : Float
     , cppFoundOpacity : Float
     , cppSections : List Section
+    , kernTop : Float
+    , kernRows : Float
+    , kernCols : Float
+    , kernOpacity : Float
+    , kernBands : List KernelBand
     , nodeW : Int
     , nodeH : Int
     }
@@ -255,6 +264,16 @@ type alias Stage =
 type alias Section =
     { title : String
     , gx : Float
+    }
+
+
+{-| A band of kernel sources, one per kernel library: its title, first column, width and a section per kernel.
+-}
+type alias KernelBand =
+    { title : String
+    , gx : Float
+    , cols : Float
+    , sections : List Section
     }
 
 
@@ -312,7 +331,7 @@ at (History history) { settle, glow } t =
             countAtOrBefore (\a -> frameOf a <= k) arr > countAtOrBefore (\a -> frameOf a <= m) arr
 
         stageKeys =
-            List.map .key history.stages ++ [ "foundation", "cppfound" ]
+            List.map .key history.stages ++ [ "foundation", "cppfound", "kernelsrc" ]
 
         stageKey i =
             List.drop i stageKeys |> List.head |> Maybe.withDefault "foundation"
@@ -496,6 +515,19 @@ stageName history world key gx =
     else if key == "foundation" then
         "Shared foundation"
 
+    else if key == "kernelsrc" then
+        case world.kernBands |> List.filter (\b -> b.gx <= gx) |> List.reverse |> List.head of
+            Just b ->
+                b.sections
+                    |> List.filter (\c -> c.gx <= gx)
+                    |> List.reverse
+                    |> List.head
+                    |> Maybe.map (\c -> b.title ++ " · " ++ c.title)
+                    |> Maybe.withDefault b.title
+
+            Nothing ->
+                "Kernel sources"
+
     else
         List.filter (\s -> s.key == key) history.stages |> List.head |> Maybe.map .title |> Maybe.withDefault key
 
@@ -507,7 +539,7 @@ blendWorld : HistoryData -> ((Int -> Float) -> Float) -> Int -> World
 blendWorld history blend k =
     let
         none =
-            { cols = 0, rows = 0, foundTop = 0, foundRows = 0, foundCols = 0, cppFoundCol = 0, cppFoundCols = 0, sectionOffsets = [] }
+            { cols = 0, rows = 0, foundTop = 0, foundRows = 0, foundCols = 0, cppFoundCol = 0, cppFoundCols = 0, kernTop = 0, kernRows = 0, kernCols = 0, sectionOffsets = [] }
 
         boxes =
             Array.toList history.world
@@ -550,6 +582,11 @@ blendWorld history blend k =
     , cppFoundCols = blend (part .cppFoundCols)
     , cppFoundOpacity = clamp 0 1 (blend (present .cppFoundCols))
     , cppSections = List.map2 (\title dx -> { title = title, gx = cppGx + dx }) history.sections (at_ k).sectionOffsets
+    , kernTop = blend (part .kernTop)
+    , kernRows = blend (part .kernRows)
+    , kernCols = blend (part .kernCols)
+    , kernOpacity = clamp 0 1 (blend (present .kernCols))
+    , kernBands = latest k Tuple.first history.kernelBands |> Maybe.map Tuple.second |> Maybe.withDefault []
     , nodeW = history.nodeW
     , nodeH = history.nodeH
     }
@@ -635,6 +672,32 @@ decoder =
         |> field "edges" (Decode.list edgeDecoder)
         |> field "stageTracks" (Decode.dict (Decode.array stageEntryDecoder))
         |> field "world" (Decode.array worldEntryDecoder)
+        |> field "kernelBands" (Decode.array kernelBandsDecoder)
+
+
+{-| `[frame, [[title, gx, cols, [[section title, gx], ...]], ...]]`: the kernel sources bands from that frame on.
+-}
+kernelBandsDecoder : Decoder ( Int, List KernelBand )
+kernelBandsDecoder =
+    Decode.map2 Tuple.pair
+        (Decode.index 0 Decode.int)
+        (Decode.index 1
+            (Decode.list
+                (Decode.map4 KernelBand
+                    (Decode.index 0 Decode.string)
+                    (Decode.index 1 Decode.float)
+                    (Decode.index 2 Decode.float)
+                    (Decode.index 3
+                        (Decode.list
+                            (Decode.map2 Section
+                                (Decode.index 0 Decode.string)
+                                (Decode.index 1 Decode.float)
+                            )
+                        )
+                    )
+                )
+            )
+        )
 
 
 trackDecoder : Decoder Track
@@ -701,7 +764,8 @@ stageEntryDecoder =
             )
 
 
-{-| `[frame, cols, rows, foundTop, foundRows, foundCols, cppFoundCol, cppFoundCols, section offsets...]`
+{-| `[frame, cols, rows, foundTop, foundRows, foundCols, cppFoundCol, cppFoundCols, kernTop, kernRows, kernCols,
+section offsets...]`
 -}
 worldEntryDecoder : Decoder ( Int, WorldBox )
 worldEntryDecoder =
@@ -709,7 +773,7 @@ worldEntryDecoder =
         |> Decode.andThen
             (\xs ->
                 case xs of
-                    f :: cols :: rows :: foundTop :: foundRows :: foundCols :: cppFoundCol :: cppFoundCols :: offsets ->
+                    f :: cols :: rows :: foundTop :: foundRows :: foundCols :: cppFoundCol :: cppFoundCols :: kernTop :: kernRows :: kernCols :: offsets ->
                         Decode.succeed
                             ( round f
                             , { cols = cols
@@ -719,6 +783,9 @@ worldEntryDecoder =
                               , foundCols = foundCols
                               , cppFoundCol = cppFoundCol
                               , cppFoundCols = cppFoundCols
+                              , kernTop = kernTop
+                              , kernRows = kernRows
+                              , kernCols = kernCols
                               , sectionOffsets = offsets
                               }
                             )

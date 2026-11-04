@@ -76,6 +76,24 @@ label =
     { font = Font.robotoMono 500, color = colors.text, units = 1, spacing = 1.45 }
 
 
+{-| What a band of kernel sources holds.
+-}
+kernelBlurb : String -> String
+kernelBlurb bandTitle =
+    case bandTitle of
+        "elm/* kernels" ->
+            "The C++ kernels of the elm/* packages, each file. The Kernels stage groups them by package."
+
+        "eco/kernel" ->
+            "The compiler's own kernels: each Eco module's Elm side and C++ files."
+
+        "eco/system" ->
+            "The eco/system package: its Elm modules and the C++ kernels they call."
+
+        _ ->
+            ""
+
+
 stageNotes : String -> String
 stageNotes key =
     case key of
@@ -309,7 +327,8 @@ branch grid graph =
 
 
 {-| The two foundations side by side under the pipeline: the Elm one under the Elm stages and the C++ one, with its two
-sections, under the C++ stages.
+sections, under the C++ stages. Under both, the kernel sources: a band for each kernel library, with a section for
+each kernel.
 -}
 foundations : Grid -> Graph -> List (Element WorldCoordinates)
 foundations grid graph =
@@ -353,8 +372,27 @@ foundations grid graph =
 
             else
                 []
+
+        kt =
+            w.kernTop
+
+        kernels =
+            if w.kernCols > 0 then
+                fade w.kernOpacity (List.concatMap kernelBand w.kernBands)
+
+            else
+                []
+
+        kernelBand b =
+            Diagram.box (Paint.filledAndOutlined "#EDF0F5" (Paint.hairline "#D0D9E4" 1))
+                3
+                (Grid.frame grid { col = b.gx, row = kt, cols = b.cols, rows = w.kernRows })
+                :: [ Text.onGrid grid title Start { col = b.gx + 2, row = kt + 4 } b.title
+                   , Text.onGrid grid blurb Start { col = b.gx + 2, row = kt + 6 } (kernelBlurb b.title)
+                   ]
+                ++ List.map (\c -> Text.onGrid grid section Start { col = c.gx + 1, row = kt + 8 } c.title) b.sections
     in
-    elm ++ cpp
+    elm ++ cpp ++ kernels
 
 
 

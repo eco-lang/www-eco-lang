@@ -70,4 +70,18 @@ encode layout rec =
         , ( "edges", E.list (\( ( a, b ), lives ) -> ints (a :: b :: List.reverse lives)) (Dict.toList rec.edgeLives) )
         , ( "stageTracks", E.object (Dict.toList rec.stageTracks |> List.map (\( k, v ) -> ( k, E.list ints (List.reverse v) ))) )
         , ( "world", E.list ints (List.reverse rec.world) )
+        , ( "kernelBands"
+          , E.list
+                (\( f, bands ) ->
+                    E.list identity
+                        [ E.int f
+                        , E.list
+                            (\( ( title, gx, cols ), secs ) ->
+                                E.list identity [ E.string title, E.int gx, E.int cols, E.list (\( t, x ) -> E.list identity [ E.string t, E.int x ]) secs ]
+                            )
+                            bands
+                        ]
+                )
+                (List.reverse rec.kernelSections)
+          )
         ]

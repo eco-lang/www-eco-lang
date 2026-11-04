@@ -38,6 +38,7 @@ type alias Recorder =
     , edgeLives : Dict ( Int, Int ) (List Int)
     , stageTracks : Dict String (List (List Int))
     , world : List (List Int)
+    , kernelSections : List ( Int, List ( ( String, Int, Int ), List ( String, Int ) ) )
     , lastPos : Dict Int ( Int, Int )
     , lastInfo : Dict Int ( Int, ( String, String, String ) )
     , lastEdges : Set ( Int, Int )
@@ -80,7 +81,7 @@ init =
     , prose = Dict.empty
     , layout = Layout.empty
     , prevFileNode = Dict.empty
-    , graph = { nodes = Dict.empty, edges = Set.empty, fileNode = Dict.empty, programs = Set.empty }
+    , graph = { nodes = Dict.empty, edges = Set.empty, fileNode = Dict.empty, programs = Set.empty, kernelSources = Link.emptyKernelSources }
     , rec =
         { frames = []
         , frameCount = 0
@@ -91,6 +92,7 @@ init =
         , edgeLives = Dict.empty
         , stageTracks = Dict.empty
         , world = []
+        , kernelSections = []
         , lastPos = Dict.empty
         , lastInfo = Dict.empty
         , lastEdges = Set.empty
@@ -225,11 +227,13 @@ step packages input state0 =
                                     Nothing
                         )
 
+            -- the atlas also lists the kernel libraries' files in full
             nodeInfos =
-                Dict.map (\_ n -> { id = n.id, label = n.label, lang = n.lang, stage = n.stage, path = n.path, group = n.group }) graph.nodes
+                Dict.union graph.nodes graph.kernelSources.nodes
+                    |> Dict.map (\_ n -> { id = n.id, label = n.label, lang = n.lang, stage = n.stage, path = n.path, group = n.group })
 
             edgePairs =
-                Link.pairs graph
+                Set.union (Link.pairs graph) (Link.kernelPairs graph)
 
             ( layout, geo, pos ) =
                 if state1.atlas then
@@ -247,6 +251,17 @@ step packages input state0 =
 
                             else
                                 Dict.get c.new graph.fileNode
+                        )
+
+            touchedKernelSources =
+                commit.changes
+                    |> List.filterMap
+                        (\c ->
+                            if c.status == 'D' then
+                                Nothing
+
+                            else
+                                Dict.get c.new graph.kernelSources.fileNode
                         )
 
             -- atlas edits, by uid, as times
@@ -270,7 +285,7 @@ step packages input state0 =
                                 acc
                     )
                     state1.rec.edits
-                    touchedIds
+                    (touchedIds ++ touchedKernelSources)
 
             rec =
                 if state1.atlas then
@@ -340,7 +355,7 @@ step packages input state0 =
 
 noGeometry : Geometry
 noGeometry =
-    { stages = Dict.empty, elmEnd = 0, cppGx = 0, foundTop = 0, foundRows = 0, hasElmFound = False, hasCppFound = False, sections = [], cols = 0, rows = 0 }
+    { stages = Dict.empty, elmEnd = 0, cppGx = 0, foundTop = 0, foundRows = 0, hasElmFound = False, hasCppFound = False, sections = [], kernTop = 0, kernRows = 0, kernCols = 0, kernSections = [], kernBands = [], cols = 0, rows = 0 }
 
 
 {-| Python builds `renamed` as a dict, so a later rename of the same old node
@@ -413,14 +428,23 @@ record commit layout geo pos edgePairs rec =
 
               else
                 0
+            , geo.kernTop
+            , geo.kernRows
+            , geo.kernCols
             , sectionGx 0 - geo.cppGx
             , sectionGx 1 - geo.cppGx
             ]
 
         lastWorld =
             List.head rec.world |> Maybe.map (List.drop 1)
+
+        kernelNow =
+            List.map (\b -> ( ( b.title, b.gx, b.cols ), List.map (\sec -> ( sec.title, sec.gx )) b.sections )) geo.kernBands
+
+        lastKernel =
+            List.head rec.kernelSections |> Maybe.map Tuple.second |> Maybe.withDefault []
     in
-    if pos == rec.lastPos && infoNow == rec.lastInfo && uidEdges == rec.lastEdges && stageNow == rec.lastGeo && lastWorld == Just worldNow then
+    if pos == rec.lastPos && infoNow == rec.lastInfo && uidEdges == rec.lastEdges && stageNow == rec.lastGeo && lastWorld == Just worldNow && kernelNow == lastKernel then
         rec
 
     else
@@ -514,6 +538,12 @@ record commit layout geo pos edgePairs rec =
 
                 else
                     rec.world
+            , kernelSections =
+                if kernelNow /= lastKernel then
+                    ( f, kernelNow ) :: rec.kernelSections
+
+                else
+                    rec.kernelSections
             , lastPos = pos
             , lastInfo = infoNow
             , lastEdges = uidEdges

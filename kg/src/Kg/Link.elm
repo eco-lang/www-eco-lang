@@ -1,6 +1,7 @@
 module Kg.Link exposing
     ( ModuleNode, ModuleGraph, Prepared, prepare, PackageKernels
     , modules, pairs
+    , KernelSources, emptyKernelSources, kernelPairs
     )
 
 {-| Facts → the module graph of one tree: a port of `extract` from
@@ -13,6 +14,11 @@ component, and the libraries CMake has eco-boot link into programs.
 
 Each edge keeps its kind: `imports`, `includes`, `uses_symbol`, `member`,
 `kernel` or `links`. The atlas only needs the pairs.
+
+`kernelSources` is for the atlas only: every Elm module and C++ file of the
+kernel libraries in `Stages.kernelLibraries`, one node each, for the kernel
+sources band. Each kernel's node in the Kernels stage `contains` its files.
+The knowledge graph does not read it.
 
 -}
 
@@ -33,7 +39,31 @@ type alias ModuleGraph =
     , edges : Set ( String, String, String )
     , fileNode : Dict String String
     , programs : Set String
+    , kernelSources : KernelSources
     }
+
+
+{-| The kernel libraries' files, one node each, in the stage `kernelsrc`. A
+node's `group` is its section of the band, written `library|kind|title` so
+that it sorts: kind 0 is a kernel, 1 the headers no kernel owns, 2 the Elm
+modules that call no kernel.
+-}
+type alias KernelSources =
+    { nodes : Dict String ModuleNode
+    , edges : Set ( String, String, String )
+    , fileNode : Dict String String
+    }
+
+
+emptyKernelSources : KernelSources
+emptyKernelSources =
+    { nodes = Dict.empty, edges = Set.empty, fileNode = Dict.empty }
+
+
+{-| The (from, to) pairs of the kernel sources' edges. -}
+kernelPairs : ModuleGraph -> Set ( String, String )
+kernelPairs g =
+    Set.foldl (\( _, a, b ) acc -> Set.insert ( a, b ) acc) Set.empty g.kernelSources.edges
 
 
 {-| A C++ file's facts with its tokens as a set, made once per blob. -}
@@ -357,199 +387,223 @@ cppPart input elm =
                 in
                 cands |> List.sortBy key |> List.head
 
-        -- includes
-        s2 =
-            List.foldl
-                (\p acc ->
-                    let
-                        nid =
-                            nodeOf p
-                    in
-                    List.foldl
-                        (\inc a ->
-                            case resolve p inc of
-                                Just f ->
-                                    let
-                                        tgt =
-                                            nodeOf f
-                                    in
-                                    { a
-                                        | included = Dict.update p (\v -> Just (Set.insert f (Maybe.withDefault Set.empty v))) a.included
-                                        , edges =
-                                            if tgt /= nid then
-                                                Set.insert ( "includes", nid, tgt ) a.edges
-
-                                            else
-                                                a.edges
-                                    }
-
-                                Nothing ->
-                                    let
-                                        base =
-                                            P.basename inc
-                                    in
-                                    case Dict.get base byBase of
-                                        Just (tgt :: _) ->
-                                            if not (Dict.member base filesByBase) && tgt /= nid then
-                                                { a | edges = Set.insert ( "includes", nid, tgt ) a.edges }
-
-                                            else
-                                                a
-
-                                        _ ->
-                                            a
-                        )
-                        acc
-                        (factsOf p |> Maybe.map .includes |> Maybe.withDefault [])
-                )
-                { included = Dict.empty, edges = elm.edges }
-                cppFiles
-
-        included =
-            s2.included
-
-        classHome : Dict String (Set String)
-        classHome =
-            List.foldl
-                (\p acc ->
-                    List.foldl (\c a -> Dict.update c (\v -> Just (Set.insert (nodeOf p) (Maybe.withDefault Set.empty v))) a)
-                        acc
-                        (factsOf p |> Maybe.map .classes |> Maybe.withDefault [])
-                )
-                Dict.empty
-                cppFiles
-
-        -- members defined outside their class's node, and the free definitions
-        s3 =
-            List.foldl
-                (\p acc ->
-                    if not (String.endsWith ".cpp" p) then
-                        acc
-
-                    else
-                        let
-                            nid =
-                                nodeOf p
-                        in
-                        List.foldl
-                            (\( ns, name ) a ->
-                                let
-                                    ownerClass =
-                                        if ns == "" then
-                                            ""
-
-                                        else
-                                            String.split "::" ns |> List.reverse |> List.head |> Maybe.withDefault ""
-                                in
-                                case Dict.get ownerClass classHome of
-                                    Just homesAll ->
-                                        let
-                                            homes =
-                                                Set.remove nid homesAll
-                                        in
-                                        if Set.size homesAll == 1 && not (Set.isEmpty homes) then
-                                            { a | edges = Set.insert ( "member", Set.toList homes |> List.head |> Maybe.withDefault "", nid ) a.edges }
-
-                                        else
-                                            a
-
-                                    Nothing ->
-                                        { a | free = Dict.update name (\v -> Just (Set.insert ( ns, nid ) (Maybe.withDefault Set.empty v))) a.free }
-                            )
-                            acc
-                            (factsOf p |> Maybe.map .defs |> Maybe.withDefault [])
-                )
-                { edges = s2.edges, free = Dict.empty }
-                cppFiles
-
-        free =
-            s3.free
-
-        programs =
-            Dict.get "main" free |> Maybe.withDefault Set.empty |> Set.map Tuple.second
-
-        closure p =
+        -- the edges between C++ files' nodes, given the node of each file:
+        -- includes, members defined outside their class's node, and names
+        -- used in one node and defined in another
+        passes nodeAt =
             let
-                go todo seen =
-                    case todo of
-                        f :: rest ->
+                -- includes
+                s2 =
+                    List.foldl
+                        (\p acc ->
                             let
-                                next =
-                                    Dict.get f included |> Maybe.withDefault Set.empty |> Set.filter (\x -> not (Set.member x seen))
+                                nid =
+                                    nodeAt p
                             in
-                            go (Set.toList next ++ rest) (Set.union next seen)
+                            List.foldl
+                                (\inc a ->
+                                    case resolve p inc of
+                                        Just f ->
+                                            let
+                                                tgt =
+                                                    nodeAt f
+                                            in
+                                            { a
+                                                | included = Dict.update p (\v -> Just (Set.insert f (Maybe.withDefault Set.empty v))) a.included
+                                                , edges =
+                                                    if tgt /= nid then
+                                                        Set.insert ( "includes", nid, tgt ) a.edges
 
-                        [] ->
-                            seen
-            in
-            go [ p ] Set.empty
+                                                    else
+                                                        a.edges
+                                            }
 
-        -- uses of names defined elsewhere
-        s4 =
-            List.foldl
-                (\p edges ->
-                    case Dict.get p input.cpp of
-                        Nothing ->
-                            edges
+                                        Nothing ->
+                                            let
+                                                base =
+                                                    P.basename inc
+                                            in
+                                            case Dict.get base byBase of
+                                                Just (tgt :: _) ->
+                                                    if not (Dict.member base filesByBase) && tgt /= nid then
+                                                        { a | edges = Set.insert ( "includes", nid, tgt ) a.edges }
 
-                        Just prepared ->
-                            let
-                                info =
-                                    prepared.facts
+                                                    else
+                                                        a
 
-                                names =
-                                    info.tokens |> List.filter (\n -> n /= "main" && Dict.member n free)
-                            in
-                            if List.isEmpty names then
-                                edges
+                                                _ ->
+                                                    a
+                                )
+                                acc
+                                (factsOf p |> Maybe.map .includes |> Maybe.withDefault [])
+                        )
+                        { included = Dict.empty, edges = Set.empty }
+                        cppFiles
+
+                included =
+                    s2.included
+
+                classHome : Dict String (Set String)
+                classHome =
+                    List.foldl
+                        (\p acc ->
+                            List.foldl (\c a -> Dict.update c (\v -> Just (Set.insert (nodeAt p) (Maybe.withDefault Set.empty v))) a)
+                                acc
+                                (factsOf p |> Maybe.map .classes |> Maybe.withDefault [])
+                        )
+                        Dict.empty
+                        cppFiles
+
+                -- members defined outside their class's node, and the free definitions
+                s3 =
+                    List.foldl
+                        (\p acc ->
+                            if not (String.endsWith ".cpp" p) then
+                                acc
 
                             else
                                 let
                                     nid =
-                                        nodeOf p
-
-                                    visible =
-                                        closure p |> Set.toList |> List.filterMap (\f -> Dict.get f input.cpp)
-
-                                    opened =
-                                        info.opened
+                                        nodeAt p
                                 in
                                 List.foldl
-                                    (\name es ->
-                                        case Dict.get name info.uses of
-                                            Nothing ->
-                                                es
-
-                                            Just u ->
-                                                if not u.declares && not (List.any (\v -> Set.member name v.tokenSet) visible) then
-                                                    es
+                                    (\( ns, name ) a ->
+                                        let
+                                            ownerClass =
+                                                if ns == "" then
+                                                    ""
 
                                                 else
-                                                    List.foldl
-                                                        (\q es2 ->
-                                                            let
-                                                                owners =
-                                                                    Dict.get name free
-                                                                        |> Maybe.withDefault Set.empty
-                                                                        |> Set.filter (\( ns, _ ) -> reaches ns q opened)
-                                                                        |> Set.map Tuple.second
-                                                                        |> Set.remove nid
-                                                                        |> (\s -> Set.diff s programs)
-                                                            in
-                                                            if Set.size owners > 0 && Set.size owners <= 3 then
-                                                                Set.foldl (\o e -> Set.insert ( "uses_symbol", nid, o ) e) es2 owners
+                                                    String.split "::" ns |> List.reverse |> List.head |> Maybe.withDefault ""
+                                        in
+                                        case Dict.get ownerClass classHome of
+                                            Just homesAll ->
+                                                let
+                                                    homes =
+                                                        Set.remove nid homesAll
+                                                in
+                                                if Set.size homesAll == 1 && not (Set.isEmpty homes) then
+                                                    { a | edges = Set.insert ( "member", Set.toList homes |> List.head |> Maybe.withDefault "", nid ) a.edges }
 
-                                                            else
-                                                                es2
-                                                        )
-                                                        es
-                                                        u.quals
+                                                else
+                                                    a
+
+                                            Nothing ->
+                                                { a | free = Dict.update name (\v -> Just (Set.insert ( ns, nid ) (Maybe.withDefault Set.empty v))) a.free }
                                     )
+                                    acc
+                                    (factsOf p |> Maybe.map .defs |> Maybe.withDefault [])
+                        )
+                        { edges = s2.edges, free = Dict.empty }
+                        cppFiles
+
+                free =
+                    s3.free
+
+                programs =
+                    Dict.get "main" free |> Maybe.withDefault Set.empty |> Set.map Tuple.second
+
+                closure p =
+                    let
+                        go todo seen =
+                            case todo of
+                                f :: rest ->
+                                    let
+                                        next =
+                                            Dict.get f included |> Maybe.withDefault Set.empty |> Set.filter (\x -> not (Set.member x seen))
+                                    in
+                                    go (Set.toList next ++ rest) (Set.union next seen)
+
+                                [] ->
+                                    seen
+                    in
+                    go [ p ] Set.empty
+
+                -- uses of names defined elsewhere
+                s4 =
+                    List.foldl
+                        (\p edges ->
+                            case Dict.get p input.cpp of
+                                Nothing ->
                                     edges
-                                    names
+
+                                Just prepared ->
+                                    let
+                                        info =
+                                            prepared.facts
+
+                                        names =
+                                            info.tokens |> List.filter (\n -> n /= "main" && Dict.member n free)
+                                    in
+                                    if List.isEmpty names then
+                                        edges
+
+                                    else
+                                        let
+                                            nid =
+                                                nodeAt p
+
+                                            visible =
+                                                closure p |> Set.toList |> List.filterMap (\f -> Dict.get f input.cpp)
+
+                                            opened =
+                                                info.opened
+                                        in
+                                        List.foldl
+                                            (\name es ->
+                                                case Dict.get name info.uses of
+                                                    Nothing ->
+                                                        es
+
+                                                    Just u ->
+                                                        if not u.declares && not (List.any (\v -> Set.member name v.tokenSet) visible) then
+                                                            es
+
+                                                        else
+                                                            List.foldl
+                                                                (\q es2 ->
+                                                                    let
+                                                                        owners =
+                                                                            Dict.get name free
+                                                                                |> Maybe.withDefault Set.empty
+                                                                                |> Set.filter (\( ns, _ ) -> reaches ns q opened)
+                                                                                |> Set.map Tuple.second
+                                                                                |> Set.remove nid
+                                                                                |> (\s -> Set.diff s programs)
+                                                                    in
+                                                                    if Set.size owners > 0 && Set.size owners <= 3 then
+                                                                        Set.foldl (\o e -> Set.insert ( "uses_symbol", nid, o ) e) es2 owners
+
+                                                                    else
+                                                                        es2
+                                                                )
+                                                                es
+                                                                u.quals
+                                            )
+                                            edges
+                                            names
+                        )
+                        s3.edges
+                        cppFiles
+            in
+            { edges = s4, included = included, free = free, programs = programs }
+
+        grouped =
+            passes nodeOf
+
+        -- each kernel library file as its own node, for the kernel sources
+        fine =
+            passes
+                (\p ->
+                    if isKernelSource p then
+                        kernelSourceId p
+
+                    else
+                        nodeOf p
                 )
-                s3.edges
-                cppFiles
+
+        withCpp =
+            Set.union elm.edges grouped.edges
 
         -- Elm to C++ kernels
         definers : Dict String (Set String)
@@ -564,7 +618,7 @@ cppPart input elm =
                             acc
                 )
                 Dict.empty
-                free
+                grouped.free
 
         s5 =
             Dict.foldl
@@ -576,11 +630,12 @@ cppPart input elm =
                         edges
                         kms
                 )
-                s4
+                withCpp
                 elm.kernelImports
 
-        -- the libraries eco-boot links programs against
-        s6 =
+        -- the libraries eco-boot links programs against: their source files
+        linked : List String
+        linked =
             if Dict.member "cpp:cg:EcoBootConfig" s1.nodes then
                 let
                     libs : Dict String (List String)
@@ -601,35 +656,19 @@ cppPart input elm =
                         codegenCMake |> Maybe.map .variables |> Maybe.withDefault [] |> Dict.fromList
                 in
                 [ ( "ECO_ELM_KERNEL_MODS", "ElmKernel_" ), ( "ECO_KERNEL_MODS", "EcoKernel_" ), ( "ECO_SYSTEM_MODS", "EcoSystem_" ) ]
-                    |> List.foldl
-                        (\( var, prefix ) edges ->
+                    |> List.concatMap
+                        (\( var, prefix ) ->
                             Dict.get var variables
                                 |> Maybe.withDefault []
-                                |> List.foldl
-                                    (\mod es ->
-                                        Dict.get (prefix ++ mod) libs
-                                            |> Maybe.withDefault []
-                                            |> List.foldl
-                                                (\src e ->
-                                                    case Dict.get src fileNode of
-                                                        Just n ->
-                                                            if n /= "cpp:cg:EcoBootConfig" then
-                                                                Set.insert ( "links", "cpp:cg:EcoBootConfig", n ) e
-
-                                                            else
-                                                                e
-
-                                                        Nothing ->
-                                                            e
-                                                )
-                                                es
-                                    )
-                                    edges
+                                |> List.concatMap (\mod -> Dict.get (prefix ++ mod) libs |> Maybe.withDefault [])
                         )
-                        s5
+                    |> List.filter (\src -> Dict.member src fileNode && Dict.get src fileNode /= Just "cpp:cg:EcoBootConfig")
 
             else
-                s5
+                []
+
+        s6 =
+            List.foldl (\src e -> Set.insert ( "links", "cpp:cg:EcoBootConfig", nodeOf src ) e) s5 linked
 
         withPaths =
             Dict.map
@@ -654,7 +693,293 @@ cppPart input elm =
                 )
                 s1.nodes
     in
-    { nodes = withPaths, edges = s6, fileNode = fileNode, programs = programs }
+    { nodes = withPaths
+    , edges = s6
+    , fileNode = fileNode
+    , programs = grouped.programs
+    , kernelSources =
+        kernelSourcesOf input
+            cppFiles
+            fileNode
+            s1.nodes
+            (Set.union fine.edges
+                (Set.fromList (List.filter isKernelSource linked |> List.map (\src -> ( "links", "cpp:cg:EcoBootConfig", kernelSourceId src ))))
+            )
+            elm.kernelImports
+    }
+
+
+{-| Whether a C++ file is listed in full in the kernel sources band. -}
+isKernelSource : String -> Bool
+isKernelSource p =
+    Stages.kernelLibraryOf p /= Nothing
+
+
+kernelSourceId : String -> String
+kernelSourceId p =
+    "cpp:src:" ++ P.stripExtension p
+
+
+{-| `fileEdges` are the C++ edges with each kernel library file as its own
+node; `kernelImports` the kernel modules each compiler module calls.
+-}
+kernelSourcesOf : Input -> List String -> Dict String String -> Dict String ModuleNode -> Set ( String, String, String ) -> Dict String (Set String) -> KernelSources
+kernelSourcesOf input cppFiles fileNode groups fileEdges kernelImports =
+    let
+        cppId =
+            kernelSourceId
+
+        elmId p =
+            "src:" ++ p
+
+        stemOf p =
+            P.stripExtension (P.basename p)
+
+        sectionKey li kind title =
+            String.fromInt li ++ "|" ++ String.fromInt kind ++ "|" ++ title
+
+        -- the C++ files, with their library and kernel group
+        cpps : List { path : String, li : Int, lib : Stages.KernelLibrary, group : String }
+        cpps =
+            cppFiles
+                |> List.filterMap
+                    (\p ->
+                        case ( Stages.kernelLibraryOf p, Dict.get p fileNode ) of
+                            ( Just ( li, lib ), Just g ) ->
+                                Just { path = p, li = li, lib = lib, group = g }
+
+                            _ ->
+                                Nothing
+                    )
+
+        cppSet =
+            Set.fromList (List.map .path cpps)
+
+        -- the files that define each kernel prefix, such as Eco_Kernel_Socket
+        definers : Dict String (Set String)
+        definers =
+            List.foldl
+                (\c acc ->
+                    Dict.get c.path input.cpp
+                        |> Maybe.map (.facts >> .defs)
+                        |> Maybe.withDefault []
+                        |> List.foldl
+                            (\( _, name ) a ->
+                                case Re.firstMatch kernelPrefixRe name |> Maybe.andThen (.groups >> List.head >> Maybe.andThen identity) of
+                                    Just prefix ->
+                                        Dict.update prefix (\v -> Just (Set.insert c.path (Maybe.withDefault Set.empty v))) a
+
+                                    Nothing ->
+                                        a
+                            )
+                            acc
+                )
+                Dict.empty
+                cpps
+
+        -- the Elm modules
+        elms : List { path : String, li : Int, lib : Stages.KernelLibrary, name : String, imports : List String, calls : List String }
+        elms =
+            Dict.toList input.files
+                |> List.filterMap
+                    (\( p, f ) ->
+                        case ( f, Stages.kernelLibraryOf p ) of
+                            ( ElmFile e, Just ( li, lib ) ) ->
+                                if String.endsWith ".elm" p then
+                                    let
+                                        imports =
+                                            List.map .name e.imports
+                                    in
+                                    Just
+                                        { path = p
+                                        , li = li
+                                        , lib = lib
+                                        , name = String.dropLeft (String.length lib.dir) p |> String.dropRight 4 |> String.replace "/" "."
+                                        , imports = imports
+                                        , calls =
+                                            imports
+                                                |> List.filter (String.contains ".Kernel.")
+                                                |> List.concatMap (\km -> Dict.get (String.replace "." "_" km) definers |> Maybe.map Set.toList |> Maybe.withDefault [])
+                                                |> List.filter (\c -> Set.member c cppSet)
+                                        }
+
+                                else
+                                    Nothing
+
+                            _ ->
+                                Nothing
+                    )
+
+        elmByName =
+            List.foldl (\m acc -> Dict.insert ( m.li, m.name ) m.path acc) Dict.empty elms
+
+        -- the kernel an Elm module belongs to: the one it calls, or else the
+        -- one its name says
+        elmGroup m =
+            case m.calls |> List.filterMap (\c -> Dict.get c fileNode) |> List.sort |> List.head of
+                Just g ->
+                    Just g
+
+                Nothing ->
+                    let
+                        segment =
+                            String.split "." m.name
+                                |> List.drop
+                                    (if String.startsWith (m.lib.name ++ ".") m.name then
+                                        1
+
+                                     else
+                                        0
+                                    )
+                                |> List.head
+                                |> Maybe.withDefault ""
+
+                        g =
+                            m.lib.groupPrefix ++ segment
+                    in
+                    if Dict.member g groups then
+                        Just g
+
+                    else
+                        Nothing
+
+        -- a module with no kernel of its own goes with its parent:
+        -- Http.Server.Internal with Http.Server
+        elmGroupOrParent m =
+            case elmGroup m of
+                Just g ->
+                    Just g
+
+                Nothing ->
+                    let
+                        parent =
+                            String.split "." m.name |> List.reverse |> List.drop 1 |> List.reverse |> String.join "."
+                    in
+                    elms
+                        |> List.filter (\o -> o.li == m.li && o.name == parent)
+                        |> List.head
+                        |> Maybe.andThen elmGroupOrParent
+
+        elmGroups =
+            List.map (\m -> ( m, elmGroupOrParent m )) elms
+
+        -- the groups that are one shared file and no kernel, such as
+        -- KernelExports.h or EffectManagerRegistry.cpp, share a section: a
+        -- header, or a file at the top of the library
+        lone : Set String
+        lone =
+            let
+                byGroup =
+                    List.foldl (\c acc -> Dict.update c.group (\v -> Just (c :: Maybe.withDefault [] v)) acc) Dict.empty cpps
+
+                withElm =
+                    List.filterMap Tuple.second elmGroups |> Set.fromList
+
+                shared c =
+                    List.any (\e -> String.endsWith e c.path) [ ".h", ".hpp" ] || P.dirname c.path ++ "/" == c.lib.dir
+            in
+            byGroup
+                |> Dict.filter
+                    (\g cs ->
+                        (Set.size (Set.fromList (List.map (.path >> cppId) cs)) == 1)
+                            && not (Set.member g withElm)
+                            && List.all shared cs
+                    )
+                |> Dict.keys
+                |> Set.fromList
+
+        groupSection li lib g =
+            if Set.member g lone then
+                sectionKey li 1 "Shared"
+
+            else
+                sectionKey li 0 (Dict.get g groups |> Maybe.map .label |> Maybe.withDefault g)
+
+        cppNodes =
+            List.foldl
+                (\c acc ->
+                    let
+                        id =
+                            cppId c.path
+                    in
+                    Dict.update id
+                        (\v ->
+                            case v of
+                                Just n ->
+                                    Just { n | files = n.files ++ [ c.path ], path = n.path ++ ", " ++ c.path }
+
+                                Nothing ->
+                                    Just
+                                        { id = id
+                                        , label = stemOf c.path
+                                        , lang = "cpp"
+                                        , stage = "kernelsrc"
+                                        , path = c.path
+                                        , group = groupSection c.li c.lib c.group
+                                        , files = [ c.path ]
+                                        }
+                        )
+                        acc
+                )
+                Dict.empty
+                cpps
+
+        nodes =
+            List.foldl
+                (\( m, g ) acc ->
+                    Dict.insert (elmId m.path)
+                        { id = elmId m.path
+                        , label = m.name
+                        , lang = "elm"
+                        , stage = "kernelsrc"
+                        , path = m.path
+                        , group =
+                            case g of
+                                Just k ->
+                                    groupSection m.li m.lib k
+
+                                Nothing ->
+                                    sectionKey m.li 2 "Elm only"
+                        , files = [ m.path ]
+                        }
+                        acc
+                )
+                cppNodes
+                elmGroups
+
+        contains =
+            List.map (\c -> ( "contains", c.group, cppId c.path )) cpps
+                ++ List.filterMap (\( m, g ) -> Maybe.map (\k -> ( "contains", k, elmId m.path )) g) elmGroups
+
+        -- every C++ edge with a kernel library file at either end
+        cppEdges =
+            fileEdges
+                |> Set.toList
+                |> List.filter (\( _, a, b ) -> a /= b && (String.startsWith "cpp:src:" a || String.startsWith "cpp:src:" b))
+
+        -- the compiler's calls into the kernels, to the files that define them
+        compilerCalls =
+            Dict.toList kernelImports
+                |> List.concatMap
+                    (\( mod, kms ) ->
+                        Set.toList kms
+                            |> List.concatMap (\km -> Dict.get (String.replace "." "_" km) definers |> Maybe.map Set.toList |> Maybe.withDefault [])
+                            |> List.map (\f -> ( "kernel", mod, cppId f ))
+                    )
+
+        elmEdges =
+            elms
+                |> List.concatMap
+                    (\m ->
+                        List.filterMap (\i -> Dict.get ( m.li, i ) elmByName |> Maybe.map (\p -> ( "imports", elmId m.path, elmId p ))) m.imports
+                            ++ List.map (\c -> ( "kernel", elmId m.path, cppId c )) m.calls
+                    )
+    in
+    { nodes = nodes
+    , edges = Set.fromList (contains ++ cppEdges ++ compilerCalls ++ elmEdges)
+    , fileNode =
+        Dict.fromList (List.map (\c -> ( c.path, cppId c.path )) cpps ++ List.map (\m -> ( m.path, elmId m.path )) elms)
+    }
 
 
 dropLeadingDotSlash : String -> String

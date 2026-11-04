@@ -1,5 +1,5 @@
 module Kg.Layout exposing
-    ( Layout, NodeInfo, Geometry, StageBox, Section, Pos
+    ( Layout, NodeInfo, Geometry, StageBox, Section, KernelBand, Pos
     , empty, step, uidOf
     , nodeW, nodeH
     )
@@ -75,6 +75,12 @@ cppPerCol =
     4
 
 
+{-| Rows of nodes in a column of the kernel sources band. -}
+kernPerCol : Int
+kernPerCol =
+    10
+
+
 type alias NodeInfo =
     { id : String, label : String, lang : String, stage : String, path : String, group : String }
 
@@ -83,6 +89,7 @@ type Where
     = InFlow ( String, Int )
     | InStack Int
     | InCpp
+    | InKernel
 
 
 type alias Pos =
@@ -108,6 +115,13 @@ type alias Section =
     { key : String, title : String, gx : Int }
 
 
+{-| A band of the kernel sources, one per kernel library: its title, first
+column, width and sections.
+-}
+type alias KernelBand =
+    { title : String, gx : Int, cols : Int, sections : List Section }
+
+
 type alias Geometry =
     { stages : Dict String StageBox
     , elmEnd : Int
@@ -117,6 +131,11 @@ type alias Geometry =
     , hasElmFound : Bool
     , hasCppFound : Bool
     , sections : List Section
+    , kernTop : Int
+    , kernRows : Int
+    , kernCols : Int
+    , kernSections : List Section
+    , kernBands : List KernelBand
     , cols : Int
     , rows : Int
     }
@@ -203,6 +222,9 @@ remove u layout =
                     { l | stacks = Dict.update c (Maybe.map (replaceFirst (Just u) Nothing)) l.stacks }
 
                 InCpp ->
+                    l
+
+                InKernel ->
                     l
 
 
@@ -437,6 +459,9 @@ step nodes edges renamed layout0 =
                         Just inf ->
                             if inf.stage == "cppfound" then
                                 { l | where_ = Dict.insert u InCpp l.where_ }
+
+                            else if inf.stage == "kernelsrc" then
+                                { l | where_ = Dict.insert u InKernel l.where_ }
 
                             else if inf.stage /= "foundation" then
                                 insertFlow u ( inf.stage, min (depth inf.id []) 2 ) l
@@ -762,6 +787,79 @@ geometry layout =
                 ( [], cppGx + 1 )
                 Stages.cppFound
 
+        -- the kernel sources band, under the foundations
+        plan =
+            kernelPlan layout
+
+        -- a band per library, side by side, each with a section per kernel
+        ( kernBands, kx ) =
+            plan
+                |> List.foldl
+                    (\( k, members ) acc ->
+                        let
+                            lib =
+                                String.split "|" k |> List.head |> Maybe.andThen String.toInt |> Maybe.withDefault 0
+                        in
+                        case acc of
+                            ( l, ms ) :: rest ->
+                                if l == lib then
+                                    ( l, ms ++ [ ( k, members ) ] ) :: rest
+
+                                else
+                                    ( lib, [ ( k, members ) ] ) :: acc
+
+                            [] ->
+                                [ ( lib, [ ( k, members ) ] ) ]
+                    )
+                    []
+                |> List.reverse
+                |> List.foldl
+                    (\( lib, secs ) ( acc, x ) ->
+                        let
+                            ( bandSections, sx2 ) =
+                                List.foldl
+                                    (\( k, members ) ( sa, sxa ) ->
+                                        ( sa ++ [ { key = k, title = sectionTitle k, gx = sxa } ], sxa + ceilDiv (List.length members) kernPerCol * colPitch + stageGap )
+                                    )
+                                    ( [], x + 1 )
+                                    secs
+
+                            width =
+                                sx2 - stageGap + 1 - x
+                        in
+                        ( acc ++ [ { title = Stages.kernelLibraries |> List.drop lib |> List.head |> Maybe.map .title |> Maybe.withDefault "", gx = x, cols = width, sections = bandSections } ]
+                        , x + width + stageGap
+                        )
+                    )
+                    ( [], 0 )
+
+        kernSections =
+            List.concatMap .sections kernBands
+
+        kernTop =
+            if List.isEmpty plan then
+                0
+
+            else if foundRows /= 0 then
+                foundTop + foundRows + rowGap
+
+            else
+                stageRows + rowGap
+
+        kernRows =
+            if List.isEmpty plan then
+                0
+
+            else
+                foundHead + 2 + (plan |> List.map (Tuple.second >> List.length >> min kernPerCol) |> List.maximum |> Maybe.withDefault 0) * nodeH + 1
+
+        kernCols =
+            if List.isEmpty plan then
+                0
+
+            else
+                kx - stageGap
+
         cols =
             (Dict.values stagesFinal |> List.map (\b -> b.gx + b.gw))
                 ++ [ if hasCppFound then
@@ -769,6 +867,7 @@ geometry layout =
 
                      else
                         0
+                   , kernCols
                    ]
                 |> List.maximum
                 |> Maybe.withDefault 0
@@ -781,14 +880,68 @@ geometry layout =
     , hasElmFound = tallestStack > 0
     , hasCppFound = hasCppFound
     , sections = sections
+    , kernTop = kernTop
+    , kernRows = kernRows
+    , kernCols = kernCols
+    , kernSections = kernSections
+    , kernBands = kernBands
     , cols = cols
     , rows =
-        if foundRows /= 0 then
+        if kernRows /= 0 then
+            kernTop + kernRows
+
+        else if foundRows /= 0 then
             foundTop + foundRows
 
         else
             stageRows
     }
+
+
+{-| The kernel sources band's sections in order, each with its nodes in order:
+Elm modules first, then C++ files, by label.
+-}
+kernelPlan : Layout -> List ( String, List Int )
+kernelPlan layout =
+    Dict.foldl
+        (\u w acc ->
+            case ( w, Dict.get u layout.info ) of
+                ( InKernel, Just i ) ->
+                    Dict.update i.group (\v -> Just (u :: Maybe.withDefault [] v)) acc
+
+                _ ->
+                    acc
+        )
+        Dict.empty
+        layout.where_
+        |> Dict.toList
+        |> List.map
+            (\( k, us ) ->
+                ( k
+                , List.sortBy
+                    (\u ->
+                        Dict.get u layout.info
+                            |> Maybe.map
+                                (\i ->
+                                    ( if i.lang == "elm" then
+                                        0
+
+                                      else
+                                        1
+                                    , i.label
+                                    )
+                                )
+                            |> Maybe.withDefault ( 2, "" )
+                    )
+                    us
+                )
+            )
+
+
+{-| A section key is `library|kind|title`. -}
+sectionTitle : String -> String
+sectionTitle k =
+    String.split "|" k |> List.drop 2 |> String.join "|"
 
 
 positions : Geometry -> Layout -> Dict Int Pos
@@ -870,3 +1023,21 @@ positions geo layout =
         )
         stackPos
         layout.where_
+        |> (\placed ->
+                List.map2
+                    (\( _, members ) sec ->
+                        List.indexedMap
+                            (\j u ->
+                                ( u
+                                , ( sec.gx + (j // kernPerCol) * colPitch
+                                  , geo.kernTop + foundHead + 2 + modBy kernPerCol j * nodeH
+                                  )
+                                )
+                            )
+                            members
+                    )
+                    (kernelPlan layout)
+                    geo.kernSections
+                    |> List.concat
+                    |> List.foldl (\( u, p ) acc -> Dict.insert u p acc) placed
+           )

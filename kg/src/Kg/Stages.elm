@@ -5,6 +5,7 @@ module Kg.Stages exposing
     , elmJsons, logPaths, sourcePaths, cppDirs, cmakes, twinDir, libraries, relevant, isCppPath
     , stageIndex, stageTitle
     , isConfigPath, configModule
+    , KernelLibrary, kernelLibraries, kernelLibraryOf
     )
 
 {-| The pipeline stages and the rules that put each file in one: a port of
@@ -55,10 +56,10 @@ branchTo =
     "premono"
 
 
-{-| The stage keys in order, then the two foundations. -}
+{-| The stage keys in order, then the two foundations, then the kernel sources. -}
 stageKeys : List String
 stageKeys =
-    List.map .key stages ++ [ "foundation", "cppfound" ]
+    List.map .key stages ++ [ "foundation", "cppfound", "kernelsrc" ]
 
 
 stageIndex : String -> Int
@@ -78,6 +79,9 @@ stageTitle key =
 
             else if key == "cppfound" then
                 "C++ foundation"
+
+            else if key == "kernelsrc" then
+                "Kernel sources"
 
             else
                 key
@@ -353,7 +357,7 @@ relevant path =
         True
 
     else if String.endsWith ".elm" path then
-        startsWithAny [ "compiler/", twinDir ] path
+        startsWithAny ([ "compiler/", twinDir ] ++ List.map .dir kernelLibraries) path
 
     else if isCppPath path then
         let
@@ -379,3 +383,29 @@ isConfigPath path =
 configModule : String -> Bool
 configModule name =
     name == "Compiler.Config" || name == "Compiler.Eco.Config"
+
+
+{-| A kernel library whose sources the atlas lists in full, in the kernel
+sources band, as well as grouped in the Kernels stage: its source folder, the
+prefix of its group nodes' ids, and the name its sections go by.
+-}
+type alias KernelLibrary =
+    { dir : String, groupPrefix : String, name : String, title : String }
+
+
+{-| In the order of their bands, each of which has a section per kernel. -}
+kernelLibraries : List KernelLibrary
+kernelLibraries =
+    [ { dir = "elm-kernel-cpp/src/", groupPrefix = "cpp:ek:", name = "elm", title = "elm/* kernels" }
+    , { dir = "eco-kernel-cpp/src/", groupPrefix = "cpp:eco:", name = "Eco", title = "eco/kernel" }
+    , { dir = "system-kernel-cpp/src/", groupPrefix = "cpp:sys:", name = "System", title = "eco/system" }
+    ]
+
+
+{-| The library a path is in, with its index in `kernelLibraries`. -}
+kernelLibraryOf : String -> Maybe ( Int, KernelLibrary )
+kernelLibraryOf path =
+    kernelLibraries
+        |> List.indexedMap Tuple.pair
+        |> List.filter (\( _, l ) -> String.startsWith l.dir path)
+        |> List.head
